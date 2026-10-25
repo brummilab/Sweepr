@@ -26,6 +26,7 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 . "$libDir\core\log.ps1"
 . "$libDir\core\ui.ps1"
 . "$libDir\core\file_ops.ps1"
+. "$libDir\core\health.ps1"
 
 # ============================================================================
 # Configuration
@@ -294,30 +295,8 @@ function Get-StartupPrograms {
     Write-Host ""
     Write-Host "$esc[34m$($script:Icons.Arrow) Startup Programs$esc[0m"
 
-    $startupPaths = @(
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"
-    )
-
-    $startupCount = 0
-
-    foreach ($path in $startupPaths) {
-        if (Test-Path $path) {
-            $items = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
-            $props = @($items.PSObject.Properties | Where-Object {
-                $_.Name -notin @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')
-            })
-            $startupCount += $props.Count
-        }
-    }
-
-    # Also check startup folder
-    $startupFolder = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-    if (Test-Path $startupFolder) {
-        $startupFiles = @(Get-ChildItem -Path $startupFolder -File -ErrorAction SilentlyContinue)
-        $startupCount += $startupFiles.Count
-    }
+    # The entries come from lib/core/health.ps1; this function only renders the count.
+    $startupCount = (Get-SweeprStartupEntries).Count
 
     # Registered entries may be disabled in StartupApproved. Count them without
     # inferring a health issue or recommending changes from quantity alone.
@@ -531,41 +510,21 @@ function Test-WindowsUpdate {
     Write-Host ""
     Write-Host "$esc[34m$($script:Icons.Arrow) Windows Update$esc[0m"
 
-    $job = $null
     Start-Spinner "Checking for updates..."
     try {
-        # Query the local catalog in a disposable process: COM can stall even
-        # without network access, and must not hold the maintenance command open.
-        try {
-            $job = Start-Job -ScriptBlock {
-                $ErrorActionPreference = 'Stop'
-                $updateSession = New-Object -ComObject Microsoft.Update.Session
-                $updateSearcher = $updateSession.CreateUpdateSearcher()
-                $updateSearcher.Online = $false
-                $searchResult = $updateSearcher.Search("IsInstalled=0")
-                [pscustomobject]@{
-                    Total = $searchResult.Updates.Count
-                    Important = @($searchResult.Updates | Where-Object { $_.MsrcSeverity -in @('Critical', 'Important') }).Count
-                }
-            }
-            $completed = Wait-Job -Job $job -Timeout 5
-        }
+        # The bounded local-catalog query lives in lib/core/health.ps1.
+        try { $pending = Get-SweeprPendingUpdates -TimeoutSeconds 5 }
         finally { Stop-Spinner } # Clear the line before any result is written on it.
-        if (-not $completed -or $job.State -ne 'Completed') { throw 'Windows Update query did not complete' }
-        $result = @(Receive-Job -Job $job -ErrorAction Stop)
-        if ($result.Count -ne 1 -or $null -eq $result[0].Total -or $null -eq $result[0].Important -or
-            $result[0].Total -lt 0 -or $result[0].Important -lt 0 -or $result[0].Important -gt $result[0].Total) {
-            throw 'Windows Update query returned an incomplete result'
-        }
-        if ($result[0].Important -gt 0) {
-            $noun = if ($result[0].Important -eq 1) { 'update' } else { 'updates' }
-            Write-Host "  $esc[33m$($script:Icons.Warning)$esc[0m $($result[0].Important) important $noun available"
+        if (-not $pending.Measured) { throw $pending.Reason }
+        if ($pending.Important -gt 0) {
+            $noun = if ($pending.Important -eq 1) { 'update' } else { 'updates' }
+            Write-Host "  $esc[33m$($script:Icons.Warning)$esc[0m $($pending.Important) important $noun available"
             Write-Host "  $esc[90mRun Windows Update to install$esc[0m"
             $script:IssuesFound++
         }
-        elseif ($result[0].Total -gt 0) {
-            $noun = if ($result[0].Total -eq 1) { 'update' } else { 'updates' }
-            Write-Host "  $esc[90m$($script:Icons.List)$esc[0m $($result[0].Total) optional $noun available"
+        elseif ($pending.Total -gt 0) {
+            $noun = if ($pending.Total -eq 1) { 'update' } else { 'updates' }
+            Write-Host "  $esc[90m$($script:Icons.List)$esc[0m $($pending.Total) optional $noun available"
         }
         else {
             Write-Host "  $esc[32m$($script:Icons.Success)$esc[0m No pending updates in the local catalog"
@@ -573,12 +532,6 @@ function Test-WindowsUpdate {
     }
     catch {
         Write-Host "  $esc[90mCould not check Windows Update status$esc[0m"
-    }
-    finally {
-        if ($null -ne $job) {
-            if ($job.State -notin @('Completed', 'Failed', 'Stopped')) { Stop-Job -Job $job -ErrorAction SilentlyContinue }
-            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        }
     }
 }
 

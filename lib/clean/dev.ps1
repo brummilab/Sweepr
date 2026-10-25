@@ -16,6 +16,10 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . "$PSScriptRoot\cache_guard.ps1"
 
+# Set by Get-SweeprCleanPreview -SkipExternalTools; the list collects the skipped tools.
+$script:SweeprSkipExternalTools = $false
+$script:SweeprSkippedTools = $null
+
 # ============================================================================
 # Node.js / JavaScript Ecosystem
 # ============================================================================
@@ -97,6 +101,14 @@ function Invoke-SweeprOwnerProcess {
 function Get-SweeprOwnerCachePath {
     param([string]$Name, [string[]]$Arguments)
 
+    # A read-only check must not start npm, pip, go and friends (they can leave log files
+    # in the profile): note the tool as not measured and carry on without its folder.
+    if ($script:SweeprSkipExternalTools) {
+        if ($null -ne $script:SweeprSkippedTools -and -not @($script:SweeprSkippedTools | Where-Object { $_.Name -eq $Name })) {
+            $script:SweeprSkippedTools.Add([pscustomobject]@{ Section = [string]$script:CurrentSection.Name; Name = $Name; Reason = 'external tool' })
+        }
+        return $null
+    }
     $result = Invoke-SweeprOwnerProcess -Name $Name -Arguments $Arguments
     if ($null -eq $result -or [string]::IsNullOrWhiteSpace($result.Output)) { return $null }
     $path = $result.Output.Trim()
@@ -119,7 +131,8 @@ function Invoke-SweeprOwnerCacheCleanup {
     }
     if (Test-DryRunMode) {
         # Selective owner pruning cannot promise the size of the whole store.
-        Add-DryRunListEntries -Description $Description -Paths @($path)
+        $storeFiles = @($tree.Items | Where-Object { -not $_.PSIsContainer })
+        Add-DryRunListEntries -Description $Description -Paths @($path) -SizeBytes @([long](Get-ValidatedTreeSize -Tree $tree)) -FileCounts @($storeFiles.Count)
         $script:OwnerCleanups++
         Write-DryRun $Description
         Set-SectionActivity

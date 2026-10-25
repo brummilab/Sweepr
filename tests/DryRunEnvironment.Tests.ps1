@@ -74,6 +74,10 @@ Describe 'GPU shader caches wait for --gpu-shaders' {
         $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'bin\clean.ps1'),[ref]$null,[ref]$null)
         $flow = $ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Start-Cleanup'},$true)
         Set-Item function:script:Invoke-CleanFlow ([scriptblock]::Create($flow.Body.Extent.Text.TrimStart('{').TrimEnd('}')))
+        # The section sequence moved to lib/clean/preview.ps1 (F-03a); Start-Cleanup calls it.
+        $previewAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'lib\clean\preview.ps1'),[ref]$null,[ref]$null)
+        $sections = $previewAst.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SweeprCleanSections'},$true)
+        Set-Item function:script:Invoke-SweeprCleanSections ([scriptblock]::Create($sections.Body.Extent.Text.TrimStart('{').TrimEnd('}')))
         foreach ($name in 'Get-WindowsVersion','Get-FreeSpace','Reset-CleanupStats','Set-DryRunMode','Invoke-UserCleanup','Clear-BrowserCaches','Clear-GPUShaderCaches','Clear-AppCaches','Invoke-DevToolsCleanup','Invoke-AppCleanup','Invoke-SystemCleanup','Get-CleanupStats','Show-CleanupSummary','Write-SweeprError') {
             Set-Item "function:script:$name" {}
         }

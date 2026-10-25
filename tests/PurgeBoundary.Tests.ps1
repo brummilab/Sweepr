@@ -4,12 +4,15 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib/core/log.ps1')
     . (Join-Path $script:RepoRoot 'lib/core/ui.ps1')
     . (Join-Path $script:RepoRoot 'lib/core/file_ops.ps1')
-    $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'bin/purge.ps1'), [ref]$null, [ref]$null)
-    foreach ($definition in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ne 'Main' }, $false)) {
-        . ([scriptblock]::Create($definition.Extent.Text))
+    # Discovery moved to lib/clean/projects.ps1 (F-03a); the removal side stays in bin/purge.ps1.
+    foreach ($relative in @('lib/clean/projects.ps1', 'bin/purge.ps1')) {
+        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot $relative), [ref]$null, [ref]$null)
+        foreach ($definition in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ne 'Main' }, $false)) {
+            . ([scriptblock]::Create($definition.Extent.Text))
+        }
+        $patterns = $ast.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:ArtifactPatterns' }, $false)
+        if ($patterns) { . ([scriptblock]::Create($patterns.Extent.Text)) }
     }
-    $patterns = $ast.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:ArtifactPatterns' }, $false)
-    . ([scriptblock]::Create($patterns.Extent.Text))
     function New-PurgeFixture {
         param([string]$Marker = 'package.json', [string]$Content = '{}', [string[]]$Artifacts = @('node_modules'))
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))

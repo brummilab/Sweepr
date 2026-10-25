@@ -45,6 +45,7 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 . "$libDir\clean\dev.ps1"
 . "$libDir\clean\apps.ps1"
 . "$libDir\clean\system.ps1"
+. "$libDir\clean\preview.ps1"
 
 # Clean refuses key, browser profile and transcript stores (lib/core/base.ps1).
 $script:SweeprCleanPathGuard = $true
@@ -227,36 +228,7 @@ function Start-Cleanup {
 
     # Run cleanup modules
     try {
-        # User essentials (temp, logs, etc.)
-        Invoke-UserCleanup -TempDaysOld 7 -LogDaysOld 7
-
-        # Browser caches
-        Clear-BrowserCaches
-
-        # GPU shader caches (NVIDIA, AMD, Intel, DirectX) only on request: every game
-        # compiles its shaders again on its next launch, which can take minutes
-        if ($IncludeGpuShaders) {
-            Clear-GPUShaderCaches
-        }
-
-        # Application caches
-        Clear-AppCaches
-
-        # Developer tools
-        Invoke-DevToolsCleanup
-
-        # Applications cleanup (with optional game media)
-        if ($IncludeGameMedia) {
-            Invoke-AppCleanup -IncludeGameMedia -GameMediaDaysOld 90
-        }
-        else {
-            Invoke-AppCleanup
-        }
-
-        # System cleanup (if requested and admin)
-        if ($IncludeSystem -and (Test-IsAdmin)) {
-            Invoke-SystemCleanup
-        }
+        Invoke-SweeprCleanSections -IncludeSystem $IncludeSystem -IncludeGameMedia $IncludeGameMedia -IncludeGpuShaders $IncludeGpuShaders
     }
     catch {
         Write-SweeprError "Cleanup error: $_"

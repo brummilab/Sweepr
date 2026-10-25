@@ -10,6 +10,7 @@ BeforeAll {
     . "$script:LibDir\core\log.ps1"
     . "$script:LibDir\core\ui.ps1"
     . "$script:LibDir\core\file_ops.ps1"
+    . "$script:LibDir\core\health.ps1"
 
     $script:OptimizeAst = [System.Management.Automation.Language.Parser]::ParseFile($script:OptimizeScript, [ref]$null, [ref]$null)
     $definitions = $script:OptimizeAst.FindAll({
