@@ -1,5 +1,8 @@
 <div align="center">
-  <h1>Sweepr</h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo-wordmark-dark.svg">
+    <img src="docs/img/logo-wordmark-light.svg" alt="Sweepr" width="480">
+  </picture>
   <p><b>Windows-PC aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen – und Apps mit REA untersuchen. Freies Open-Source-CLI.</b></p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL_v3-blue.svg?style=flat-square" alt="License"></a>
 </div>

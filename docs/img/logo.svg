@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Sweepr">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#0E7490"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <!-- sweep trails -->
+  <path d="M44 196 C 76 214, 120 214, 150 200" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="10" stroke-linecap="round"/>
+  <path d="M40 166 C 60 180, 84 186, 104 184" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="10" stroke-linecap="round"/>
+  <!-- dust being swept away -->
+  <circle cx="54" cy="128" r="9" fill="#FFFFFF" fill-opacity="0.9"/>
+  <circle cx="34" cy="104" r="6" fill="#FFFFFF" fill-opacity="0.7"/>
+  <circle cx="64" cy="94" r="4.5" fill="#FFFFFF" fill-opacity="0.55"/>
+  <!-- broom -->
+  <g transform="rotate(-38 140 132)">
+    <rect x="133" y="22" width="14" height="112" rx="7" fill="#FFFFFF"/>
+    <rect x="122" y="126" width="36" height="16" rx="5" fill="#0F172A" fill-opacity="0.85"/>
+    <path d="M118 140 H162 L182 214 Q140 226 98 214 Z" fill="url(#head)"/>
+    <path d="M124 150 L114 210 M140 150 V214 M156 150 L166 210" stroke="#B45309" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <!-- sparkle -->
+  <path d="M196 52 l6 14 l14 6 l-14 6 l-6 14 l-6 -14 l-14 -6 l14 -6 z" fill="#FFFFFF"/>
+</svg>
