@@ -175,7 +175,7 @@ function Edit-SearchPaths {
     }
 
     Write-Info "Opening paths configuration: $($script:ConfigFile)"
-    Start-Process notepad.exe -ArgumentList $script:ConfigFile -Wait
+    Start-Process notepad.exe -ArgumentList ('"{0}"' -f $script:ConfigFile) -Wait
 
     Write-Success "Configuration saved"
 }
