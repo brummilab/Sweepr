@@ -115,7 +115,7 @@ function Edit-Whitelist {
 
     # Open in default editor
     Write-Info "Opening whitelist file: $whitelistPath"
-    Start-Process notepad.exe -ArgumentList $whitelistPath -Wait
+    Start-Process notepad.exe -ArgumentList ('"{0}"' -f $whitelistPath) -Wait
 
     Write-Success "Whitelist saved"
 }
