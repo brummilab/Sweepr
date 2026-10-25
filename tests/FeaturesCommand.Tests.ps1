@@ -20,15 +20,25 @@
 #     Show-FeaturesHelp                    usage text: --dry-run, --list, --all-users-future, --help; no --restore
 #     Test-FeaturesListAsJson              [Console]::IsOutputRedirected (mocked)
 #     Read-FeaturesMenuKey                 [Console]::ReadKey($true) -> ConsoleKeyInfo (mocked)
-#     Show-FeaturesMenu -Items <rows>      rows are Get-SweeprFeatureInventory items, shown in the given
-#                                          order, ASCII only, output through Write-Host: one line per row
-#                                          "<pointer> [ ] <Title>" (pointer ">" on the row under the cursor,
-#                                          "[x]" when checked) with Description, and Warning when there is
-#                                          one, for EVERY row. Nothing is checked at the start (E16), the
-#                                          cursor starts on the first row, UpArrow/DownArrow move (no wrap),
-#                                          Spacebar toggles, Enter returns the checked rows in menu order
-#                                          (an empty array, not $null, when none are checked), Escape or Q
-#                                          returns $null.
+#     Get-FeaturesWindowHeight             console window height in lines (mocked; the menu pages by it)
+#     Show-FeaturesMenu -Items <rows> [...]  rows are Get-SweeprFeatureInventory items, shown in the given
+#                                          order, ASCII only, output through Write-Host. Every redraw starts
+#                                          with Clear-Host and is one SCREEN. A screen has at most
+#                                          Get-FeaturesWindowHeight lines (a Write-Host string counts one line
+#                                          per newline), also with the header and a notice. One line per row:
+#                                          "<pointer> [ ] <Title>" (pointer ">" on the cursor row, "[x]" when
+#                                          checked; a warning sign is allowed). The Description and the Warning
+#                                          (if any) are shown ONLY for the cursor row, below the list. When
+#                                          the rows do not fit, the menu shows a window of rows that follows
+#                                          the cursor (arrow keys scroll past the page end; PageUp/PageDown
+#                                          are optional and not tested). Nothing is checked at the start (E16),
+#                                          the cursor starts on the first row, UpArrow/DownArrow move (no wrap),
+#                                          Spacebar toggles (the check survives scrolling), Enter returns the
+#                                          checked rows in menu order (an empty array, not $null, when none
+#                                          are checked), Escape or Q returns $null. The administrator notice
+#                                          for optional features is part of the head of EVERY screen (so it is
+#                                          visible after each Clear-Host), however Invoke-FeaturesCommand
+#                                          passes it in.
 #     Invoke-FeaturesCommand [-DryRun] [-List] [-AllUsersFuture] [-ShowHelp]
 #                                          the whole command. Sets $script:FeaturesExitCode (0 ok,
 #                                          1 aborted by the administrator rule, 2 usage) at the start of
@@ -44,7 +54,7 @@
 #   writes "Run Sweepr in an administrator PowerShell for --all-users-future." and ends with exit code 1
 #   before anything is read, asked or changed (a dry run still previews). When the inventory says
 #   FeaturesNeedAdmin, "Run Sweepr in an administrator PowerShell for optional Windows features." is
-#   written and the features are simply not offered. Nothing to offer -> message, no menu, exit 0.
+#   written (in the menu head, see above) and the features are simply not offered. Nothing to offer -> message, no menu, exit 0.
 #   Menu -> Escape/Q cancels, an empty selection stops with a message, both without a prompt.
 #   Dry run (-DryRun or Test-DryRunMode already true, e.g. SWEEPR_DRY_RUN=1): sets the dry-run mode,
 #   prints one exact Get-SweeprFeatureCommand line per selected row (with -AllUsersFuture when
@@ -53,10 +63,19 @@
 #   Warning text, asks Read-Host with a prompt containing "(y/N)"; only "y"/"Y" go on.
 #   Per item, right before touching it: re-read the inventory and require the same Id and Target
 #   (and the entry still in Get-SweeprFeatureCatalog); otherwise log SKIPPED and go on.
+#   Per item, right before touching it: Get-SweeprFeatureInventory -Catalog @(<the one fresh catalog entry
+#   with this Id>) (the entry comes from a fresh Get-SweeprFeatureCatalog; not in it -> SKIPPED), so only
+#   that entry is read again. With -AllUsersFuture the administrator rights are checked again too (lost ->
+#   SKIPPED, no Remove-* call).
 #     App:     Remove-AppxPackage -Package <FullName> (no -AllUsers); with -AllUsersFuture and
 #              Provisioned also Remove-AppxProvisionedPackage -Online -PackageName <ProvisionedName>,
-#              user package first. Success: REMOVED appx:<FullName> with the command text as detail.
-#              A failing step: FAILED appx:<FullName> with the error text, no REMOVED line.
+#              user package first. Each step has its own log line: REMOVED appx:<FullName> (detail has
+#              the Remove-AppxPackage command) and, with the option, REMOVED appx-provisioned:<ProvisionedName>
+#              (detail has the Remove-AppxProvisionedPackage command). A failing user step: one line
+#              FAILED appx:<FullName> with the error text and no provisioned step. A failing provisioned
+#              step after the user package went: REMOVED appx:<FullName> plus FAILED
+#              appx-provisioned:<ProvisionedName> whose detail has the command and the error text.
+#   --list as JSON never calls Write-Host (the hint, notices and everything else stay off the console).
 #     Feature: Disable-WindowsOptionalFeature -Online -FeatureName <Name> -NoRestart (never -Remove).
 #              Success: DISABLED feature:<Name>, detail has the command and "restart needed" when the
 #              result has RestartNeeded -eq $true. A throw: FAILED feature:<Name>.
@@ -64,7 +83,7 @@
 #   elevation, no Start-Process.
 #
 #   lib\core\history.ps1: DISABLED is counted as its own action `disabled` (sessions[].actions.disabled,
-#   "disabled N" in the text), no longer under `other`.
+#   "disabled N" in the text), no longer under `other`. appx-provisioned: lines count like any other path.
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -138,6 +157,9 @@ BeforeAll {
     # Placeholders so Mock still works while bin\features.ps1 does not define them yet.
     if (-not (Test-Path -Path 'function:Read-FeaturesMenuKey')) { function script:Read-FeaturesMenuKey { throw 'bin\features.ps1 is missing Read-FeaturesMenuKey' } }
     if (-not (Test-Path -Path 'function:Test-FeaturesListAsJson')) { function script:Test-FeaturesListAsJson { throw 'bin\features.ps1 is missing Test-FeaturesListAsJson' } }
+    if (-not (Test-Path -Path 'function:Get-FeaturesWindowHeight')) { function script:Get-FeaturesWindowHeight { throw 'bin\features.ps1 is missing Get-FeaturesWindowHeight' } }
+    # The real inventory, so a spy Mock can call through and record how it was called.
+    $script:RealInventory = (Get-Command -Name Get-SweeprFeatureInventory -CommandType Function).ScriptBlock
     Import-ScriptFunction -Script $script:SweeprFile -Names @("Resolve-CommandParameterName", "Invoke-SweeprCommand", "Show-MainHelp")
 
     # ---- fixtures -------------------------------------------------------------------------------
@@ -202,6 +224,20 @@ BeforeAll {
         return [pscustomobject]@{ Id = $Id; Kind = $Kind; Title = $Title; Description = "Example description of $Title."; Warning = $Warning; Target = $Target; Provisioned = $false; ProvisionedName = $null }
     }
 
+    function script:New-ManyRows {
+        param([int]$Count, [int]$WarnAt = 0)
+        foreach ($n in 1..$Count) {
+            $warning = if ($n -eq $WarnAt) { 'Row warning text.' } else { $null }
+            New-MenuRow -Id ("app.r{0:00}" -f $n) -Kind App -Title ("Row {0:00}" -f $n) -Target ("Contoso.Row{0:00}_1.0.0.0_x64__examplepublisher" -f $n) -Warning $warning
+        }
+    }
+    function script:New-RepeatedKeys {
+        param([scriptblock]$Key, [int]$Count)
+        $keys = @()
+        for ($i = 0; $i -lt $Count; $i++) { $keys += , (& $Key) }
+        return , $keys
+    }
+
     # Mocks, state and a private operations log for one test. Called from BeforeEach (one per block).
     function script:Initialize-FeatureEnvironment {
         param([switch]$ThrowOnChange)
@@ -235,6 +271,9 @@ BeforeAll {
         $script:Calls = [System.Collections.Generic.List[string]]::new()
         $script:Prompts = [System.Collections.Generic.List[string]]::new()
         $script:FirstScreen = $null
+        $script:Screens = [System.Collections.Generic.List[object]]::new()
+        $script:WindowHeight = 40
+        $script:InventoryCalls = [System.Collections.Generic.List[string]]::new()
         $script:LinesAtLastKey = 0
         $script:ConfirmScreen = $null
         $script:OnAppRemove = $null
@@ -253,7 +292,14 @@ BeforeAll {
         if (Get-Command Test-FeaturesInteractive -ErrorAction SilentlyContinue) {
             Mock Test-FeaturesInteractive { return $true }
         }
-        Mock Clear-Host { }
+        Mock Clear-Host { $script:Transcript.Add('CLEAR') }
+        Mock Get-FeaturesWindowHeight { return $script:WindowHeight }
+        Mock Get-SweeprFeatureInventory {
+            $count = if ($null -eq $Catalog) { -1 } else { @($Catalog).Count }
+            $ids = if ($null -eq $Catalog) { '' } else { (@($Catalog) | ForEach-Object { Get-SweeprFeatureProperty $_ 'Id' }) -join ',' }
+            $script:InventoryCalls.Add("${count}:$ids")
+            return (& $script:RealInventory @PSBoundParameters)
+        }
         Mock Write-Host {
             $text = ($Object | ForEach-Object { [string]$_ }) -join ' '
             $script:HostBuffer += $text
@@ -263,20 +309,28 @@ BeforeAll {
             }
         }
         Mock Read-FeaturesMenuKey {
-            if ($null -eq $script:FirstScreen) { $script:FirstScreen = ($script:Transcript -join "`n") }
+            # One screen = the lines written since the last Clear-Host (markers left out).
+            $clear = $script:Transcript.LastIndexOf('CLEAR')
+            $since = @($script:Transcript | Select-Object -Skip ($clear + 1) | Where-Object { $_ -cnotmatch '^(READ|CALL):' })
+            if ($script:HostBuffer) { $since += $script:HostBuffer }
+            $lineCount = 0
+            foreach ($l in $since) { $lineCount += @($l -split "`n").Count }
+            $script:Screens.Add([pscustomobject]@{ Text = ($since -join "`n"); Lines = $lineCount })
+            if ($null -eq $script:FirstScreen) { $script:FirstScreen = ($since -join "`n") }
             $script:LinesAtLastKey = $script:Transcript.Count
             if ($script:KeyQueue.Count -eq 0) { throw 'Test: menu asked for more keys than the test queued' }
             return $script:KeyQueue.Dequeue()
         }
         Mock Read-Host {
             $script:Prompts.Add([string]$Prompt)
-            $script:ConfirmScreen = (@($script:Transcript | Select-Object -Skip $script:LinesAtLastKey | Where-Object { $_ -notmatch '^(READ|CALL):' }) -join "`n")
+            $script:InventoryCalls.Add('PROMPT')
+            $script:ConfirmScreen = (@($script:Transcript | Select-Object -Skip $script:LinesAtLastKey | Where-Object { $_ -notmatch '^(READ|CALL|CLEAR):' }) -join "`n")
             if ($script:OnPrompt) { & $script:OnPrompt }
             return $script:Answer
         }
 
         Mock Get-AppxPackage {
-            $script:Transcript.Add('READ:Get-AppxPackage')
+            $script:Transcript.Add("READ:Get-AppxPackage $Name")
             if ($script:Packages.ContainsKey($Name)) { return $script:Packages[$Name] }
             return $null
         }
@@ -285,7 +339,7 @@ BeforeAll {
             return @($script:Provisioned)
         }
         Mock Get-WindowsOptionalFeature {
-            $script:Transcript.Add('READ:Get-WindowsOptionalFeature')
+            $script:Transcript.Add("READ:Get-WindowsOptionalFeature $FeatureName")
             if ($FeatureName) {
                 if ($script:Features.ContainsKey($FeatureName)) { return $script:Features[$FeatureName] }
                 throw "Feature name $FeatureName is unknown."
@@ -334,7 +388,7 @@ BeforeAll {
         $script:FeaturesExitCode = 0
         $output = @(Invoke-FeaturesCommand @Params)
         if ($script:HostBuffer) { $script:Transcript.Add($script:HostBuffer); $script:HostBuffer = '' }
-        $host_ = @($script:Transcript | Where-Object { $_ -notmatch '^(READ|CALL):' })
+        $host_ = @($script:Transcript | Where-Object { $_ -notmatch '^(READ|CALL|CLEAR):' })
         return [pscustomobject]@{
             Output = $output
             Text   = (($host_ + @($output | ForEach-Object { [string]$_ })) -join "`n")
@@ -529,6 +583,17 @@ Describe "sw features --list" {
         { ($result.Output | ForEach-Object { [string]$_ }) -join "`n" | ConvertFrom-Json } | Should -Not -Throw
     }
 
+    It "Never calls Write-Host in the JSON form, with or without admin and items" {
+        $script:ListAsJson = $true
+        $null = Invoke-Features -Params @{ List = $true }
+        Set-AllInstalled
+        $null = Invoke-Features -Params @{ List = $true }
+        $script:IsAdmin = $false
+        $result = Invoke-Features -Params @{ List = $true }
+        ($result.Output -join "`n") | Should -Match '"features_need_admin"\s*:\s*true'
+        Should -Invoke Write-Host -Times 0
+    }
+
     It "Reports provisioned apps and an empty list as an empty JSON array" {
         $script:ListAsJson = $true
         $result = Invoke-Features -Params @{ List = $true }
@@ -611,15 +676,72 @@ Describe "sw features menu" {
         ([regex]::Matches($script:FirstScreen, '\[ \]')).Count | Should -Be 3
     }
 
-    It "Shows title, description and warning of every row, with the pointer on the first row" {
+    It "Shows one line per row, but description and warning only for the cursor row" {
         $script:KeyQueue.Enqueue((Get-KeyEnter))
         $null = Show-FeaturesMenu -Items $script:Rows
-        foreach ($title in @('Example App', 'Other App', 'Legacy Feature')) {
-            $script:FirstScreen | Should -Match $title
-            $script:FirstScreen | Should -Match "Example description of $title"
-        }
+        foreach ($title in @('Example App', 'Other App', 'Legacy Feature')) { $script:FirstScreen | Should -Match $title }
+        $script:FirstScreen | Should -Match '(?m)^\s*>\s+\[ \]\s+Example App'
+        $script:FirstScreen | Should -Match 'Example description of Example App\.'
         $script:FirstScreen | Should -Match 'Sign-in may need this\.'
-        $script:FirstScreen | Should -Match '>\s+\[ \]\s+Example App'
+        $script:FirstScreen | Should -Not -Match 'Example description of Other App'
+        $script:FirstScreen | Should -Not -Match 'Example description of Legacy Feature'
+        $boxLines = @($script:FirstScreen -split "`n" | Where-Object { $_ -match '\[ \]' })
+        $boxLines.Count | Should -Be 3
+        $boxLines[1] | Should -Match 'Other App'
+        $boxLines[2] | Should -Match 'Legacy Feature'
+    }
+
+    It "Moves the description and the warning with the cursor" {
+        foreach ($key in @((Get-KeyDown), (Get-KeyUp), (Get-KeyEnter))) { $script:KeyQueue.Enqueue($key) }
+        $null = Show-FeaturesMenu -Items $script:Rows
+        $script:Screens.Count | Should -Be 3
+        $script:Screens[1].Text | Should -Match '(?m)^\s*>\s+\[ \]\s+Other App'
+        $script:Screens[1].Text | Should -Match 'Example description of Other App\.'
+        $script:Screens[1].Text | Should -Not -Match 'Example description of Example App'
+        $script:Screens[1].Text | Should -Not -Match 'Sign-in may need this'
+        $script:Screens[2].Text | Should -Match 'Sign-in may need this\.'
+    }
+
+    It "Shows a screen of at most <Height> lines and follows the cursor through 28 rows" -ForEach @(@{ Height = 14 }, @{ Height = 20 }) {
+        $script:WindowHeight = $Height
+        $rows = @(New-ManyRows -Count 28)
+        foreach ($key in ((New-RepeatedKeys -Key { Get-KeyDown } -Count 27) + @((Get-KeyEnter)))) { $script:KeyQueue.Enqueue($key) }
+        $null = Show-FeaturesMenu -Items $rows
+        $script:Screens.Count | Should -Be 28
+        foreach ($screen in $script:Screens) { $screen.Lines | Should -BeLessOrEqual $Height }
+        $script:Screens[0].Text | Should -Match 'Row 01'
+        $script:Screens[0].Text | Should -Not -Match 'Row 28'
+        for ($n = 1; $n -le 28; $n++) {
+            $script:Screens[$n - 1].Text | Should -Match ("(?m)^\s*>\s+\[ \]\s+Row {0:00}\b" -f $n)
+        }
+    }
+
+    It "Scrolls back up to the first row" {
+        $script:WindowHeight = 14
+        $rows = @(New-ManyRows -Count 28)
+        foreach ($key in ((New-RepeatedKeys -Key { Get-KeyDown } -Count 27) + (New-RepeatedKeys -Key { Get-KeyUp } -Count 27) + @((Get-KeyEnter)))) { $script:KeyQueue.Enqueue($key) }
+        $null = Show-FeaturesMenu -Items $rows
+        foreach ($screen in $script:Screens) { $screen.Lines | Should -BeLessOrEqual 14 }
+        $script:Screens[$script:Screens.Count - 1].Text | Should -Match '(?m)^\s*>\s+\[ \]\s+Row 01\b'
+    }
+
+    It "Keeps checks made on another page and returns them in menu order" {
+        $script:WindowHeight = 14
+        $rows = @(New-ManyRows -Count 28)
+        foreach ($key in (@((Get-KeySpace)) + (New-RepeatedKeys -Key { Get-KeyDown } -Count 27) + @((Get-KeySpace), (Get-KeyEnter)))) { $script:KeyQueue.Enqueue($key) }
+        $selected = Show-FeaturesMenu -Items $rows
+        @($selected | ForEach-Object { $_.Title }) | Should -Be @('Row 01', 'Row 28')
+    }
+
+    It "Shows the warning only while the cursor is on the warned row, also when paged" {
+        $script:WindowHeight = 14
+        $rows = @(New-ManyRows -Count 28 -WarnAt 20)
+        foreach ($key in ((New-RepeatedKeys -Key { Get-KeyDown } -Count 22) + @((Get-KeyEnter)))) { $script:KeyQueue.Enqueue($key) }
+        $null = Show-FeaturesMenu -Items $rows
+        for ($n = 1; $n -le 23; $n++) {
+            if ($n -eq 20) { $script:Screens[$n - 1].Text | Should -Match 'Row warning text\.' }
+            else { $script:Screens[$n - 1].Text | Should -Not -Match 'Row warning text\.' }
+        }
     }
 
     It "Writes ASCII only" {
@@ -811,32 +933,48 @@ Describe "sw features --all-users-future" {
         Should -Invoke Remove-AppxProvisionedPackage -Times 1 -Exactly -ParameterFilter { $Online -and $PackageName -eq 'Contoso.Example_2.5.0.0_neutral_~_examplepublisher' }
     }
 
-    It "Logs one REMOVED line that names both commands" {
+    It "Logs one REMOVED line per step: the user package and the provisioned package" {
         Set-AllInstalled
         $script:Provisioned = @([pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_2.5.0.0_neutral_~_examplepublisher' })
         $null = Invoke-Features -Params @{ AllUsersFuture = $true } -Keys (New-SelectionKeys -Select 0 -Rows 5)
         $records = @(Get-LogRecords)
-        $records.Count | Should -Be 1
-        $records[0] | Should -Match 'REMOVED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*Remove-AppxPackage -Package Contoso\.Example_2\.5\.0\.0_x64__examplepublisher; Remove-AppxProvisionedPackage -Online -PackageName Contoso\.Example_2\.5\.0\.0_neutral_~_examplepublisher'
+        $records.Count | Should -Be 2
+        $records[0] | Should -Match 'REMOVED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*Remove-AppxPackage -Package Contoso\.Example_2\.5\.0\.0_x64__examplepublisher'
+        $records[1] | Should -Match 'REMOVED appx-provisioned:Contoso\.Example_2\.5\.0\.0_neutral_~_examplepublisher \(.*Remove-AppxProvisionedPackage -Online -PackageName Contoso\.Example_2\.5\.0\.0_neutral_~_examplepublisher'
     }
 
-    It "Logs FAILED, with the error and no REMOVED line, when the provisioned step fails" {
+    It "Logs the partial success: REMOVED for the user package, FAILED for the provisioned step with command and error" {
         Set-AllInstalled
         $script:Provisioned = @([pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_2.5.0.0_neutral_~_examplepublisher' })
         $script:OnProvisionedRemove = { throw 'provisioned boom' }
         $null = Invoke-Features -Params @{ AllUsersFuture = $true } -Keys (New-SelectionKeys -Select 0 -Rows 5)
         $records = @(Get-LogRecords)
-        $records.Count | Should -Be 1
-        $records[0] | Should -Match 'FAILED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*provisioned boom'
+        $records.Count | Should -Be 2
+        $records[0] | Should -Match 'REMOVED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \('
+        $records[1] | Should -Match 'FAILED appx-provisioned:Contoso\.Example_2\.5\.0\.0_neutral_~_examplepublisher \(.*Remove-AppxProvisionedPackage -Online -PackageName Contoso\.Example_2\.5\.0\.0_neutral_~_examplepublisher.*provisioned boom'
     }
 
-    It "Does not try the provisioned step when the user package fails" {
+    It "Does not try the provisioned step when the user package fails, and logs one FAILED line" {
         Set-AllInstalled
         $script:Provisioned = @([pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_2.5.0.0_neutral_~_examplepublisher' })
         $script:OnAppRemove = { throw 'user boom' }
         $null = Invoke-Features -Params @{ AllUsersFuture = $true } -Keys (New-SelectionKeys -Select 0 -Rows 5)
         Should -Invoke Remove-AppxProvisionedPackage -Times 0
-        @(Get-LogRecords)[0] | Should -Match 'FAILED appx:'
+        $records = @(Get-LogRecords)
+        $records.Count | Should -Be 1
+        $records[0] | Should -Match 'FAILED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*user boom'
+    }
+
+    It "Skips the app, with no Remove-* call, when the administrator rights are gone after the menu" {
+        Set-AllInstalled
+        $script:Provisioned = @([pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_2.5.0.0_neutral_~_examplepublisher' })
+        $script:OnPrompt = { $script:IsAdmin = $false }
+        $null = Invoke-Features -Params @{ AllUsersFuture = $true } -Keys (New-SelectionKeys -Select 0 -Rows 5)
+        Should -Invoke Remove-AppxPackage -Times 0
+        Should -Invoke Remove-AppxProvisionedPackage -Times 0
+        $records = @(Get-LogRecords)
+        $records.Count | Should -Be 1
+        $records[0] | Should -Match 'SKIPPED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \((?!-\)).+\)'
     }
 
     It "Skips the provisioned step for an app that is not provisioned" {
@@ -887,6 +1025,30 @@ Describe "sw features administrator rules (E19)" {
         $script:FirstScreen | Should -Not -Match 'Legacy Feature'
         $script:FirstScreen | Should -Not -Match 'Second Feature'
         $result.Text | Should -Match 'Run Sweepr in an administrator PowerShell for optional Windows features'
+    }
+
+    It "Keeps the administrator notice at the head of every menu screen, after each Clear-Host" {
+        Set-AllInstalled
+        $script:IsAdmin = $false
+        $null = Invoke-Features -Keys @((Get-KeyDown), (Get-KeyDown), (Get-KeyEscape))
+        $script:Screens.Count | Should -Be 3
+        foreach ($screen in $script:Screens) {
+            $screen.Text | Should -Match 'Run Sweepr in an administrator PowerShell for optional Windows features'
+        }
+    }
+
+    It "Still keeps every screen within the window height with the notice" {
+        Set-AllInstalled
+        $script:IsAdmin = $false
+        $script:WindowHeight = 12
+        $null = Invoke-Features -Keys @((Get-KeyDown), (Get-KeyEscape))
+        foreach ($screen in $script:Screens) { $screen.Lines | Should -BeLessOrEqual 12 }
+    }
+
+    It "Shows no administrator notice on the menu screens with admin rights" {
+        Set-AllInstalled
+        $null = Invoke-Features -Keys @((Get-KeyDown), (Get-KeyEscape))
+        foreach ($screen in $script:Screens) { $screen.Text | Should -Not -Match 'administrator PowerShell' }
     }
 
     It "Removes an app of the current user without admin and touches no feature" {
@@ -1047,6 +1209,16 @@ Describe "sw features check right before the removal" {
         $records.Count | Should -Be 2
         $records[0] | Should -Match 'SKIPPED appx:Contoso\.Other_'
         $records[1] | Should -Match 'SKIPPED feature:Contoso-Legacy'
+    }
+
+    It "Re-reads only the one catalog entry of each selected row, after the prompt" {
+        Set-AllInstalled
+        $null = Invoke-Features -Keys (New-SelectionKeys -Select 0, 3 -Rows 5)
+        $calls = @($script:InventoryCalls)
+        $prompt = $calls.IndexOf('PROMPT')
+        $prompt | Should -BeGreaterThan 0
+        $calls[0] | Should -Be '-1:'
+        @($calls | Select-Object -Skip ($prompt + 1)) | Should -Be @('1:app.example', '1:feature.legacy')
     }
 
     It "Checks each entry right before its own removal, not once for the whole batch" {
@@ -1257,6 +1429,19 @@ Describe "sw history counts the features actions" {
         $path = Write-HistoryFixture @("[2026-10-25 10:00:02] [features run=f2] DISABLED feature:Contoso-Legacy (Disable-WindowsOptionalFeature -Online -FeatureName Contoso-Legacy -NoRestart)")
         $history = Read-SweeprHistory -Path $path
         Format-SweeprHistoryActions $history.Sessions[0].actions | Should -Be 'disabled 1'
+    }
+
+    It "Counts appx-provisioned: lines like any other path" {
+        $path = Write-HistoryFixture @(
+            "[2026-10-25 10:00:01] [features run=f3] REMOVED appx:Contoso.Example_2.5.0.0_x64__examplepublisher (Remove-AppxPackage -Package Contoso.Example_2.5.0.0_x64__examplepublisher)",
+            "[2026-10-25 10:00:02] [features run=f3] REMOVED appx-provisioned:Contoso.Example_2.5.0.0_neutral_~_examplepublisher (Remove-AppxProvisionedPackage -Online -PackageName Contoso.Example_2.5.0.0_neutral_~_examplepublisher)",
+            "[2026-10-25 10:00:03] [features run=f3] FAILED appx-provisioned:Contoso.Other_2.5.0.0_neutral_~_examplepublisher (Remove-AppxProvisionedPackage -Online -PackageName Contoso.Other_2.5.0.0_neutral_~_examplepublisher; boom)"
+        )
+        $history = Read-SweeprHistory -Path $path
+        $history.Sessions[0].actions.removed | Should -Be 2
+        $history.Sessions[0].actions.failed | Should -Be 1
+        $history.Sessions[0].actions.other | Should -Be 0
+        $history.Operations[1].path | Should -BeExactly 'appx-provisioned:Contoso.Example_2.5.0.0_neutral_~_examplepublisher'
     }
 
     It "Still counts the actions of the other commands as before" {
