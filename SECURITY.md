@@ -1,19 +1,16 @@
 # Security Policy
 
-Mole CLI for Windows is a local system maintenance tool. It includes high-risk operations such as cleanup, uninstall, optimization, and artifact removal, so safety boundaries, deletion logic, and release integrity are treated as security-sensitive.
+freeMole (a fork of the Mole CLI for Windows) is a local system maintenance tool. It includes high-risk operations such as cleanup, uninstall, optimization, and artifact removal, so safety boundaries, deletion logic, and release integrity are treated as security-sensitive.
 
 ## Reporting a Vulnerability
 
-Please report suspected security issues privately.
+Please report suspected security issues privately through GitHub's private vulnerability reporting for this repository: <https://github.com/brummilab/freeMole/security/advisories/new>.
 
-- Email: `hitw93@gmail.com`
-- Subject line: `Mole Windows security report`
-
-Do not open a public GitHub issue for an unpatched vulnerability. If GitHub Security Advisories private reporting is enabled for the repository, you may use that channel instead.
+Do not open a public GitHub issue for an unpatched vulnerability. Do not send freeMole reports to the upstream Mole maintainer; if an issue also affects upstream Mole, report it there separately through the channel described in [tw93/Mole](https://github.com/tw93/Mole/blob/windows/SECURITY.md).
 
 Include as much of the following as possible:
 
-- Output of `mo --version` and how Mole was installed
+- Output of `fm --version` and how freeMole was installed
 - Windows version
 - Exact command or workflow involved
 - Reproduction steps or proof of concept
@@ -29,7 +26,7 @@ Response times are best-effort for a maintainer-led open source project, but sec
 
 ## Supported Versions
 
-Security fixes are only guaranteed for the latest published `V<version>-windows` release and the current `windows` branch.
+Security fixes are only guaranteed for the current `main` branch and, once releases exist, the latest published `V<version>-windows` release.
 
 ## What We Consider a Security Issue
 
@@ -42,7 +39,7 @@ Security fixes are only guaranteed for the latest published `V<version>-windows`
 ## What Usually Does Not Qualify
 
 - Cleanup misses that leave recoverable junk behind
-- Mole refusing to clean something
+- freeMole refusing to clean something
 - Cosmetic UI problems
 - Requests for broader or more aggressive cleanup
 

@@ -134,7 +134,7 @@ freeMole kann Dateien löschen, deshalb werden Pfade validiert und System- sowie
 - Aktivitäten werden in `%USERPROFILE%\.config\freemole\operations.log` protokolliert (`fm history`; abschalten mit `MO_NO_OPLOG=1`)
 - `C:\Windows`, `C:\Program Files`, Windows-Defender-Ordner und das Profil-Stammverzeichnis werden nie angefasst
 
-Siehe [SECURITY.md](SECURITY.md) und [SECURITY_AUDIT.md](SECURITY_AUDIT.md) (aus dem Upstream übernommen).
+Sicherheitslücken bitte privat über [GitHub Security Advisories](https://github.com/brummilab/freeMole/security/advisories/new) melden, nicht als öffentliches Issue. Siehe [SECURITY.md](SECURITY.md) und [SECURITY_AUDIT.md](SECURITY_AUDIT.md) (aus dem Upstream übernommen).
 
 ## Ordner und Unterschiede zum Original
 
@@ -161,6 +161,8 @@ go build -o bin\analyze.exe .\cmd\analyze
 go build -o bin\status.exe .\cmd\status
 .\freemole.ps1 clean --dry-run
 ```
+
+Jeder Push und jeder Pull-Request auf `main` startet die GitHub-Actions-Workflows **Validation** (Pester unter PowerShell 5.1 und 7, Go-Tests, Windows-Builds) und **Check** auf `windows-latest`.
 
 Projektübersicht und Änderungsprotokoll: [Projektinhalt.md](Projektinhalt.md).
 

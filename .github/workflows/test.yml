@@ -2,9 +2,9 @@ name: Validation
 
 on:
   push:
-    branches: [windows]
+    branches: [main]
   pull_request:
-    branches: [windows]
+    branches: [main]
 
 permissions:
   contents: read
