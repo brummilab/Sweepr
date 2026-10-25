@@ -182,7 +182,7 @@ Describe "portable release asset" {
         $script:NormalZip = Join-Path $releaseDir "sweepr-9.9.9-x64.zip"
         $script:PortableZip = Join-Path $releaseDir "sweepr-9.9.9-x64-portable.zip"
 
-        # One BeforeAll per block: newer Pester releases keep only the last one.
+        # One BeforeAll per block: Pester 5 runs only the last one (the Linux runner ships Pester 5).
         function script:Get-ZipNames([string]$Path) {
             $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
             try { return @($archive.Entries | ForEach-Object { $_.FullName }) }
