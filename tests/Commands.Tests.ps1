@@ -291,10 +291,13 @@ if (-not $?) { exit 1 }
             @'
 . $env:SWEEPR_INSTALL_SCRIPT -ShowHelp 6>$null
 
+# The legacy PATH intent is read live from the user PATH; stand in for it here.
+function Test-InstallDirOnUserPath { param([string]$Path) return $false }
 $withoutPath = Resolve-InstallInvocation `
     -SourceDir "C:\Sweepr" `
     -RequestedInstallDir "-InstallDir" `
     -RequestedAddToPath
+function Test-InstallDirOnUserPath { param([string]$Path) return $true }
 $withPath = Resolve-InstallInvocation `
     -SourceDir "C:\Sweepr" `
     -RequestedInstallDir "-InstallDir" `

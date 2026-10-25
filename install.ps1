@@ -26,6 +26,18 @@ $script:InstallDirGiven = $PSBoundParameters.ContainsKey("InstallDir")
 # Configuration
 # ============================================================================
 
+# Same check as bin/update.ps1: is this exact folder an entry of the user PATH?
+function Test-InstallDirOnUserPath {
+    param([string]$Path)
+
+    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (-not $currentPath) {
+        return $false
+    }
+
+    return $currentPath -split ";" | Where-Object { $_ -eq $Path }
+}
+
 function Resolve-InstallInvocation {
     param(
         [string]$SourceDir,
@@ -35,14 +47,19 @@ function Resolve-InstallInvocation {
     )
 
     # v1.30.0 passed @("-InstallDir", $sourceDir, optional "-AddToPath")
-    # through array splatting. PowerShell bound those values positionally, so
-    # the path made AddToPath truthy and the optional marker became
-    # CreateShortcut. Decode only that exact legacy shape for the first update
-    # that pulls this installer while the old updater is still running.
+    # through array splatting, so every element bound positionally: the text
+    # "-InstallDir" became the value of InstallDir. With -Components declared,
+    # the source folder then binds positionally to -Components (seen on pwsh 7
+    # and in the Windows CI for Windows PowerShell 5.1), so the switch values
+    # say nothing reliable about what the old updater meant. Decode only that
+    # exact legacy shape for the first update that pulls this installer while
+    # the old updater is still running: install the folder the script lives in
+    # and keep PATH only if that folder is already on the user PATH, the same
+    # check bin/update.ps1 makes.
     if ($RequestedInstallDir -ceq "-InstallDir") {
         return [PSCustomObject]@{
             InstallDir     = $SourceDir
-            AddToPath      = $RequestedCreateShortcut.IsPresent
+            AddToPath      = [bool](Test-InstallDirOnUserPath -Path $SourceDir)
             CreateShortcut = $false
         }
     }
@@ -60,8 +77,8 @@ $script:SourceDir = if ($MyInvocation.MyCommand.Path) {
     $PSScriptRoot
 }
 # The v1.30.0 updater passes its source folder positionally after
-# "-InstallDir"; with -Components declared, that path binds to -Components.
-# It is not a component list, and that old updater must never see the menu.
+# "-InstallDir"; with -Components declared, that path binds to -Components. It is not a
+# component list, and that old updater must never see the menu.
 $script:LegacyInvocation = $InstallDir -ceq "-InstallDir"
 if ($script:LegacyInvocation) {
     $Components = $null
@@ -417,7 +434,7 @@ function ConvertTo-InstallComponents {
     foreach ($part in @($Text -split "[,\s]+")) {
         if ($part) { $names += $part.ToLowerInvariant() }
     }
-    $allowed = @("analyze", "path", "shortcut", "status")
+    $allowed = $script:InstallComponentNames
     foreach ($name in $names) {
         if ($allowed -notcontains $name) {
             throw "Unknown component '$name'. Allowed components: $($allowed -join ', ')"
@@ -1148,10 +1165,12 @@ function Main {
         # Decide before anything is copied: a bad name or a cancelled menu
         # must leave the machine untouched.
         $interactive = Test-InstallInteractive -NoPrompt ([bool]$NoPrompt) -Uninstall $false
+        # The old updater never meant a component choice, so the variable is ignored for it.
+        $envComponents = if ($script:LegacyInvocation) { "" } else { $env:SWEEPR_COMPONENTS }
         try {
             $selection = Get-InstallComponentSelection `
             -Components $Components `
-            -EnvComponents $env:SWEEPR_COMPONENTS `
+            -EnvComponents $envComponents `
             -AddToPath ([bool]$AddToPath) `
             -CreateShortcut ([bool]$CreateShortcut) `
             -Interactive $interactive
@@ -1163,7 +1182,8 @@ function Main {
         if ($null -eq $selection) {
             Write-Host ""
             Write-Info "Installation cancelled. Nothing was installed."
-            exit 1
+            # 3 = cancelled, so callers can tell it from a failure (1) and bad arguments (2).
+            exit 3
         }
         $selection = @($selection)
         $script:AddToPath = [switch]($selection -contains "path")
