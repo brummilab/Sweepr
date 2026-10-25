@@ -86,8 +86,9 @@
 #   as `~\...`; below another user's folder `C:\Users\<user>\...`; a network path `\\<host>\<share>\...`
 #   (host and share are always replaced); EVERY path part equal to $env:USERNAME (any case) becomes `<user>`
 #   (e.g. a redirected %APPDATA% on `\\srv01\home$\Alice\AppData` -> `\\<host>\<share>\<user>\AppData`);
-#   anything else (C:\Windows\Temp\x) unchanged. Neither user nor computer name appears in the JSON, the
-#   console or the object handed to the report hook.
+#   anything else (C:\Windows\Temp\x) unchanged. Neither user nor computer name appears in the JSON or
+#   the object handed to the report hook, and in the console only the single line "Report: <path>" may show the
+#   real (clickable, local) path of the report; no other console line contains them.
 #   Reason texts come from a fixed list only: 'external tool', 'needs administrator', 'time limit',
 #   'incomplete', 'not available', 'error'. A source text of 'external tool' or 'needs administrator' is kept,
 #   one starting with 'error' becomes 'error', every other text becomes 'not available'.
@@ -940,13 +941,28 @@ Describe 'sw check result' {
         $json = Get-CheckJson -Params @{ Json = $true; Report = $true }
         $console = Invoke-Check -Params @{ Report = $true }
         $hook = $script:HookArgs.Result | ConvertTo-Json -Depth 10
-        foreach ($text in @($json.Raw, $console.Text, $hook)) {
+        # The "Report: <path>" line is the one place with the real path; it is left out here.
+        $consoleRest = (@($console.Text -split "`n") | Where-Object { $_ -notmatch '^\s*Report:' }) -join "`n"
+        foreach ($text in @($json.Raw, $consoleRest, $hook)) {
             $text | Should -Not -Match 'Alice'
             $text | Should -Not -Match 'Bob'
             $text | Should -Not -Match 'fileserver01'
             $text | Should -Not -Match 'srv'
             $text | Should -Not -Match 'CONTOSO'
         }
+    }
+
+    It 'Shows the real report path in exactly one console line and no name in any other line' {
+        $script:CleanData = New-CleanPreview -Hits @(
+            (New-Hit 'User essentials' 'x' '\\fileserver01\home$\Alice\AppData\Roaming\Slack\Cache' 3MB)
+            (New-Hit 'User essentials' 'x' 'C:\Users\Alice\AppData\Local\Temp\a' 2MB)
+        )
+        $script:HealthData.Startup.Entries = @([pscustomobject]@{ Name = 'ExampleSync'; Command = 'C:\Users\Alice\x.exe'; Source = 'HKCU Run' })
+        $run = Invoke-Check -Params @{ Report = $true }
+        $lines = @($run.Text -split "`n")
+        $withName = @($lines | Where-Object { $_ -match 'Alice|CONTOSO|fileserver01' })
+        $withName.Count | Should -Be 1
+        $withName[0] | Should -Match '^\s*Report:\s+C:\\Users\\Alice\\AppData\\Local\\Temp\\sweepr-check-2026-10-25\.html'
     }
 
     It 'Sums the clean preview and groups it by cleanup section in run order' {
