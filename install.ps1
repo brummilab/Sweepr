@@ -829,6 +829,7 @@ function Get-SweeprInstallNestedFiles {
         "lib\clean\user.ps1"
         "lib\core\base.ps1"
         "lib\core\common.ps1"
+        "lib\core\features.ps1"
         "lib\core\file_ops.ps1"
         "lib\core\history.ps1"
         "lib\core\log.ps1"
