@@ -162,10 +162,15 @@ Purge Command.Help Display.Should list artifact types in help
 Purge Command.Help Display.Should show help without error
 Purge project boundaries.checks Git again immediately before removal after sizing
 Purge project boundaries.does not discover dependency packages as independent projects
+Purge project boundaries.does not inherit Git index or pathspec overrides
 Purge project boundaries.finds untracked artifacts under literal bracket project paths
 Purge project boundaries.keeps authored and unrelated generic folders in a Node project
 Purge project boundaries.keeps authored bin in an unversioned Go project
+Purge project boundaries.keeps candidates when Git inspection fails
+Purge project boundaries.keeps candidates when the content walk is incomplete
+Purge project boundaries.keeps nested repositories
 Purge project boundaries.keeps real ecosystem artifacts eligible
+Purge project boundaries.keeps tracked content without relying on wildcard path failure
 Purge project boundaries.matches tracked artifacts under literal bracket project names
 Purge project boundaries.reads Git root paths as UTF8 for Unicode projects
 Purge project labels.names each project by its path while cleaning

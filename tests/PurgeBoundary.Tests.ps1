@@ -83,6 +83,8 @@ Describe 'Purge project boundaries' {
     It 'keeps tracked content without relying on wildcard path failure' {
         $root = New-PurgeFixture
         & git -C $root init -q
+        # Positive control: untracked, the candidate is found.
+        @(Find-ProjectArtifacts $root).Count | Should -Be 1
         & git -C $root add -- 'node_modules/payload.txt'
         $LASTEXITCODE | Should -Be 0
         @(Find-ProjectArtifacts $root).Count | Should -Be 0
@@ -99,6 +101,8 @@ Describe 'Purge project boundaries' {
         $root = New-PurgeFixture
         $nested = Join-Path $root 'node_modules\child'
         $null = New-Item -ItemType Directory -Path $nested
+        # Positive control: without the protecting condition the candidate is found.
+        @(Find-ProjectArtifacts $root).Count | Should -Be 1
         & git -C $nested init -q
         $LASTEXITCODE | Should -Be 0
         @(Find-ProjectArtifacts $root).Count | Should -Be 0
@@ -106,6 +110,8 @@ Describe 'Purge project boundaries' {
 
     It 'keeps candidates when Git inspection fails' {
         $root = New-PurgeFixture
+        # Positive control: without the protecting condition the candidate is found.
+        @(Find-ProjectArtifacts $root).Count | Should -Be 1
         $null = New-Item -ItemType Directory -Path (Join-Path $root '.git')
         @(Find-ProjectArtifacts $root).Count | Should -Be 0
     }
@@ -128,6 +134,8 @@ Describe 'Purge project boundaries' {
 
     It 'keeps candidates when the content walk is incomplete' {
         $root = New-PurgeFixture
+        # Positive control: without the protecting condition the candidate is found.
+        @(Find-ProjectArtifacts $root).Count | Should -Be 1
         Mock Get-TreeItemsNoFollow { throw 'fixture walk timeout' }
         @(Find-ProjectArtifacts $root).Count | Should -Be 0
     }
@@ -145,6 +153,8 @@ Describe 'Purge project boundaries' {
     It 'does not inherit Git index or pathspec overrides' {
         $root = New-PurgeFixture
         & git -C $root init -q
+        # Positive control: untracked, the candidate is found.
+        @(Find-ProjectArtifacts $root).Count | Should -Be 1
         & git -C $root add -- 'node_modules/payload.txt'
         $oldIndex = $env:GIT_INDEX_FILE
         $oldLiteral = $env:GIT_LITERAL_PATHSPECS
