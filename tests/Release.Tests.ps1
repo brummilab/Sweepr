@@ -152,3 +152,119 @@ Describe "new-release-zip.ps1" {
         }
     }
 }
+
+Describe "portable release asset" {
+    BeforeAll {
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        $build = Get-Content (Join-Path $script:ScriptsDir "build-release.ps1") -Raw
+        $start = $build.IndexOf('# Copy all necessary files')
+        $end = $build.IndexOf('# Summary', $start)
+        $start | Should -BeGreaterThan -1
+        $end | Should -BeGreaterThan $start
+
+        # Execute the real staging, archive and checksum steps (5 and 6) with fake binaries.
+        $projectRoot = $script:WindowsDir
+        $scriptDir = $script:ScriptsDir
+        $releaseDir = Join-Path $TestDrive "portable-release"
+        $tempBuildDir = Join-Path $releaseDir "temp-build"
+        $launcherDir = Join-Path $releaseDir "launcher"
+        $binDir = Join-Path $TestDrive "portable-bin"
+        New-Item -ItemType Directory -Path $tempBuildDir, $launcherDir, $binDir -Force | Out-Null
+        Set-Content -Path (Join-Path $launcherDir "sw.exe") -Value "fake"
+        Set-Content -Path (Join-Path $binDir "analyze.exe") -Value "fake"
+        Set-Content -Path (Join-Path $binDir "status.exe") -Value "fake"
+        $archiveName = "sweepr-9.9.9-x64"
+        . ([scriptblock]::Create($build.Substring($start, $end - $start))) 6>$null
+
+        $script:ReleaseDir = $releaseDir
+        $script:NormalZip = Join-Path $releaseDir "sweepr-9.9.9-x64.zip"
+        $script:PortableZip = Join-Path $releaseDir "sweepr-9.9.9-x64-portable.zip"
+    }
+
+    BeforeAll {
+        function script:Get-ZipNames([string]$Path) {
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+            try { return @($archive.Entries | ForEach-Object { $_.FullName }) }
+            finally { $archive.Dispose() }
+        }
+    }
+
+    It "Creates the portable zip next to the normal zip" {
+        Test-Path $script:NormalZip | Should -BeTrue
+        Test-Path $script:PortableZip | Should -BeTrue
+    }
+
+    It "Puts sweepr.portable at the root of the portable zip" {
+        Get-ZipNames $script:PortableZip | Should -Contain "sweepr.portable"
+    }
+
+    It "Keeps sweepr.portable out of the normal zip" {
+        Get-ZipNames $script:NormalZip | Should -Not -Contain "sweepr.portable"
+    }
+
+    It "Ships every entry of the normal zip in the portable zip, and nothing else but the marker" {
+        $normal = @(Get-ZipNames $script:NormalZip | Sort-Object)
+        $portable = @(Get-ZipNames $script:PortableZip | Where-Object { $_ -ne "sweepr.portable" } | Sort-Object)
+        $normal.Count | Should -BeGreaterThan 0
+        $portable | Should -Be $normal
+    }
+
+    It "Stores the same content for every shared entry" {
+        $a = [System.IO.Compression.ZipFile]::OpenRead($script:NormalZip)
+        $b = [System.IO.Compression.ZipFile]::OpenRead($script:PortableZip)
+        try {
+            foreach ($entry in @($a.Entries | Where-Object { $_.Length -gt 0 })) {
+                $other = $b.GetEntry($entry.FullName)
+                $other | Should -Not -BeNullOrEmpty -Because "$($entry.FullName) must be in both zips"
+                $other.Length | Should -Be $entry.Length
+            }
+        }
+        finally { $a.Dispose(); $b.Dispose() }
+    }
+
+    It "Writes an ASCII English explanation into sweepr.portable" {
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($script:PortableZip)
+        try {
+            $entry = $archive.GetEntry("sweepr.portable")
+            $entry | Should -Not -BeNullOrEmpty
+            $reader = New-Object System.IO.StreamReader($entry.Open(), [System.Text.Encoding]::ASCII)
+            try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        }
+        finally { $archive.Dispose() }
+        $text.Trim().Length | Should -BeGreaterThan 20
+        $text | Should -Match '(?i)portable mode'
+        $text | Should -Match '(?i)data folder'
+        $text | Should -Match '(?i)delete this file'
+        $text | Should -Not -Match '[^\x09\x0A\x0D\x20-\x7E]'
+    }
+
+    It "Lists both zips in SHA256SUMS.txt with matching hashes" {
+        $lines = @(Get-Content (Join-Path $script:ReleaseDir "SHA256SUMS.txt"))
+        foreach ($name in @("sweepr-9.9.9-x64.zip", "sweepr-9.9.9-x64-portable.zip")) {
+            $expected = (Get-FileHash (Join-Path $script:ReleaseDir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            $lines | Should -Contain "$expected  $name"
+        }
+    }
+}
+
+Describe "release workflow portable asset" {
+    BeforeAll {
+        $script:WorkflowText = Get-Content (Join-Path $script:WindowsDir ".github/workflows/release-windows.yml") -Raw
+        $script:Asset = 'release/sweepr-${{ steps.version.outputs.VERSION }}-x64-portable.zip'
+    }
+
+    It "Uploads the portable zip as a workflow artifact" {
+        $uploads = [regex]::Matches($script:WorkflowText, '(?ms)uses: actions/upload-artifact@.*?(?=^\s*- name:|\z)')
+        @($uploads | Where-Object { $_.Value.Contains($script:Asset) }).Count | Should -BeGreaterThan 0
+    }
+
+    It "Attaches the portable zip to the release" {
+        $collect = $script:WorkflowText.IndexOf('$files = @(')
+        $collect | Should -BeGreaterThan -1
+        $block = $script:WorkflowText.Substring($collect, $script:WorkflowText.IndexOf(')', $collect) - $collect)
+        $block | Should -Match ([regex]::Escape($script:Asset))
+        $block | Should -Match ([regex]::Escape('-x64.zip"'))
+    }
+}

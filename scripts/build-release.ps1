@@ -259,6 +259,18 @@ Write-Host "  Compressing to ZIP..." -ForegroundColor Gray
 $zipSize = (Get-Item $zipPath).Length / 1MB
 Write-Host "  Created: $archiveName.zip ($([math]::Round($zipSize, 2)) MB)" -ForegroundColor Green
 
+# The portable ZIP is the same tree plus the sweepr.portable marker. It is added
+# only after the normal ZIP exists, because winget/Scoop use the normal ZIP and
+# the marker would switch them into portable mode.
+$portableMarker = Join-Path $tempBuildDir "sweepr.portable"
+$portableText = "This file turns on Sweepr portable mode. Settings, whitelist, operation log and caches are kept in the data folder next to it; nothing is written to your user profile. Delete this file to use the normal per-user folders instead."
+[System.IO.File]::WriteAllText($portableMarker, $portableText + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+$portableName = "$archiveName-portable.zip"
+$portableZipPath = Join-Path $releaseDir $portableName
+& (Join-Path $scriptDir "new-release-zip.ps1") -SourceDir $tempBuildDir -Destination $portableZipPath
+$portableSize = (Get-Item $portableZipPath).Length / 1MB
+Write-Host "  Created: $portableName ($([math]::Round($portableSize, 2)) MB)" -ForegroundColor Green
+
 # Cleanup temp directories
 Remove-Item $tempBuildDir -Recurse -Force
 Remove-Item (Join-Path $releaseDir "launcher") -Recurse -Force
@@ -280,7 +292,7 @@ foreach ($tui in $tuiAssets) {
     Copy-Item -LiteralPath $tui.Source -Destination (Join-Path $releaseDir $tui.Name) -Force
     Write-Host "  $($tui.Name)" -ForegroundColor Gray
 }
-& (Join-Path $scriptDir "write-checksums.ps1") -Directory $releaseDir -Files (@("$archiveName.zip") + ($tuiAssets | ForEach-Object { $_.Name }))
+& (Join-Path $scriptDir "write-checksums.ps1") -Directory $releaseDir -Files (@("$archiveName.zip", $portableName) + ($tuiAssets | ForEach-Object { $_.Name }))
 Write-Host ""
 
 # ============================================================================
