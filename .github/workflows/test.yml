@@ -1,0 +1,189 @@
+name: Validation
+
+on:
+  push:
+    branches: [windows]
+  pull_request:
+    branches: [windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    # freeMole targets Windows PowerShell 5.1; pwsh 7 is what most contributors run.
+    name: Tests (${{ matrix.shell }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Pester
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Pester 6.2.0 is the version verified in docs/development-record.md
+          # on both Windows PowerShell 5.1 and pwsh 7. The two hosts use
+          # different CurrentUser module roots, hence the matrix-shell key.
+          path: |
+            ~\Documents\PowerShell\Modules
+            ~\Documents\WindowsPowerShell\Modules
+          key: ${{ runner.os }}-${{ matrix.shell }}-pester-6.2.0
+
+      - name: Install Pester
+        run: |
+          $ErrorActionPreference = "Stop"
+          $preferred = '6.2.0'
+          $fallback = '5.7.1'
+          $have = Get-Module -ListAvailable -Name Pester |
+              Where-Object { $_.Version.ToString() -eq $preferred }
+          if (-not $have) {
+              try {
+                  Install-Module -Name Pester -RequiredVersion $preferred -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+              }
+              catch {
+                  Write-Host "Pester $preferred is unavailable; falling back to $fallback."
+                  Install-Module -Name Pester -RequiredVersion $fallback -Force -SkipPublisherCheck -Scope CurrentUser
+              }
+          }
+          Import-Module Pester -MinimumVersion '5.0.0'
+          Write-Host "Pester $((Get-Module Pester).Version) ready"
+
+      - name: Run PowerShell tests
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          # scripts/test.ps1 owns the pass gate: a missing result, zero passing
+          # tests and an entirely skipped suite are failures there.
+          & ./scripts/test.ps1 -NoGo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test e2e orchestration with mocks
+        if: matrix.shell == 'pwsh'
+        env:
+          MOLE_TEST_NO_AUTH: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python tests/e2e_harness_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Go tests
+        if: matrix.shell == 'pwsh'
+        run: |
+          go test -v ./cmd/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
+
+  build:
+    name: Build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build Go binaries
+        run: |
+          go build -o bin/analyze.exe ./cmd/analyze/
+          go build -o bin/status.exe ./cmd/status/
+        shell: pwsh
+
+      - name: Verify binaries
+        run: |
+          if (Test-Path bin/analyze.exe) {
+            Write-Host "analyze.exe built successfully"
+          } else {
+            Write-Host "Failed to build analyze.exe"
+            exit 1
+          }
+          if (Test-Path bin/status.exe) {
+            Write-Host "status.exe built successfully"
+          } else {
+            Write-Host "Failed to build status.exe"
+            exit 1
+          }
+        shell: pwsh
+
+  security:
+    name: Security Checks
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Load core modules
+        run: |
+          . ./lib/core/base.ps1
+          . ./lib/core/file_ops.ps1
+          Write-Host "Core modules loaded successfully"
+        shell: pwsh
+
+      - name: Verify protected paths
+        run: |
+          . ./lib/core/base.ps1
+          . ./lib/core/file_ops.ps1
+          
+          $protectedPaths = @(
+              "C:\Windows",
+              "C:\Windows\System32",
+              "C:\Program Files",
+              "C:\Program Files (x86)"
+          )
+          
+          foreach ($path in $protectedPaths) {
+              if (-not (Test-ProtectedPath -Path $path)) {
+                  Write-Host "FAIL: $path should be protected!" -ForegroundColor Red
+                  exit 1
+              }
+              Write-Host "OK: $path is protected" -ForegroundColor Green
+          }
+        shell: pwsh
+
+      - name: Check for unsafe patterns
+        run: |
+          $hasIssues = $false
+          
+          # Check for raw Remove-Item without safety
+          $unsafePatterns = Get-ChildItem -Path lib,bin -Recurse -Filter "*.ps1" | 
+            Select-String -Pattern "Remove-Item.*-Recurse.*-Force" |
+            Where-Object { $_.Line -notmatch "Remove-SafeItem|function Remove-" }
+          
+          if ($unsafePatterns) {
+            Write-Host "Warning: Potential unsafe Remove-Item usage found:" -ForegroundColor Yellow
+            $unsafePatterns | ForEach-Object { Write-Host "  $($_.Filename):$($_.LineNumber)" }
+          }
+          
+          Write-Host "Security check completed" -ForegroundColor Green
+        shell: pwsh
+
+      - name: Check for secrets
+        run: |
+          $matches = Get-ChildItem -Path . -Recurse -Filter "*.ps1" |
+            Select-String -Pattern "password|secret|api_key" -CaseSensitive:$false |
+            Where-Object { $_.Line -notmatch "^\s*#" }
+          
+          if ($matches) {
+            Write-Host "Review these lines for potential secrets:" -ForegroundColor Yellow
+            $matches | ForEach-Object { Write-Host "  $($_.Filename):$($_.LineNumber): $($_.Line.Trim())" }
+          }
+          
+          Write-Host "Secret scan completed" -ForegroundColor Green
+        shell: pwsh
