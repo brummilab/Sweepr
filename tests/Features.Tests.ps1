@@ -191,6 +191,17 @@ Describe "Feature catalog" {
         }
     }
 
+    It "Warns on Internet Explorer (Edge IE mode depends on it)" {
+        $ie = @($script:Catalog | Where-Object { @(Get-Field $_ 'Match') -contains 'Internet-Explorer-Optional-amd64' })
+        $ie.Count | Should -Be 1
+        ([string](Get-Field $ie[0] 'Warning')).Trim() | Should -Not -BeNullOrEmpty
+    }
+
+    It "Does not offer Groove Music / Media Player (Microsoft.ZuneMusic)" {
+        $all = @($script:Catalog | ForEach-Object { @(Get-Field $_ 'Match') })
+        $all | Should -Not -Contain 'Microsoft.ZuneMusic'
+    }
+
     It "Offers the PowerShell 2.0 optional feature" {
         $names = @($script:Catalog | Where-Object { (Get-Field $_ 'Kind') -eq 'OptionalFeature' } | ForEach-Object { @(Get-Field $_ 'Match') })
         $names | Should -Contain 'MicrosoftWindowsPowerShellV2'
@@ -362,8 +373,9 @@ Describe "Feature inventory" {
         }
         Mock Get-WindowsOptionalFeature {
             if ($script:FeaturesFail) { throw 'Elevation required' }
-            if ($script:Features.ContainsKey($FeatureName)) { return $script:Features[$FeatureName] }
-            return $null
+            # Like the real cmdlet: an unknown -FeatureName throws; the plain -Online listing returns everything.
+            if ($FeatureName) { throw "Feature name $FeatureName is unknown." }
+            return @($script:Features.Values)
         }
         Mock Remove-AppxPackage { throw 'inventory must not remove anything' }
         Mock Remove-AppxProvisionedPackage { throw 'inventory must not remove anything' }
@@ -520,6 +532,51 @@ Describe "Feature inventory" {
         @($result.Items).Count | Should -Be 0
     }
 
+    It "Reads features once with a plain -Online listing and never queries by -FeatureName" {
+        $script:Features['ExampleFeature'] = [pscustomobject]@{ FeatureName = 'ExampleFeature'; State = 'Enabled' }
+        $script:Features['OtherFeature'] = [pscustomobject]@{ FeatureName = 'OtherFeature'; State = 'Enabled' }
+        $catalog = @(
+            (New-TestEntry -Id 'feature.example' -Kind OptionalFeature -Match @('ExampleFeature')),
+            (New-TestEntry -Id 'feature.other' -Kind OptionalFeature -Match @('OtherFeature'))
+        )
+        $result = Get-SweeprFeatureInventory -Catalog $catalog
+        @($result.Items).Count | Should -Be 2
+        Should -Invoke Get-WindowsOptionalFeature -Times 0 -Exactly -ParameterFilter { $FeatureName }
+        Should -Invoke Get-WindowsOptionalFeature -Times 1 -Exactly
+    }
+
+    It "Skips a catalog feature that this Windows does not know and still lists the others" {
+        $script:Features['ExampleFeature'] = [pscustomobject]@{ FeatureName = 'ExampleFeature'; State = 'Enabled' }
+        $catalog = @(
+            (New-TestEntry -Id 'feature.unknown' -Kind OptionalFeature -Match @('UnknownFeature')),
+            (New-TestEntry -Id 'feature.example' -Kind OptionalFeature -Match @('ExampleFeature'))
+        )
+        $result = Get-SweeprFeatureInventory -Catalog $catalog
+        $result.FeaturesNeedAdmin | Should -BeFalse
+        @($result.Items | ForEach-Object { $_.Id }) | Should -Be @('feature.example')
+    }
+
+    It "Matches feature names exactly, not by prefix or case-folded neighbours" {
+        $script:Features['ExampleFeatureExtra'] = [pscustomobject]@{ FeatureName = 'ExampleFeatureExtra'; State = 'Enabled' }
+        $result = Get-SweeprFeatureInventory -Catalog @(New-TestEntry -Id 'feature.example' -Kind OptionalFeature -Match @('ExampleFeature'))
+        @($result.Items).Count | Should -Be 0
+        $result.FeaturesNeedAdmin | Should -BeFalse
+    }
+
+    It "Still lists apps and sets FeaturesNeedAdmin when the admin check itself throws" {
+        $script:Packages['Contoso.Example'] = New-TestPackage -Name 'Contoso.Example'
+        $script:Features['ExampleFeature'] = [pscustomobject]@{ FeatureName = 'ExampleFeature'; State = 'Enabled' }
+        Mock Test-IsAdmin { throw 'cannot determine identity' }
+        $catalog = @(
+            (New-TestEntry -Id 'app.example' -Kind App -Match @('Contoso.Example')),
+            (New-TestEntry -Id 'feature.example' -Kind OptionalFeature -Match @('ExampleFeature'))
+        )
+        { Get-SweeprFeatureInventory -Catalog $catalog } | Should -Not -Throw
+        $result = Get-SweeprFeatureInventory -Catalog $catalog
+        $result.FeaturesNeedAdmin | Should -BeTrue
+        @($result.Items | ForEach-Object { $_.Id }) | Should -Be @('app.example')
+    }
+
     It "Reports FeaturesNeedAdmin when the feature query fails, without throwing" {
         $script:FeaturesFail = $true
         $entry = New-TestEntry -Id 'feature.example' -Kind OptionalFeature -Match @('ExampleFeature')
@@ -631,6 +688,27 @@ Describe "Feature command text" {
             $text | Should -Not -Match '-Remove\b'
             $text | Should -Not -Match 'Restart-Computer'
         }
+    }
+
+    It "Refuses targets with unexpected characters" -ForEach @(
+        @{ Target = 'x; Remove-Item C:\\Example' }
+        @{ Target = 'Contoso.Example 1.0' }
+        @{ Target = 'Contoso.Example$(x)' }
+        @{ Target = '' }
+    ) {
+        $row = [pscustomobject]@{ Id = 'app.example'; Kind = 'App'; Title = 'Example'; Description = 'Example'; Warning = $null; Target = $Target; Provisioned = $false; ProvisionedName = $null }
+        { Get-SweeprFeatureCommand -Item $row } | Should -Throw
+        $feature = [pscustomobject]@{ Id = 'feature.example'; Kind = 'OptionalFeature'; Title = 'Example'; Description = 'Example'; Warning = $null; Target = $Target; Provisioned = $false; ProvisionedName = $null }
+        { Get-SweeprFeatureCommand -Item $feature } | Should -Throw
+    }
+
+    It "Refuses a ProvisionedName with unexpected characters" -ForEach @(
+        @{ Name = 'x; Remove-Item C:\\Example' }
+        @{ Name = 'Contoso.Example neutral' }
+        @{ Name = 'Contoso.Example|calc' }
+    ) {
+        $row = [pscustomobject]@{ Id = 'app.example'; Kind = 'App'; Title = 'Example'; Description = 'Example'; Warning = $null; Target = 'Contoso.Example_1.0.0.0_x64__examplepublisher'; Provisioned = $true; ProvisionedName = $Name }
+        { Get-SweeprFeatureCommand -Item $row -AllUsersFuture } | Should -Throw
     }
 
     It "Does not execute anything while building the text" {
