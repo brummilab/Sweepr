@@ -169,8 +169,6 @@ go build -o bin\status.exe .\cmd\status
 
 Jeder Push und jeder Pull-Request auf `main` startet die GitHub-Actions-Workflows **Validation** (Pester unter PowerShell 5.1 und 7, Go-Tests, Windows-Builds) und **Check** auf `windows-latest`, dazu das Gate unter Linux.
 
-### Gate
-
 Vor jedem Merge muss das Gate grün sein:
 
 ```bash
