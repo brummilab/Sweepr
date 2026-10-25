@@ -154,3 +154,68 @@ func setTestHome(t *testing.T, dir string) {
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
 }
+
+func TestGetConfigPathUsesSweeprDataDir(t *testing.T) {
+	data := t.TempDir()
+	setTestHome(t, t.TempDir())
+	t.Setenv("SWEEPR_DATA_DIR", data)
+
+	want := filepath.Join(data, "config", "status_prefs")
+	if got := getConfigPath(); got != want {
+		t.Errorf("getConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestGetConfigPathTrimsSweeprDataDir(t *testing.T) {
+	data := t.TempDir()
+	setTestHome(t, t.TempDir())
+	t.Setenv("SWEEPR_DATA_DIR", "  "+data+"  ")
+
+	want := filepath.Join(data, "config", "status_prefs")
+	if got := getConfigPath(); got != want {
+		t.Errorf("getConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestGetConfigPathIgnoresEmptySweeprDataDir(t *testing.T) {
+	for _, value := range []string{"", "   ", "\t"} {
+		home := t.TempDir()
+		setTestHome(t, home)
+		t.Setenv("SWEEPR_DATA_DIR", value)
+
+		want := filepath.Join(home, ".config", "sweepr", "status_prefs")
+		if got := getConfigPath(); got != want {
+			t.Errorf("SWEEPR_DATA_DIR=%q: getConfigPath() = %q, want %q", value, got, want)
+		}
+	}
+}
+
+func TestSavePrefWritesLockAndPrefsUnderSweeprDataDir(t *testing.T) {
+	data := t.TempDir()
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("SWEEPR_DATA_DIR", data)
+
+	savePref("cpu_cores", "8")
+
+	prefs := filepath.Join(data, "config", "status_prefs")
+	if _, err := os.Stat(prefs); err != nil {
+		t.Errorf("status_prefs not written under SWEEPR_DATA_DIR: %v", err)
+	}
+	if _, err := os.Stat(prefs + ".lock"); err != nil {
+		t.Errorf("status_prefs.lock not created under SWEEPR_DATA_DIR: %v", err)
+	}
+	if entries, err := os.ReadDir(filepath.Join(data, "config")); err == nil {
+		for _, e := range entries {
+			if e.Name() != "status_prefs" && e.Name() != "status_prefs.lock" {
+				t.Errorf("leftover file %q beside status_prefs (temp file not cleaned up)", e.Name())
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config")); !os.IsNotExist(err) {
+		t.Errorf("profile .config must stay untouched when SWEEPR_DATA_DIR is set, stat err = %v", err)
+	}
+	if got := loadPrefs()["cpu_cores"]; got != "8" {
+		t.Errorf("loadPrefs()[cpu_cores] = %q, want %q", got, "8")
+	}
+}
