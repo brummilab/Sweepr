@@ -206,6 +206,15 @@ function Get-PackageManagerUpgradeCommand {
     return $null
 }
 
+# A portable copy is replaced by hand: the marker file is checked before the
+# installer, package manager and .git checks so none of them can apply to it.
+if (Test-Path -LiteralPath (Join-Path $windowsDir "sweepr.portable") -PathType Leaf) {
+    Write-Host "This is a portable copy of Sweepr, so 'sw update' cannot update it in place." -ForegroundColor Yellow
+    Write-Host "Download sweepr-<version>-x64-portable.zip from https://github.com/brummilab/sweepr/releases" -ForegroundColor Yellow
+    Write-Host "and replace the program files with it. Keep the folder 'data' (your settings and operation log) when replacing." -ForegroundColor Yellow
+    exit 1
+}
+
 if ($DebugMode) {
     $env:SWEEPR_DEBUG = "1"
 }
