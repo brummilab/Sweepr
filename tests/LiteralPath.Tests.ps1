@@ -184,6 +184,25 @@ Describe 'purge_paths.txt in a data folder with brackets' {
         @(Get-SearchPaths).Count | Should -Be 0
     }
 
+    It 'Passes the purge_paths.txt path quoted to the editor (F-01k)' {
+        Edit-SearchPaths
+        $quoted = '"{0}"' -f $script:ConfigFile
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { (@($ArgumentList) -join ' ') -ceq $quoted }
+    }
+
+    It 'Passes a purge_paths.txt path with spaces and parentheses quoted to the editor (F-01k)' {
+        $dir = Join-Path $script:Case 'Max Muster (old) [x]/config'
+        $file = Join-Path $dir 'purge_paths.txt'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $script:ConfigFile = $file
+        Edit-SearchPaths
+        $quoted = '"{0}"' -f $file
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
+            @($ArgumentList).Count -eq 1 -and $ArgumentList[0] -ceq $quoted
+        }
+        $quoted | Should -Match '^".* \(old\) .*"$'
+    }
+
     It 'Accepts a custom search path that has brackets in its name' {
         $project = Join-Path $script:Case 'Code [old]'
         New-Item -ItemType Directory -Path $project -Force | Out-Null
@@ -288,9 +307,22 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
         (Get-Content -LiteralPath $script:WhitelistFile -Raw).Trim() | Should -BeExactly 'keep me'
     }
 
-    It 'Opens the real whitelist path in the editor' {
+    It 'Opens the real whitelist path in the editor, quoted' {
         Edit-Whitelist
-        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq $script:WhitelistFile }
+        $quoted = '"{0}"' -f $script:WhitelistFile
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { (@($ArgumentList) -join ' ') -ceq $quoted }
+    }
+
+    It 'Passes a whitelist path with spaces and parentheses quoted to the editor (F-01k)' {
+        $dir = Join-Path $script:Case 'Max Muster (old) [x]/config'
+        $file = Join-Path $dir 'whitelist.txt'
+        $script:Config = @{ WhitelistFile = $file }
+        Edit-Whitelist
+        $quoted = '"{0}"' -f $file
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
+            @($ArgumentList).Count -eq 1 -and $ArgumentList[0] -ceq $quoted
+        }
+        $quoted | Should -Match '^".* \(old\) .*"$'
     }
 
     It 'Uses -LiteralPath for every path access in Edit-Whitelist' {
