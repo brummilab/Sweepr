@@ -45,6 +45,12 @@ func isProtectedPath(path string) bool {
 	}
 	absPath = strings.ToLower(absPath)
 
+	// Sweepr's own config and cache folders. checkRecycleTree calls only this
+	// function, so the rule must live here as well as in validateDeleteTarget.
+	if isSweeprDataFolderPath(absPath) {
+		return true
+	}
+
 	// A GLOBALROOT device path reaches a volume through the object namespace, so
 	// the components after it are not folders on that volume. Refuse it.
 	if strings.HasSuffix(filepath.VolumeName(absPath), `\globalroot`) {
