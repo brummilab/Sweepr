@@ -2,6 +2,8 @@
 # Appx, junctions, ...). scripts/gate-pester.ps1 -Scope portable fails on any failing test
 # that is not listed here, and reports listed tests that now pass so this list can shrink.
 # One Pester ExpandedPath per line, sorted; a boolean -ForEach value is written without '$'.
+# Cases of one -TestCases/-ForEach test are listed one by one, with the placeholders filled in
+# from the case data (the gate does this even when the test fails before Pester expands the name).
 # Regenerate after intentional changes by running the suite on Linux and comparing.
 Analyze Command.Help Display.Should mention keybindings in help
 Analyze Command.Help Display.Should show help without error
@@ -99,15 +101,19 @@ File Operations Module.Operation log.Removes an empty read-only folder
 File Operations Module.Operation log.Retries a line while another run holds the log
 File Operations Module.Operation log.Says on the debug stream when a line could not be written
 File Operations Module.Operation log.Writes nothing for a dry run or with SWEEPR_NO_OPLOG=1
-File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through <_>
+File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeDirectoryTree
+File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeItem
+File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeItems
 File Operations Module.Remove-SafeItem.Should not partially remove a directory tree when a protected child is present
 File Operations Module.Remove-SafeItem.Should not remove protected paths
 File Operations Module.Remove-SafeItem.Should reject dry-run previews when a directory tree contains a protected child
 File Operations Module.Remove-SafeItem.Should remove empty directories successfully
 File Operations Module.Remove-SafeItem.Should remove file successfully
 File Operations Module.Remove-SafeItem.Should respect DryRun mode
-File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk instead of walking it again (dry run: <DryRun>)
-File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: <DryRun>)
+File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk instead of walking it again (dry run: False)
+File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk instead of walking it again (dry run: True)
+File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: False)
+File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: True)
 File Operations Module.Remove-SafeItem.Still refuses a whitelisted child with the single whitelist read
 File Operations Module.Test-ProtectedPath.Should keep a planned path under an unprotected parent safe
 File Operations Module.Test-ProtectedPath.Should not protect temp directories
@@ -206,9 +212,11 @@ Scanning installed apps.Leaves out Store packages Windows depends on
 Scanning installed apps.Leaves out a sparse package a desktop app registers, like WinMerge's context menu
 Scanning installed apps.Measures an outlier estimate even when personal content prevents leftover removal
 Scanning installed apps.Merges entries with one name, version and publisher
-Scanning installed apps.Preserves distinct registered identities when <ProtectedCount> installs contain saves
+Scanning installed apps.Preserves distinct registered identities when 1 installs contain saves
+Scanning installed apps.Preserves distinct registered identities when 2 installs contain saves
 Scanning installed apps.Reads the per-user 32-bit Uninstall key too
-Scanning installed apps.Retains <Kind> registration identity without recursive measurement or leftover removal
+Scanning installed apps.Retains shared root registration identity without recursive measurement or leftover removal
+Scanning installed apps.Retains system root registration identity without recursive measurement or leftover removal
 Scanning installed apps.Shows a RustDesk-like outlier size as measured, once, beside its duplicate key
 Start menu shortcut removal.Removes a 1.30.0 Sweepr.lnk that starts this install
 Start menu shortcut removal.Removes this install's shortcut and keeps another app's
@@ -218,8 +226,12 @@ Store package eligibility at the removal boundary.Does not preview a Store packa
 Store package eligibility at the removal boundary.Preserves discovery policy for an unreadable manifest on an ordinary Store package
 Store package eligibility at the removal boundary.Previews an eligible ordinary Store package without writing
 Store package eligibility at the removal boundary.Rechecks an explicit sparse manifest even when the cached full identity still matches
-Store package eligibility at the removal boundary.Refuses current Game Bar metadata even with an old friendly name, preview=<Preview>
-Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is <State>
+Store package eligibility at the removal boundary.Refuses current Game Bar metadata even with an old friendly name, preview=False
+Store package eligibility at the removal boundary.Refuses current Game Bar metadata even with an old friendly name, preview=True
+Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is different version
+Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is missing
+Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is system
+Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is unreadable
 Store package eligibility at the removal boundary.Still removes an exactly matched ordinary Store app
 System Cleanup Module.Admin Requirements.Should check for admin when needed
 Test runner exit status.passes when the native Go checks pass
@@ -274,10 +286,15 @@ sw optimize steps.Allows a laptop only with complete online non-discharging powe
 sw optimize steps.An unrelated unhealthy disk does not block the healthy system disk
 sw optimize steps.Checks target disk health before optimization and keeps a failing target untouched
 sw optimize steps.Counts only the steps it lists in an elevated dry run
-sw optimize steps.Keeps disk optimization off battery and unknown power: <State>
+sw optimize steps.Keeps disk optimization off battery and unknown power: battery
+sw optimize steps.Keeps disk optimization off battery and unknown power: partial
+sw optimize steps.Keeps disk optimization off battery and unknown power: unknown
 sw optimize steps.Never resets Winsock or rebuilds search, icon, font or Store caches when elevated
 sw optimize steps.No longer defines the removed repair functions
-sw optimize steps.Still checks the target disk when physical inventory fails: <Health>
+sw optimize steps.Still checks the target disk when physical inventory fails: Healthy
+sw optimize steps.Still checks the target disk when physical inventory fails: Unhealthy
+sw optimize steps.Still checks the target disk when physical inventory fails: Unknown
+sw optimize steps.Still checks the target disk when physical inventory fails: Warning
 sw optimize steps.Unknown disk health does not invent a critical failure
 sw optimize steps.Uses the singular noun when a non-admin dry run has one step
 sw purge accounting.Counts each removed artifact's size once
