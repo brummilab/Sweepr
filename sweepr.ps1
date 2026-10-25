@@ -177,6 +177,7 @@ function Show-MainHelp {
     Write-HelpRow "sw optimize --dry-run" "Preview optimization"
     Write-HelpRow "sw uninstall --dry-run" "Preview app uninstall"
     Write-HelpRow "sw features --dry-run" "Preview what would be removed"
+    Write-HelpRow "sw features --restore" "Bring back apps and features removed earlier"
     Write-HelpRow "sw purge --dry-run" "Preview project purge"
     Write-HelpRow "sw purge --paths" "Configure scan directories"
     Write-HelpRow "sw history --json" "Export cleanup history"

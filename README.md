@@ -136,6 +136,7 @@ sw optimize --dry-run
 sw purge --dry-run
 sw features --dry-run        # Zeigt die exakten Befehle, ändert nichts
 sw features --list           # Nur auflisten (JSON, wenn umgeleitet)
+sw features --restore        # Früher Entferntes wiederherstellen (mit --dry-run nur Vorschau)
 sw history                   # Was wurde wann entfernt?
 sw history --json
 
@@ -156,7 +157,10 @@ sw analyze --json D:\        # Disk-Report als JSON
 - Apps werden für den aktuellen Benutzer entfernt (ohne Administrator). `--all-users-future` entfernt sie zusätzlich für künftige Benutzer (Administrator nötig).
 - Optionale Features werden nur abgeschaltet (nicht gelöscht) und brauchen eine Administrator-PowerShell. Sweepr fordert keine Rechte an und startet nie neu; braucht Windows einen Neustart, steht am Ende „Restart Windows to finish.“
 - Direkt vor dem Entfernen wird jeder Eintrag noch einmal geprüft; jede Aktion steht im Protokoll (`sw history`).
-- Rückgängig: Apps aus dem Microsoft Store neu installieren, Features unter „Windows-Features aktivieren oder deaktivieren“ wieder einschalten. `sw features --restore` ist in Arbeit.
+- Rückgängig mit `sw features --restore`: Vor jedem Entfernen speichert Sweepr einen Eintrag in `features-removed.json` im Datenordner (Profil, portabel oder `SWEEPR_DATA_DIR`). Lässt sich die Liste nicht lesen oder speichern, wird nichts entfernt; `sw remove` behält die Datei wie `operations.log`. `--restore` zeigt die gespeicherten Einträge im Menü (nichts vorausgewählt), `--restore --dry-run` zeigt die exakten Befehle, danach fragt Sweepr `(y/N)`.
+  - Optionale Features: `Enable-WindowsOptionalFeature -Online -FeatureName <Name> -NoRestart` (Administrator-PowerShell nötig; ein Neustart wird nur gemeldet, nie ausgeführt).
+  - Apps: `winget install --id <Store-ID> --source msstore`; ohne bekannte Store-ID oder ohne winget nennt Sweepr den Microsoft Store. Ist die App schon installiert, wird nur der Eintrag entfernt.
+  - Erfolgreich Wiederhergestelltes verschwindet aus der Liste; Fehlgeschlagenes bleibt für einen neuen Versuch. `--restore` lässt sich nicht mit `--list` oder `--all-users-future` kombinieren.
 
 ## Sicherheit
 

@@ -7,9 +7,9 @@
 # Interface fixed by these tests (the implementer builds exactly this in bin\features.ps1,
 # sweepr.ps1 and lib\core\history.ps1):
 #
-#   bin\features.ps1 param block ([CmdletBinding()], no -Restore until F-02c):
+#   bin\features.ps1 param block ([CmdletBinding()]; -Restore is covered by tests\FeaturesRestore.Tests.ps1):
 #       [Alias('dry-run')] [switch]$DryRun, [Alias('d')] [switch]$DebugMode, [switch]$List,
-#       [Alias('all-users-future')] [switch]$AllUsersFuture, [Alias('h')] [switch]$ShowHelp
+#       [Alias('all-users-future')] [switch]$AllUsersFuture, [switch]$Restore, [Alias('h')] [switch]$ShowHelp
 #   Plain ASCII. Dot-sources base, log, ui, file_ops and features. The script ends with
 #       try { Invoke-FeaturesCommand -DryRun:$DryRun -List:$List -AllUsersFuture:$AllUsersFuture -ShowHelp:$ShowHelp ... }
 #       finally { Stop-Spinner }
@@ -17,7 +17,7 @@
 #   bin\uninstall.ps1 (Enable-DebugMode); the tests do not exercise it.
 #
 #   Top-level functions (all lifted by the tests):
-#     Show-FeaturesHelp                    usage text: --dry-run, --list, --all-users-future, --help; no --restore
+#     Show-FeaturesHelp                    usage text: --dry-run, --list, --all-users-future, --restore, --help
 #     Test-FeaturesListAsJson              [Console]::IsOutputRedirected (mocked)
 #     Read-FeaturesMenuKey                 [Console]::ReadKey($true) -> ConsoleKeyInfo (mocked)
 #     Get-FeaturesWindowHeight             console window height in lines (mocked; the menu pages by it)
@@ -246,6 +246,7 @@ BeforeAll {
             SystemRoot = $env:SystemRoot; NoOplog = $env:SWEEPR_NO_OPLOG; DryRun = $env:SWEEPR_DRY_RUN
             RunCommand = $env:_SWEEPR_OPLOG_RUN_COMMAND; RunId = $env:_SWEEPR_OPLOG_RUN_ID
             LogFile = $script:SweeprOperationsLogFile; LogStarted = $script:SweeprOperationsLogStarted
+            ConfigPath = $script:Config.ConfigPath
         }
         $env:SystemRoot = 'C:\Windows'
         $env:SWEEPR_NO_OPLOG = $null
@@ -254,6 +255,8 @@ BeforeAll {
         $env:_SWEEPR_OPLOG_RUN_ID = 'testrun'
         $script:ConfigDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:ConfigDir -Force | Out-Null
+        # The restore list (features-removed.json) goes to the private folder too, never to the real profile.
+        $script:Config.ConfigPath = $script:ConfigDir
         $script:LogFile = Join-Path $script:ConfigDir 'operations.log'
         $script:SweeprOperationsLogFile = $script:LogFile
         $script:SweeprOperationsLogStarted = $false
@@ -364,7 +367,7 @@ BeforeAll {
             if ($script:OnFeatureDisable) { & $script:OnFeatureDisable $FeatureName }
             return $script:DisableResult
         }
-        Mock Enable-WindowsOptionalFeature { throw 'Enable-WindowsOptionalFeature belongs to F-02c' }
+        Mock Enable-WindowsOptionalFeature { throw 'Enable-WindowsOptionalFeature belongs to sw features --restore, not to the removal' }
         Mock Restart-Computer { throw 'Sweepr must never restart Windows' }
         Mock Start-Process { throw 'Sweepr must never start a process or elevate' }
     }
@@ -378,6 +381,7 @@ BeforeAll {
         $env:_SWEEPR_OPLOG_RUN_ID = $script:Saved.RunId
         $script:SweeprOperationsLogFile = $script:Saved.LogFile
         $script:SweeprOperationsLogStarted = $script:Saved.LogStarted
+        $script:Config.ConfigPath = $script:Saved.ConfigPath
     }
 
     # Runs the command with queued keys; returns what it wrote and its exit code.
@@ -445,11 +449,11 @@ Describe "sw features files and interface" {
         ($aliases + @($Parameter)) | Should -Contain $Alias
     }
 
-    It "Is an advanced script and has no -Restore parameter before F-02c" {
+    It "Is an advanced script and has the -Restore parameter (F-02c)" {
         $script:FeaturesAst | Should -Not -BeNullOrEmpty
         @($script:FeaturesAst.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' }).Count | Should -Be 1
         $names = @($script:FeaturesAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
-        $names | Should -Not -Contain 'Restore'
+        $names | Should -Contain 'Restore'
     }
 
     It "Defines <Name>" -ForEach @(
@@ -491,33 +495,24 @@ Describe "sw features router and help" {
         $text | Should -Match '\$validCommands\s*=\s*@\([^)]*"features"[^)]*\)'
     }
 
-    It "Does not add --restore anywhere before F-02c" {
-        (Get-Content -LiteralPath $script:SweeprFile -Raw) | Should -Not -Match '(?i)restore'
-    }
-
     It "Shows sw features in the main help" {
         Show-MainHelp
         $help = $script:Transcript -join "`n"
         $help | Should -Match 'sw features\s+\S'
-        $help | Should -Not -Match '--restore'
+        $help | Should -Match 'sw features --restore'
     }
 
     It "Maps <Flag> to the parameter <Parameter> of bin/features.ps1" -ForEach @(
         @{ Flag = 'dry-run'; Parameter = 'DryRun' }
         @{ Flag = 'list'; Parameter = 'List' }
         @{ Flag = 'all-users-future'; Parameter = 'AllUsersFuture' }
+        @{ Flag = 'restore'; Parameter = 'Restore' }
         @{ Flag = 'help'; Parameter = 'ShowHelp' }
         @{ Flag = 'h'; Parameter = 'ShowHelp' }
         @{ Flag = 'debug'; Parameter = 'DebugMode' }
     ) {
         $declared = (Get-Command -Name $script:BinFile -CommandType ExternalScript).Parameters
         Resolve-CommandParameterName -Parameters $declared -Flag $Flag | Should -Be $Parameter
-    }
-
-    It "Refuses --restore through sweepr.ps1 with exit code 2 and runs nothing" {
-        $result = Invoke-SweeprChild -Arguments @('features', '--restore')
-        $result.ExitCode | Should -Be 2
-        $result.Text | Should -Match 'Unknown option for sw features: --restore'
     }
 
     It "Prints the features help through sweepr.ps1 with exit code 0" {
@@ -533,12 +528,11 @@ Describe "sw features --help" {
     BeforeEach { Initialize-FeatureEnvironment }
     AfterEach { Restore-FeatureEnvironment }
 
-    It "Documents every option and no --restore" {
+    It "Documents every option" {
         Show-FeaturesHelp
         $help = $script:Transcript -join "`n"
-        foreach ($option in @('--dry-run', '--list', '--all-users-future', '--help')) { $help | Should -Match ([regex]::Escape($option)) }
+        foreach ($option in @('--dry-run', '--list', '--all-users-future', '--restore', '--help')) { $help | Should -Match ([regex]::Escape($option)) }
         $help | Should -Match 'sw features'
-        $help | Should -Not -Match '--restore'
     }
 
     It "Prints the help for -ShowHelp and reads or changes nothing" {

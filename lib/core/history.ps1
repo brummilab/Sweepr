@@ -28,7 +28,7 @@ function New-SweeprHistorySession {
         run_id          = $RunId
         started_at      = $StartedAt
         operation_count = 0
-        actions         = [ordered]@{ removed = 0; recycled = 0; uninstalled = 0; disabled = 0; skipped = 0; failed = 0; other = 0 }
+        actions         = [ordered]@{ removed = 0; recycled = 0; uninstalled = 0; disabled = 0; restored = 0; skipped = 0; failed = 0; other = 0 }
     }
 }
 
@@ -93,7 +93,7 @@ function Format-SweeprHistoryActions {
     param($Actions)
 
     $parts = @()
-    foreach ($name in @("removed", "recycled", "uninstalled", "disabled", "skipped", "failed", "other")) {
+    foreach ($name in @("removed", "recycled", "uninstalled", "disabled", "restored", "skipped", "failed", "other")) {
         if ($Actions[$name] -gt 0) { $parts += "$name $($Actions[$name])" }
     }
     if ($parts.Count -eq 0) { return "no file actions" }
