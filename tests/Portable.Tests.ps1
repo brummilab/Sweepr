@@ -298,3 +298,66 @@ Describe 'Get-SweeprInstallMethod' {
         Get-SweeprInstallMethod -RootDir $Root | Should -BeExactly $Expected
     }
 }
+
+Describe 'Resolve-SweeprDataPaths override edge cases' {
+    BeforeEach {
+        $script:Case = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:AppRoot = Join-Path $script:Case 'app'
+        $script:UserHome = Join-Path $script:Case 'home'
+        New-Item -ItemType Directory -Path $script:AppRoot, $script:UserHome -Force | Out-Null
+        $env:USERPROFILE = $script:UserHome
+        $script:SavedLocation = (Get-Location).Path
+    }
+
+    AfterEach {
+        Set-Location -LiteralPath $script:SavedLocation
+        $env:USERPROFILE = $script:SavedProfile
+        $env:SWEEPR_DATA_DIR = $script:SavedDataDir
+    }
+
+    It 'Treats a whitespace-only SWEEPR_DATA_DIR as not set' {
+        $env:SWEEPR_DATA_DIR = '   '
+        $paths = Resolve-SweeprDataPaths -RootDir $script:AppRoot
+        $paths.Mode | Should -BeExactly 'Profile'
+        Norm $paths.ConfigPath | Should -BeExactly (Norm "$($script:UserHome)/.config/sweepr")
+    }
+
+    It 'Resolves a relative override against the current directory' {
+        Set-Location -LiteralPath $script:Case
+        $env:SWEEPR_DATA_DIR = Join-Path 'rel' 'data'
+        $full = (Get-Item -LiteralPath $script:Case).FullName
+        $paths = Resolve-SweeprDataPaths -RootDir $script:AppRoot
+        $paths.Mode | Should -BeExactly 'Override'
+        Norm $paths.ConfigPath | Should -BeExactly (Norm "$full/rel/data/config")
+        Norm $paths.CachePath | Should -BeExactly (Norm "$full/rel/data/cache")
+    }
+}
+
+Describe 'sweepr.ps1 start order' {
+    BeforeAll {
+        $script:SweeprAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:ProjectRoot 'sweepr.ps1'), [ref]$null, [ref]$null)
+    }
+
+    It 'Checks the data folder is writable before Initialize-Sweepr creates folders' {
+        $main = $script:SweeprAst.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Main'
+            }, $true)
+        $main | Should -Not -BeNullOrEmpty
+        $calls = @($main.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+        $check = @($calls | Where-Object { $_.GetCommandName() -eq 'Initialize-SweeprDataDir' })
+        $init = @($calls | Where-Object { $_.GetCommandName() -eq 'Initialize-Sweepr' })
+        $check.Count | Should -BeGreaterThan 0
+        $init.Count | Should -BeGreaterThan 0
+        $check[0].Extent.StartOffset | Should -BeLessThan $init[0].Extent.StartOffset
+    }
+
+    It 'Defines Initialize-SweeprDataDir and lets it call Assert-SweeprDataWritable' {
+        $fn = $script:SweeprAst.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Initialize-SweeprDataDir'
+            }, $true)
+        $fn | Should -Not -BeNullOrEmpty
+        $fn.Extent.Text | Should -Match 'Assert-SweeprDataWritable'
+    }
+}
