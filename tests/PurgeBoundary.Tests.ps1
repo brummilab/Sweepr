@@ -5,13 +5,13 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib/core/ui.ps1')
     . (Join-Path $script:RepoRoot 'lib/core/file_ops.ps1')
     # Discovery moved to lib/clean/projects.ps1 (F-03a); the removal side stays in bin/purge.ps1.
-    foreach ($relative in @('lib/clean/projects.ps1', 'bin/purge.ps1')) {
-        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot $relative), [ref]$null, [ref]$null)
-        foreach ($definition in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ne 'Main' }, $false)) {
-            . ([scriptblock]::Create($definition.Extent.Text))
-        }
-        $patterns = $ast.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:ArtifactPatterns' }, $false)
-        if ($patterns) { . ([scriptblock]::Create($patterns.Extent.Text)) }
+    # The lib file is loaded whole, as bin/purge.ps1 does, so its script state (such as the
+    # $script:PurgeUnverified counter the Git checks increment) exists under strict mode.
+    . (Join-Path $script:RepoRoot 'lib/clean/projects.ps1')
+    # bin/purge.ps1 runs Main when loaded, so only its function definitions are taken.
+    $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'bin/purge.ps1'), [ref]$null, [ref]$null)
+    foreach ($definition in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ne 'Main' }, $false)) {
+        . ([scriptblock]::Create($definition.Extent.Text))
     }
     function New-PurgeFixture {
         param([string]$Marker = 'package.json', [string]$Content = '{}', [string[]]$Artifacts = @('node_modules'))
