@@ -1198,6 +1198,92 @@ Describe "sw features --restore run" {
 }
 
 # ================================================================================================
+# Lead decision on festlegung 6: an app that is already there is restored by definition.
+# "Already installed" = Get-AppxPackage -Name <Target up to the first "_"> returns exactly one package.
+# Then: no winget call, RESTORED with "already installed" in the detail, record removed.
+# winget exit code -1978335189 (0x8A15002B, package already installed) counts the same way.
+Describe "sw features --restore for apps that are already installed" {
+    BeforeEach { Initialize-FeatureEnvironment }
+    AfterEach { Restore-FeatureEnvironment }
+
+    It "Does not run winget, logs RESTORED already installed and removes the record" {
+        $null = Write-RemovedFile
+        $script:Packages['Contoso.Example'] = New-AppPackage -Name 'Contoso.Example' -Version '2.6.0.0'
+        $result = Invoke-Restore -Select 0, 2
+        @($script:Calls) | Should -Be @($script:WingetInstallThird)
+        Should -Invoke Invoke-FeaturesWinget -Times 1 -Exactly
+        $records = @(Get-LogRecords)
+        $records.Count | Should -Be 2
+        $records[0] | Should -Match 'RESTORED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*already installed.*\)$'
+        $records[0] | Should -Not -Match 'winget install'
+        @(Get-RemovedIds) | Should -Be @('app.other', 'feature.legacy', 'feature.second')
+        $result.Exit | Should -Be 0
+    }
+
+    It "Counts it as installed without a store id and without winget" {
+        $null = Write-RemovedFile
+        $script:WingetAvailable = $false
+        $script:Packages['Contoso.Other'] = New-AppPackage -Name 'Contoso.Other'
+        $null = Invoke-Restore -Select 1
+        Should -Invoke Invoke-FeaturesWinget -Times 0
+        $records = @(Get-LogRecords)
+        $records.Count | Should -Be 1
+        $records[0] | Should -Match 'RESTORED appx:Contoso\.Other_.* \(.*already installed.*\)$'
+        @(Get-RemovedIds) | Should -Not -Contain 'app.other'
+    }
+
+    It "Takes the exact package name from the target before the first underscore: another package does not count" {
+        $null = Write-RemovedFile
+        $script:Packages['Contoso.ExampleOther'] = New-AppPackage -Name 'Contoso.ExampleOther'
+        $null = Invoke-Restore -Select 0
+        @($script:Calls) | Should -Be @($script:WingetInstallExample)
+        Should -Invoke Get-AppxPackage -Times 1 -ParameterFilter { $Name -eq 'Contoso.Example' }
+    }
+
+    It "Runs winget when the app is not installed" {
+        $null = Write-RemovedFile
+        $null = Invoke-Restore -Select 0
+        @($script:Calls) | Should -Be @($script:WingetInstallExample)
+        @(Get-LogRecords)[0] | Should -Not -Match 'already installed'
+    }
+
+    It "Does not guess when the package list is ambiguous: two packages mean winget runs" {
+        $null = Write-RemovedFile
+        $script:Packages['Contoso.Example'] = @((New-AppPackage -Name 'Contoso.Example' -Version '2.6.0.0'), (New-AppPackage -Name 'Contoso.Example' -Version '2.7.0.0'))
+        $null = Invoke-Restore -Select 0
+        @($script:Calls) | Should -Be @($script:WingetInstallExample)
+    }
+
+    It "Checks installed apps with no administrator rights" {
+        $null = Write-RemovedFile
+        $script:IsAdmin = $false
+        $script:Packages['Contoso.Example'] = New-AppPackage -Name 'Contoso.Example'
+        $null = Invoke-Restore -Select 0
+        $script:Calls.Count | Should -Be 0
+        @(Get-LogRecords)[0] | Should -Match 'RESTORED appx:'
+    }
+
+    It "Counts winget's already-installed exit code (-1978335189) as RESTORED already installed and removes the record" {
+        $null = Write-RemovedFile
+        $script:WingetExitCode = -1978335189
+        $null = Invoke-Restore -Select 0
+        $records = @(Get-LogRecords)
+        $records.Count | Should -Be 1
+        $records[0] | Should -Match 'RESTORED appx:Contoso\.Example_2\.5\.0\.0_x64__examplepublisher \(.*already installed.*\)$'
+        $records[0] | Should -Not -Match 'FAILED'
+        @(Get-RemovedIds) | Should -Not -Contain 'app.example'
+    }
+
+    It "Still fails on another negative winget exit code and keeps the record" {
+        $null = Write-RemovedFile
+        $script:WingetExitCode = -1978335188
+        $null = Invoke-Restore -Select 0
+        @(Get-LogRecords)[0] | Should -Match 'FAILED appx:.*exit code -1978335188'
+        @(Get-RemovedIds) | Should -Contain 'app.example'
+    }
+}
+
+# ================================================================================================
 Describe "sw features --restore restart notice" {
     BeforeEach { Initialize-FeatureEnvironment }
     AfterEach { Restore-FeatureEnvironment }
