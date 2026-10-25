@@ -715,17 +715,17 @@ func TestSparkline(t *testing.T) {
 	}
 }
 
-func TestRenderHeaderErrorReturnsMoleOnce(t *testing.T) {
-	header, mole := renderHeader(MetricsSnapshot{}, "boom", 0, 120, false)
+func TestRenderHeaderErrorReturnsMascotOnce(t *testing.T) {
+	header, mascot := renderHeader(MetricsSnapshot{}, "boom", 0, 120, false)
 
-	if mole != "" {
-		t.Fatalf("renderHeader() mole return should be empty on error to avoid duplicate render, got %q", mole)
+	if mascot != "" {
+		t.Fatalf("renderHeader() mascot return should be empty on error to avoid duplicate render, got %q", mascot)
 	}
 	if !strings.Contains(header, "ERROR: boom") {
 		t.Fatalf("renderHeader() missing error text, got %q", header)
 	}
 	if strings.Count(header, "/\\_/\\") != 1 {
-		t.Fatalf("renderHeader() should contain one mole frame in error state, got %d", strings.Count(header, "/\\_/\\"))
+		t.Fatalf("renderHeader() should contain one mascot frame in error state, got %d", strings.Count(header, "/\\_/\\"))
 	}
 }
 
@@ -1455,7 +1455,7 @@ func TestModelViewPadsToTerminalHeight(t *testing.T) {
 	}
 }
 
-func TestModelViewErrorRendersSingleMole(t *testing.T) {
+func TestModelViewErrorRendersSingleMascot(t *testing.T) {
 	m := model{
 		width:      120,
 		height:     40,
@@ -1468,7 +1468,7 @@ func TestModelViewErrorRendersSingleMole(t *testing.T) {
 
 	view := m.View()
 	if strings.Count(view, "/\\_/\\") != 1 {
-		t.Fatalf("model.View() should render one mole frame in error state, got %d", strings.Count(view, "/\\_/\\"))
+		t.Fatalf("model.View() should render one mascot frame in error state, got %d", strings.Count(view, "/\\_/\\"))
 	}
 }
 

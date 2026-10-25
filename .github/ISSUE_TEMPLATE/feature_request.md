@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for Mole
+about: Suggest an idea for Sweepr
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

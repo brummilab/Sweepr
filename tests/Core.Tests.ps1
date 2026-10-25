@@ -1,4 +1,4 @@
-# freeMole Windows - Core Module Tests
+# Sweepr Windows - Core Module Tests
 # Pester tests for lib/core functionality
 
 BeforeAll {
@@ -38,7 +38,7 @@ Describe "Base Module" {
 
         It "Should expose the full icon table in Windows PowerShell" {
             $basePath = (Join-Path $script:LibDir "core\base.ps1").Replace("'", "''")
-            $psCommand = "& { . '$basePath'; `$icons = Get-MoleDefaultIcons; [pscustomobject]@{ Count = `$icons.Count; HasSolid = `$icons.ContainsKey('Solid'); HasAdmin = `$icons.ContainsKey('Admin'); HasSuccess = `$icons.ContainsKey('Success') } | ConvertTo-Json -Compress }"
+            $psCommand = "& { . '$basePath'; `$icons = Get-SweeprDefaultIcons; [pscustomobject]@{ Count = `$icons.Count; HasSolid = `$icons.ContainsKey('Solid'); HasAdmin = `$icons.ContainsKey('Admin'); HasSuccess = `$icons.ContainsKey('Success') } | ConvertTo-Json -Compress }"
             $result = & powershell -NoProfile -ExecutionPolicy Bypass -Command $psCommand
             $iconInfo = $result | ConvertFrom-Json
 
@@ -64,7 +64,7 @@ Describe "Base Module" {
             Remove-Variable -Name Colors -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable -Name Icons -Scope Script -ErrorAction SilentlyContinue
 
-            { Initialize-MoleVisualDefaults } | Should -Not -Throw
+            { Initialize-SweeprVisualDefaults } | Should -Not -Throw
             $script:Colors.Cyan | Should -Not -BeNullOrEmpty
             $script:Colors.Green | Should -Not -BeNullOrEmpty
             $script:Icons.Solid | Should -Not -BeNullOrEmpty
@@ -75,7 +75,7 @@ Describe "Base Module" {
             $script:Colors = @{ Cyan = "custom-cyan" }
             $script:Icons = @{ Solid = "*" }
 
-            Initialize-MoleVisualDefaults
+            Initialize-SweeprVisualDefaults
 
             $script:Colors.Cyan | Should -Be "custom-cyan"
             $script:Colors.Green | Should -Not -BeNullOrEmpty
@@ -86,7 +86,7 @@ Describe "Base Module" {
         It "Should restore missing icon entries on demand" {
             $script:Icons = @{ Solid = "*" }
 
-            (Get-MoleIcon -Name "Error") | Should -Not -BeNullOrEmpty
+            (Get-SweeprIcon -Name "Error") | Should -Not -BeNullOrEmpty
             $script:Icons.Error | Should -Not -BeNullOrEmpty
             $script:Icons.Solid | Should -Be "*"
         }
@@ -127,7 +127,7 @@ Describe "Base Module" {
 Describe "File Operations Module" {
     BeforeAll {
         # Create temp test directory
-        $script:TestDir = Join-Path $env:TEMP "mole_test_$(Get-Random)"
+        $script:TestDir = Join-Path $env:TEMP "sweepr_test_$(Get-Random)"
         New-Item -ItemType Directory -Path $script:TestDir -Force | Out-Null
     }
 
@@ -228,7 +228,7 @@ Describe "File Operations Module" {
         }
 
         It "Should keep a planned path under an unprotected parent safe" {
-            $planned = Join-Path $env:TEMP ("freemole-planned-" + [guid]::NewGuid().ToString("N"))
+            $planned = Join-Path $env:TEMP ("sweepr-planned-" + [guid]::NewGuid().ToString("N"))
             Test-ProtectedPath -Path $planned | Should -Be $false
         }
 
@@ -281,27 +281,27 @@ Describe "File Operations Module" {
 
     Context "Operation log" {
         BeforeEach {
-            $script:OriginalOperationsLog = $script:MoleOperationsLogFile
-            $script:OriginalOperationsMax = $script:MoleOperationsLogMaxBytes
-            $script:OriginalNoOplog = $env:MO_NO_OPLOG
-            $script:OriginalRunCommand = $env:_MOLE_OPLOG_RUN_COMMAND
-            $script:OriginalRunId = $env:_MOLE_OPLOG_RUN_ID
-            $env:MO_NO_OPLOG = $null
-            $env:_MOLE_OPLOG_RUN_COMMAND = "clean"
-            $env:_MOLE_OPLOG_RUN_ID = "run-canary"
-            $script:MoleOperationsLogFile = Join-Path (Join-Path $TestDrive ("oplog-" + [guid]::NewGuid().ToString("N"))) "operations.log"
-            $script:MoleOperationsLogStarted = $false
+            $script:OriginalOperationsLog = $script:SweeprOperationsLogFile
+            $script:OriginalOperationsMax = $script:SweeprOperationsLogMaxBytes
+            $script:OriginalNoOplog = $env:SWEEPR_NO_OPLOG
+            $script:OriginalRunCommand = $env:_SWEEPR_OPLOG_RUN_COMMAND
+            $script:OriginalRunId = $env:_SWEEPR_OPLOG_RUN_ID
+            $env:SWEEPR_NO_OPLOG = $null
+            $env:_SWEEPR_OPLOG_RUN_COMMAND = "clean"
+            $env:_SWEEPR_OPLOG_RUN_ID = "run-canary"
+            $script:SweeprOperationsLogFile = Join-Path (Join-Path $TestDrive ("oplog-" + [guid]::NewGuid().ToString("N"))) "operations.log"
+            $script:SweeprOperationsLogStarted = $false
             $script:OplogFile = Join-Path $script:TestDir "oplog_target.txt"
             "Test content" | Set-Content -Path $script:OplogFile
         }
 
         AfterEach {
-            $script:MoleOperationsLogFile = $script:OriginalOperationsLog
-            $script:MoleOperationsLogMaxBytes = $script:OriginalOperationsMax
-            $script:MoleOperationsLogStarted = $false
-            $env:MO_NO_OPLOG = $script:OriginalNoOplog
-            $env:_MOLE_OPLOG_RUN_COMMAND = $script:OriginalRunCommand
-            $env:_MOLE_OPLOG_RUN_ID = $script:OriginalRunId
+            $script:SweeprOperationsLogFile = $script:OriginalOperationsLog
+            $script:SweeprOperationsLogMaxBytes = $script:OriginalOperationsMax
+            $script:SweeprOperationsLogStarted = $false
+            $env:SWEEPR_NO_OPLOG = $script:OriginalNoOplog
+            $env:_SWEEPR_OPLOG_RUN_COMMAND = $script:OriginalRunCommand
+            $env:_SWEEPR_OPLOG_RUN_ID = $script:OriginalRunId
             Set-DryRunMode -Enabled $false
         }
 
@@ -311,53 +311,53 @@ Describe "File Operations Module" {
             Remove-SafeItem -Path $script:OplogFile | Should -Be $true
             Remove-SafeItems -Paths @($second) -Description "Second"
 
-            $lines = @(Get-Content -LiteralPath $script:MoleOperationsLogFile | Where-Object { $_ })
+            $lines = @(Get-Content -LiteralPath $script:SweeprOperationsLogFile | Where-Object { $_ })
             @($lines | Where-Object { $_.StartsWith("# ========== clean run=run-canary session started at ") }).Count | Should -Be 1
             @($lines | Where-Object { $_.Contains("[clean run=run-canary] REMOVED $($script:OplogFile) (") }).Count | Should -Be 1
             @($lines | Where-Object { $_.Contains("[clean run=run-canary] REMOVED $second (") }).Count | Should -Be 1
         }
 
-        It "Writes nothing for a dry run or with MO_NO_OPLOG=1" {
+        It "Writes nothing for a dry run or with SWEEPR_NO_OPLOG=1" {
             Set-DryRunMode -Enabled $true
             Remove-SafeItem -Path $script:OplogFile | Should -Be $true
             Set-DryRunMode -Enabled $false
-            $env:MO_NO_OPLOG = "1"
+            $env:SWEEPR_NO_OPLOG = "1"
             Remove-SafeItem -Path $script:OplogFile | Should -Be $true
-            Test-Path -LiteralPath $script:MoleOperationsLogFile | Should -BeFalse
+            Test-Path -LiteralPath $script:SweeprOperationsLogFile | Should -BeFalse
         }
 
         It "Records a removal that failed" {
             Mock Remove-Item { throw "access-denied-canary" }
             Remove-SafeItem -Path $script:OplogFile | Should -Be $false
-            Get-Content -LiteralPath $script:MoleOperationsLogFile -Raw | Should -Match ("FAILED " + [regex]::Escape($script:OplogFile) + " \(access-denied-canary\)")
+            Get-Content -LiteralPath $script:SweeprOperationsLogFile -Raw | Should -Match ("FAILED " + [regex]::Escape($script:OplogFile) + " \(access-denied-canary\)")
         }
 
         It "Keeps one record per line whatever the name holds" {
             $name = "C:\dir\x" + [char]9 + "name" + [char]10 + "forged" + [char]27
-            ConvertTo-MoleLogValue $name | Should -BeExactly 'C:\dir\x\tname\nforged\x1b'
+            ConvertTo-SweeprLogValue $name | Should -BeExactly 'C:\dir\x\tname\nforged\x1b'
         }
 
         It "Retries a line while another run holds the log" {
-            $dir = Split-Path -Parent $script:MoleOperationsLogFile
+            $dir = Split-Path -Parent $script:SweeprOperationsLogFile
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            $script:HeldLog = [System.IO.File]::Open($script:MoleOperationsLogFile, 'OpenOrCreate', 'ReadWrite', 'None')
+            $script:HeldLog = [System.IO.File]::Open($script:SweeprOperationsLogFile, 'OpenOrCreate', 'ReadWrite', 'None')
             try {
                 Mock Start-Sleep { $script:HeldLog.Dispose() }
-                Write-MoleOperation -Action "REMOVED" -Path "C:\held\file.txt" -Detail "1 KB"
+                Write-SweeprOperation -Action "REMOVED" -Path "C:\held\file.txt" -Detail "1 KB"
                 Should -Invoke Start-Sleep -Times 1 -Exactly
             }
             finally { $script:HeldLog.Dispose() }
-            Get-Content -LiteralPath $script:MoleOperationsLogFile -Raw | Should -Match "REMOVED C:\\held\\file\.txt \(1 KB\)"
+            Get-Content -LiteralPath $script:SweeprOperationsLogFile -Raw | Should -Match "REMOVED C:\\held\\file\.txt \(1 KB\)"
         }
 
         It "Says on the debug stream when a line could not be written" {
-            $dir = Split-Path -Parent $script:MoleOperationsLogFile
+            $dir = Split-Path -Parent $script:SweeprOperationsLogFile
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            $held = [System.IO.File]::Open($script:MoleOperationsLogFile, 'OpenOrCreate', 'ReadWrite', 'None')
+            $held = [System.IO.File]::Open($script:SweeprOperationsLogFile, 'OpenOrCreate', 'ReadWrite', 'None')
             try {
                 Mock Start-Sleep { }
                 Mock Write-Debug { }
-                Write-MoleOperation -Action "REMOVED" -Path "C:\held\file.txt"
+                Write-SweeprOperation -Action "REMOVED" -Path "C:\held\file.txt"
                 Should -Invoke Start-Sleep -Times 4 -Exactly
             }
             finally { $held.Dispose() }
@@ -372,7 +372,7 @@ Describe "File Operations Module" {
             Remove-SafeItem -Path $dir -Recurse | Should -Be $false
             Remove-SafeItems -Paths @($dir) -Description "Refused"
 
-            $lines = @(Get-Content -LiteralPath $script:MoleOperationsLogFile | Where-Object { $_.Contains("SKIPPED $dir (refused: protected or whitelisted entry inside: C:\x\keep)") })
+            $lines = @(Get-Content -LiteralPath $script:SweeprOperationsLogFile | Where-Object { $_.Contains("SKIPPED $dir (refused: protected or whitelisted entry inside: C:\x\keep)") })
             $lines.Count | Should -Be 2
         }
 
@@ -407,18 +407,18 @@ Describe "File Operations Module" {
 
             Remove-SafeItem -Path $dir -Recurse | Should -Be $false
 
-            $text = Get-Content -LiteralPath $script:MoleOperationsLogFile -Raw
+            $text = Get-Content -LiteralPath $script:SweeprOperationsLogFile -Raw
             $text | Should -Match ("FAILED " + [regex]::Escape($dir) + " \(incomplete: removed \d of 3 entries; stopped at [^()]*\\locked\.txt: in-use-canary\)")
         }
 
         It "Moves a log over its size limit aside before the next session" {
-            $dir = Split-Path -Parent $script:MoleOperationsLogFile
+            $dir = Split-Path -Parent $script:SweeprOperationsLogFile
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            Set-Content -LiteralPath $script:MoleOperationsLogFile -Value ("x" * 64)
-            $script:MoleOperationsLogMaxBytes = 16
+            Set-Content -LiteralPath $script:SweeprOperationsLogFile -Value ("x" * 64)
+            $script:SweeprOperationsLogMaxBytes = 16
             Remove-SafeItem -Path $script:OplogFile | Should -Be $true
-            Get-Content -LiteralPath "$($script:MoleOperationsLogFile).old" -Raw | Should -Match "x{64}"
-            Get-Content -LiteralPath $script:MoleOperationsLogFile -Raw | Should -Not -Match "x{64}"
+            Get-Content -LiteralPath "$($script:SweeprOperationsLogFile).old" -Raw | Should -Match "x{64}"
+            Get-Content -LiteralPath $script:SweeprOperationsLogFile -Raw | Should -Not -Match "x{64}"
         }
     }
 
@@ -435,7 +435,7 @@ Describe "File Operations Module" {
         }
 
         It "Should respect DryRun mode" {
-            $env:MOLE_DRY_RUN = "1"
+            $env:SWEEPR_DRY_RUN = "1"
             try {
                 # Reset the module's DryRun state
                 Set-DryRunMode -Enabled $true
@@ -444,7 +444,7 @@ Describe "File Operations Module" {
                 Test-Path $script:TestFile | Should -Be $true  # File should still exist
             }
             finally {
-                $env:MOLE_DRY_RUN = $null
+                $env:SWEEPR_DRY_RUN = $null
                 Set-DryRunMode -Enabled $false
             }
         }
@@ -627,14 +627,14 @@ Describe "Logging Module" {
             { Write-Success "Test message" } | Should -Not -Throw
         }
 
-        It "Should have Write-MoleWarning function" {
-            # Note: The actual function is Write-MoleWarning
-            { Write-MoleWarning "Test message" } | Should -Not -Throw
+        It "Should have Write-SweeprWarning function" {
+            # Note: The actual function is Write-SweeprWarning
+            { Write-SweeprWarning "Test message" } | Should -Not -Throw
         }
 
-        It "Should have Write-MoleError function" {
-            # Note: The actual function is Write-MoleError
-            { Write-MoleError "Test message" } | Should -Not -Throw
+        It "Should have Write-SweeprError function" {
+            # Note: The actual function is Write-SweeprError
+            { Write-SweeprError "Test message" } | Should -Not -Throw
         }
 
         It "Should log errors even when the icon table is partial" {
@@ -642,7 +642,7 @@ Describe "Logging Module" {
 
             try {
                 $script:Icons = @{ Solid = "*" }
-                { Write-MoleError "Test message" } | Should -Not -Throw
+                { Write-SweeprError "Test message" } | Should -Not -Throw
                 $script:Icons.Error | Should -Not -BeNullOrEmpty
             }
             finally {
@@ -653,41 +653,41 @@ Describe "Logging Module" {
 
     Context "Debug session log" {
         BeforeEach {
-            $script:OriginalDebugLogFile = $script:MoleDebugLogFile
+            $script:OriginalDebugLogFile = $script:SweeprDebugLogFile
             $script:OriginalLogConfig = $script:LogConfig.Clone()
-            $script:OriginalMoleDebug = $env:MOLE_DEBUG
-            $script:MoleDebugLogFile = Join-Path $TestDrive "config\mole\mole_debug_session.log"
+            $script:OriginalSweeprDebug = $env:SWEEPR_DEBUG
+            $script:SweeprDebugLogFile = Join-Path $TestDrive "config\sweepr\sweepr_debug_session.log"
         }
 
         AfterEach {
-            $script:MoleDebugLogFile = $script:OriginalDebugLogFile
+            $script:SweeprDebugLogFile = $script:OriginalDebugLogFile
             $script:LogConfig = $script:OriginalLogConfig
-            $env:MOLE_DEBUG = $script:OriginalMoleDebug
+            $env:SWEEPR_DEBUG = $script:OriginalSweeprDebug
         }
 
         It "Starts a fresh log with its header and records debug and message lines" {
-            New-Item -ItemType Directory -Path (Split-Path -Parent $script:MoleDebugLogFile) -Force | Out-Null
-            Set-Content -LiteralPath $script:MoleDebugLogFile -Value "previous session"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $script:SweeprDebugLogFile) -Force | Out-Null
+            Set-Content -LiteralPath $script:SweeprDebugLogFile -Value "previous session"
 
-            Start-MoleDebugSession -Header @("freeMole Debug Session", "Command: fm clean --debug")
+            Start-SweeprDebugSession -Header @("Sweepr Debug Session", "Command: sw clean --debug")
             Write-Debug "probe-debug-line"
-            Write-MoleWarning "probe-warning-line"
-            Complete-MoleDebugSession
+            Write-SweeprWarning "probe-warning-line"
+            Complete-SweeprDebugSession
 
-            $log = Get-Content -LiteralPath $script:MoleDebugLogFile -Raw
+            $log = Get-Content -LiteralPath $script:SweeprDebugLogFile -Raw
             $log | Should -Not -Match "previous session"
-            $log | Should -Match "Command: fm clean --debug"
+            $log | Should -Match "Command: sw clean --debug"
             $log | Should -Match "\[DEBUG\] probe-debug-line"
             $log | Should -Match "\[WARN\] probe-warning-line"
-            $env:MOLE_DEBUG | Should -Be "1"
+            $env:SWEEPR_DEBUG | Should -Be "1"
         }
 
         It "Keeps working when the log cannot be written" {
             $blocker = Join-Path $TestDrive "blocked"
             Set-Content -LiteralPath $blocker -Value "a file, not a folder"
-            $script:MoleDebugLogFile = Join-Path $blocker "mole_debug_session.log"
+            $script:SweeprDebugLogFile = Join-Path $blocker "sweepr_debug_session.log"
 
-            { Start-MoleDebugSession -Header @("header") } | Should -Not -Throw
+            { Start-SweeprDebugSession -Header @("header") } | Should -Not -Throw
             { Write-Debug "still printed" } | Should -Not -Throw
             $script:LogConfig.LogFile | Should -BeNullOrEmpty
         }
@@ -700,24 +700,24 @@ Describe "Logging Module" {
             $result | Should -Match "loaded"
         }
 
-        It "Writes a command script's own lines when the router already set MOLE_DEBUG" {
+        It "Writes a command script's own lines when the router already set SWEEPR_DEBUG" {
             # Command scripts load the log module afresh in their own scope after
-            # the router set MOLE_DEBUG; reading it only in Main was too late.
+            # the router set SWEEPR_DEBUG; reading it only in Main was too late.
             $profileDir = Join-Path $TestDrive "profile"
-            New-Item -ItemType Directory -Path (Join-Path $profileDir ".config\freemole") -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $profileDir ".config\sweepr") -Force | Out-Null
             $logPath = (Join-Path $script:LibDir "core\log.ps1").Replace("'", "''")
-            $psCommand = "& { . '$logPath'; Write-Debug 'child-debug-line'; Write-MoleWarning 'child-warning-line' }"
+            $psCommand = "& { . '$logPath'; Write-Debug 'child-debug-line'; Write-SweeprWarning 'child-warning-line' }"
             $originalProfile = $env:USERPROFILE
             try {
                 $env:USERPROFILE = $profileDir
-                $env:MOLE_DEBUG = "1"
+                $env:SWEEPR_DEBUG = "1"
                 & powershell -NoProfile -ExecutionPolicy Bypass -Command $psCommand | Out-Null
             }
             finally {
                 $env:USERPROFILE = $originalProfile
             }
 
-            $log = Get-Content -LiteralPath (Join-Path $profileDir ".config\freemole\mole_debug_session.log") -Raw
+            $log = Get-Content -LiteralPath (Join-Path $profileDir ".config\sweepr\sweepr_debug_session.log") -Raw
             $log | Should -Match "\[DEBUG\] child-debug-line"
             $log | Should -Match "\[WARN\] child-warning-line"
         }
@@ -744,12 +744,12 @@ Describe "Version Helpers" {
     Context "Shared VERSION Source" {
         It "Should read the version from VERSION" {
             $expected = (Get-Content $script:VersionFile -Raw).Trim()
-            Get-MoleVersionString -RootDir $script:WindowsDir | Should -Be $expected
+            Get-SweeprVersionString -RootDir $script:WindowsDir | Should -Be $expected
         }
 
         It "Should keep TUI release lookup aligned with VERSION" {
             $expected = (Get-Content $script:VersionFile -Raw).Trim()
-            Get-MoleVersionFromScriptFile -WindowsDir $script:WindowsDir | Should -Be $expected
+            Get-SweeprVersionFromScriptFile -WindowsDir $script:WindowsDir | Should -Be $expected
         }
 
         It "Should keep the compiled-in fallback in sync with VERSION" {
@@ -758,12 +758,12 @@ Describe "Version Helpers" {
             # the user ever sees, so it must never drift from VERSION.
             $expected = (Get-Content $script:VersionFile -Raw).Trim()
             $rootWithoutVersionFile = Join-Path $script:WindowsDir "no-version-file-here"
-            Get-MoleVersionString -RootDir $rootWithoutVersionFile | Should -Be $expected
+            Get-SweeprVersionString -RootDir $rootWithoutVersionFile | Should -Be $expected
         }
     }
 }
 
-Describe "Module path repair (#1744)" {
+Describe "Module path repair" {
     BeforeEach {
         $script:SavedModulePath = $env:PSModulePath
         $script:SavedSystemRoot = $env:SystemRoot
@@ -785,7 +785,7 @@ Describe "Module path repair (#1744)" {
             'C:\Program Files\WindowsPowerShell\Modules',
             'C:\Windows\system32\WindowsPowerShell\v1.0\Modules\'
         ) -join ';'
-        Repair-MoleModulePath -Edition 'Desktop'
+        Repair-SweeprModulePath -Edition 'Desktop'
         $env:PSModulePath | Should -Be (@(
             'C:\Users\me\Documents\WindowsPowerShell\Modules',
             'D:\Tools\Modules',
@@ -796,19 +796,19 @@ Describe "Module path repair (#1744)" {
 
     It "Puts the Windows PowerShell system modules back when the inherited path lost them" {
         $env:PSModulePath = 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
-        Repair-MoleModulePath -Edition 'Desktop'
+        Repair-SweeprModulePath -Edition 'Desktop'
         $env:PSModulePath | Should -Be ('D:\Tools\Modules;' + 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules')
     }
 
     It "Leaves PowerShell 7 itself alone" {
         $env:PSModulePath = 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
-        Repair-MoleModulePath -Edition 'Core'
+        Repair-SweeprModulePath -Edition 'Core'
         $env:PSModulePath | Should -Be 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
     }
 
-    It "Runs in freemole.ps1 before the runtime is loaded" {
-        $lines = Get-Content (Join-Path $script:WindowsDir 'freemole.ps1')
-        $repair = [array]::FindIndex([string[]]$lines, [Predicate[string]] { param($l) $l -match '^\s*Repair-MoleModulePath\s*$' })
+    It "Runs in sweepr.ps1 before the runtime is loaded" {
+        $lines = Get-Content (Join-Path $script:WindowsDir 'sweepr.ps1')
+        $repair = [array]::FindIndex([string[]]$lines, [Predicate[string]] { param($l) $l -match '^\s*Repair-SweeprModulePath\s*$' })
         $common = [array]::FindIndex([string[]]$lines, [Predicate[string]] { param($l) $l -match '^\s*\.\s+".*\\core\\common\.ps1"' })
         $repair | Should -BeGreaterThan -1
         $common | Should -BeGreaterThan $repair
@@ -843,10 +843,10 @@ Describe "Prebuilt TUI download verification" {
         Restore-PrebuiltTuiBinary -Name "status" -WindowsDir $TestDrive -DestinationPath $script:Dest -Version "9.9.9" | Should -Be "ok"
         Should -Invoke Invoke-RestMethod -Times 0
         Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-            $Uri -eq "https://github.com/brummilab/freeMole/releases/download/V9.9.9-windows/SHA256SUMS.txt" -and -not $OutFile
+            $Uri -eq "https://github.com/brummilab/sweepr/releases/download/V9.9.9-windows/SHA256SUMS.txt" -and -not $OutFile
         }
         Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-            $Uri -eq "https://github.com/brummilab/freeMole/releases/download/V9.9.9-windows/status-windows-x64.exe" -and $OutFile
+            $Uri -eq "https://github.com/brummilab/sweepr/releases/download/V9.9.9-windows/status-windows-x64.exe" -and $OutFile
         }
     }
 
@@ -854,7 +854,7 @@ Describe "Prebuilt TUI download verification" {
         $script:MissingTags = @("V9.9.9-windows")
         Restore-PrebuiltTuiBinary -Name "status" -WindowsDir $TestDrive -DestinationPath $script:Dest -Version "9.9.9" | Should -Be "ok"
         Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
-            $Uri -eq "https://github.com/brummilab/freeMole/releases/download/v9.9.9-windows/status-windows-x64.exe" -and $OutFile
+            $Uri -eq "https://github.com/brummilab/sweepr/releases/download/v9.9.9-windows/status-windows-x64.exe" -and $OutFile
         }
     }
 
@@ -876,13 +876,13 @@ Describe "Prebuilt TUI download verification" {
         Test-Path "$($script:Dest).download" | Should -BeFalse
     }
 
-    It "Verifies the checksum without Get-FileHash (#1744)" {
+    It "Verifies the checksum without Get-FileHash" {
         Mock Get-FileHash { throw [System.Management.Automation.CommandNotFoundException]::new("Get-FileHash") }
         Restore-PrebuiltTuiBinary -Name "status" -WindowsDir $TestDrive -DestinationPath $script:Dest -Version "9.9.9" | Should -Be "ok"
         Test-Path $script:Dest | Should -BeTrue
     }
 
-    It "Names the cause when the verified release cannot be fetched (#1744)" {
+    It "Names the cause when the verified release cannot be fetched" {
         Mock Write-TuiBinaryStatus { }
         Mock Invoke-WebRequest -ParameterFilter { $OutFile } { throw "connection reset" }
         Restore-PrebuiltTuiBinary -Name "status" -WindowsDir $TestDrive -DestinationPath $script:Dest -Version "9.9.9" | Should -Be "unavailable"
@@ -892,12 +892,12 @@ Describe "Prebuilt TUI download verification" {
 
     It "Keeps <_> progress out of a redirected stdout" -ForEach @("download", "build") {
         # Both launchers start a child PowerShell whose host lines land in its
-        # stdout, so `$out = fm analyze --json` used to begin with this line.
+        # stdout, so `$out = sw analyze --json` used to begin with this line.
         $tui = (Join-Path $script:LibDir "core\tui_binaries.ps1").Replace("'", "''")
         $dest = (Join-Path $TestDrive ("redirect-" + [guid]::NewGuid().ToString("N") + "\analyze.exe")).Replace("'", "''")
         $probe = Join-Path $TestDrive ("payload-" + [guid]::NewGuid().ToString("N"))
         [System.IO.File]::WriteAllText($probe, "x")
-        $hash = Get-MoleFileSha256 -Path $probe
+        $hash = Get-SweeprFileSha256 -Path $probe
         $call = if ($_ -eq "download") {
             "'RESULT=' + (Restore-PrebuiltTuiBinary -Name analyze -WindowsDir '$($TestDrive.Replace("'", "''"))' -DestinationPath '$dest' -Version 9.9.9)"
         }

@@ -1,4 +1,4 @@
-# freeMole - Inspect (REA bridge) Tests
+# Sweepr - Inspect (REA bridge) Tests
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -37,21 +37,21 @@ BeforeAll {
 '@
 }
 
-Describe "ConvertFrom-MoleDisplayIcon" {
+Describe "ConvertFrom-SweeprDisplayIcon" {
     It "Reads a quoted path with an icon index" {
-        ConvertFrom-MoleDisplayIcon -DisplayIcon '"C:\Program Files\App\app.exe",0' | Should -Be 'C:\Program Files\App\app.exe'
+        ConvertFrom-SweeprDisplayIcon -DisplayIcon '"C:\Program Files\App\app.exe",0' | Should -Be 'C:\Program Files\App\app.exe'
     }
 
     It "Reads a bare path with an icon index" {
-        ConvertFrom-MoleDisplayIcon -DisplayIcon 'C:\Apps\Tool\tool.exe,-101' | Should -Be 'C:\Apps\Tool\tool.exe'
+        ConvertFrom-SweeprDisplayIcon -DisplayIcon 'C:\Apps\Tool\tool.exe,-101' | Should -Be 'C:\Apps\Tool\tool.exe'
     }
 
     It "Returns null for an empty value" {
-        ConvertFrom-MoleDisplayIcon -DisplayIcon '' | Should -BeNullOrEmpty
+        ConvertFrom-SweeprDisplayIcon -DisplayIcon '' | Should -BeNullOrEmpty
     }
 }
 
-Describe "Resolve-MoleInspectTarget" {
+Describe "Resolve-SweeprInspectTarget" {
     BeforeEach {
         $script:AppDir = Join-Path $TestDrive "Contoso"
         $script:OtherDir = Join-Path $TestDrive "Contoso Tools"
@@ -61,14 +61,14 @@ Describe "Resolve-MoleInspectTarget" {
     }
 
     It "Uses an existing folder as is" {
-        $target = Resolve-MoleInspectTarget -Target $script:AppDir -Entries @()
+        $target = Resolve-SweeprInspectTarget -Target $script:AppDir -Entries @()
         $target.Kind | Should -Be "Directory"
         $target.Path | Should -Be (Get-Item -LiteralPath $script:AppDir).FullName
         $target.MainExecutable | Should -BeNullOrEmpty
     }
 
     It "Uses an existing file as its own executable" {
-        $target = Resolve-MoleInspectTarget -Target $script:AppExe -Entries @()
+        $target = Resolve-SweeprInspectTarget -Target $script:AppExe -Entries @()
         $target.Kind | Should -Be "File"
         $target.MainExecutable | Should -Be (Get-Item -LiteralPath $script:AppExe).FullName
     }
@@ -78,7 +78,7 @@ Describe "Resolve-MoleInspectTarget" {
             [pscustomobject]@{ Name = "Contoso"; InstallLocation = $script:AppDir; DisplayIcon = "`"$script:AppExe`",0" },
             [pscustomobject]@{ Name = "Contoso Tools"; InstallLocation = $script:OtherDir; DisplayIcon = "" }
         )
-        $target = Resolve-MoleInspectTarget -Target "contoso" -Entries $entries
+        $target = Resolve-SweeprInspectTarget -Target "contoso" -Entries $entries
         $target.ContainsKey("Error") | Should -BeFalse
         $target.Name | Should -Be "Contoso"
         $target.MainExecutable | Should -Be $script:AppExe
@@ -89,7 +89,7 @@ Describe "Resolve-MoleInspectTarget" {
             [pscustomobject]@{ Name = "Contoso Suite"; InstallLocation = $script:AppDir; DisplayIcon = "" },
             [pscustomobject]@{ Name = "Contoso Tools"; InstallLocation = $script:OtherDir; DisplayIcon = "" }
         )
-        $target = Resolve-MoleInspectTarget -Target "Contoso" -Entries $entries
+        $target = Resolve-SweeprInspectTarget -Target "Contoso" -Entries $entries
         $target.Error | Should -Match "matches 2 installed apps"
         $target.Matches | Should -Contain "Contoso Tools"
     }
@@ -99,24 +99,24 @@ Describe "Resolve-MoleInspectTarget" {
             [pscustomobject]@{ Name = "Contoso App"; InstallLocation = $script:AppDir; DisplayIcon = "" },
             [pscustomobject]@{ Name = "Contoso App (x64)"; InstallLocation = $script:AppDir; DisplayIcon = "" }
         )
-        $target = Resolve-MoleInspectTarget -Target "Contoso App" -Entries $entries
+        $target = Resolve-SweeprInspectTarget -Target "Contoso App" -Entries $entries
         $target.ContainsKey("Error") | Should -BeFalse
         $target.Path | Should -Be (Get-Item -LiteralPath $script:AppDir).FullName
     }
 
     It "Falls back to the icon's folder when InstallLocation is missing" {
         $entries = @([pscustomobject]@{ Name = "Contoso"; InstallLocation = ""; DisplayIcon = $script:AppExe })
-        $target = Resolve-MoleInspectTarget -Target "Contoso" -Entries $entries
+        $target = Resolve-SweeprInspectTarget -Target "Contoso" -Entries $entries
         $target.Path | Should -Be (Get-Item -LiteralPath $script:AppDir).FullName
     }
 
     It "Reports when nothing matches" {
-        $target = Resolve-MoleInspectTarget -Target "Fabrikam" -Entries @()
+        $target = Resolve-SweeprInspectTarget -Target "Fabrikam" -Entries @()
         $target.Error | Should -Match "No installed app or path"
     }
 }
 
-Describe "Get-MoleInspectMainExecutable" {
+Describe "Get-SweeprInspectMainExecutable" {
     It "Picks the largest exe and skips uninstallers and updaters" {
         $dir = Join-Path $TestDrive "pick"
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -124,33 +124,33 @@ Describe "Get-MoleInspectMainExecutable" {
         Set-Content -LiteralPath (Join-Path $dir "unins000.exe") -Value ("x" * 5000)
         Set-Content -LiteralPath (Join-Path $dir "Update.exe") -Value ("x" * 5000)
         Set-Content -LiteralPath (Join-Path $dir "helper.exe") -Value ("x" * 10)
-        Split-Path -Leaf (Get-MoleInspectMainExecutable -Directory $dir) | Should -Be "app.exe"
+        Split-Path -Leaf (Get-SweeprInspectMainExecutable -Directory $dir) | Should -Be "app.exe"
     }
 
     It "Returns null for a folder without executables" {
         $dir = Join-Path $TestDrive "empty"
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        Get-MoleInspectMainExecutable -Directory $dir | Should -BeNullOrEmpty
+        Get-SweeprInspectMainExecutable -Directory $dir | Should -BeNullOrEmpty
     }
 }
 
-Describe "Get-MoleReaSigner" {
+Describe "Get-SweeprReaSigner" {
     It "Names the leaf certificate that matches the SignerInfo" {
-        $signer = Get-MoleReaSigner -Certificates ($script:CertificatesJson | ConvertFrom-Json)
+        $signer = Get-SweeprReaSigner -Certificates ($script:CertificatesJson | ConvertFrom-Json)
         $signer.Subject | Should -Be "Contoso App"
         $signer.Organization | Should -Be "Contoso Ltd"
         $signer.Issuer | Should -Be "Contoso PCA"
     }
 
     It "Returns null for an image without a certificate table" {
-        Get-MoleReaSigner -Certificates ($script:UnsignedJson | ConvertFrom-Json) | Should -BeNullOrEmpty
+        Get-SweeprReaSigner -Certificates ($script:UnsignedJson | ConvertFrom-Json) | Should -BeNullOrEmpty
     }
 }
 
-Describe "ConvertTo-MoleInspectSummary" {
+Describe "ConvertTo-SweeprInspectSummary" {
     It "Combines runtime, signer, imports and .NET facts" {
         $target = @{ Name = "Contoso"; Kind = "Directory"; Path = "C:\App"; MainExecutable = "C:\App\app.exe" }
-        $summary = ConvertTo-MoleInspectSummary -Target $target `
+        $summary = ConvertTo-SweeprInspectSummary -Target $target `
             -Desktop ($script:DesktopJson | ConvertFrom-Json) `
             -Certificates ($script:CertificatesJson | ConvertFrom-Json) `
             -Imports ($script:ImportsJson | ConvertFrom-Json) `
@@ -167,25 +167,25 @@ Describe "ConvertTo-MoleInspectSummary" {
 
     It "Drops MCP-only follow-up probes" {
         $target = @{ Name = "Contoso"; Kind = "Directory"; Path = "C:\App"; MainExecutable = $null }
-        $summary = ConvertTo-MoleInspectSummary -Target $target -Desktop ($script:DesktopJson | ConvertFrom-Json)
+        $summary = ConvertTo-SweeprInspectSummary -Target $target -Desktop ($script:DesktopJson | ConvertFrom-Json)
         @($summary.NextProbes.Operation) | Should -Be @("analyze_javascript_application")
     }
 
     It "Leaves the signature unknown when it was not checked" {
         $target = @{ Name = "x"; Kind = "File"; Path = "C:\x.asar"; MainExecutable = $null }
-        $summary = ConvertTo-MoleInspectSummary -Target $target -Errors @("No main executable found")
+        $summary = ConvertTo-SweeprInspectSummary -Target $target -Errors @("No main executable found")
         $summary.Signed | Should -BeNullOrEmpty
         $summary.Errors | Should -Contain "No main executable found"
     }
 
     It "Reports an unsigned image as not signed" {
         $target = @{ Name = "x"; Kind = "File"; Path = "C:\x.exe"; MainExecutable = "C:\x.exe" }
-        $summary = ConvertTo-MoleInspectSummary -Target $target -Certificates ($script:UnsignedJson | ConvertFrom-Json)
+        $summary = ConvertTo-SweeprInspectSummary -Target $target -Certificates ($script:UnsignedJson | ConvertFrom-Json)
         $summary.Signed | Should -BeFalse
     }
 }
 
-Describe "Invoke-MoleRea" {
+Describe "Invoke-SweeprRea" {
     BeforeAll {
         # A stand-in REA: echoes a success record, or an REA error object.
         $script:FakeRea = Join-Path $TestDrive "fake-rea.ps1"
@@ -202,48 +202,48 @@ exit 0
     }
 
     It "Appends --json, keeps the prefix and parses stdout only" {
-        $run = Invoke-MoleRea -Invocation $script:FakeInvocation -Arguments @("inspect-pe-imports", "C:/app.exe")
+        $run = Invoke-SweeprRea -Invocation $script:FakeInvocation -Arguments @("inspect-pe-imports", "C:/app.exe")
         $run.ExitCode | Should -Be 0
         $run.Data.args | Should -Be "-y rea-agents@latest inspect-pe-imports C:/app.exe --json"
     }
 
     It "Returns REA's own issue message on failure" {
-        $run = Invoke-MoleRea -Invocation $script:FakeInvocation -Arguments @("fail")
+        $run = Invoke-SweeprRea -Invocation $script:FakeInvocation -Arguments @("fail")
         $run.ExitCode | Should -Be 1
         $run.Data | Should -BeNullOrEmpty
         $run.Error | Should -Match "could not be read"
     }
 }
 
-Describe "Get-MoleReaInvocation" {
-    AfterEach { Remove-Item Env:MOLE_REA_COMMAND -ErrorAction SilentlyContinue }
+Describe "Get-SweeprReaInvocation" {
+    AfterEach { Remove-Item Env:SWEEPR_REA_COMMAND -ErrorAction SilentlyContinue }
 
-    It "Honors MOLE_REA_COMMAND when it names a file" {
+    It "Honors SWEEPR_REA_COMMAND when it names a file" {
         $fake = Join-Path $TestDrive "rea.cmd"
         Set-Content -LiteralPath $fake -Value "@echo {}"
-        $env:MOLE_REA_COMMAND = $fake
-        $invocation = Get-MoleReaInvocation
+        $env:SWEEPR_REA_COMMAND = $fake
+        $invocation = Get-SweeprReaInvocation
         $invocation.File | Should -Be $fake
         @($invocation.Prefix).Count | Should -Be 0
     }
 
-    It "Returns null when MOLE_REA_COMMAND names a missing file" {
-        $env:MOLE_REA_COMMAND = Join-Path $TestDrive "missing.cmd"
-        Get-MoleReaInvocation | Should -BeNullOrEmpty
+    It "Returns null when SWEEPR_REA_COMMAND names a missing file" {
+        $env:SWEEPR_REA_COMMAND = Join-Path $TestDrive "missing.cmd"
+        Get-SweeprReaInvocation | Should -BeNullOrEmpty
     }
 }
 
 Describe "Inspect command" {
     It "Shows help without needing REA" {
         $output = & (Join-Path $script:WindowsDir "bin\inspect.ps1") -ShowHelp 6>&1 | Out-String
-        $output | Should -Match "fm inspect"
+        $output | Should -Match "sw inspect"
         $output | Should -Match "--setup"
     }
 
     It "Is routed and listed in the main help" {
-        $source = Get-Content (Join-Path $script:WindowsDir "freemole.ps1") -Raw
+        $source = Get-Content (Join-Path $script:WindowsDir "sweepr.ps1") -Raw
         $source | Should -Match '"inspect"'
-        $source | Should -Match 'fm inspect <app>'
+        $source | Should -Match 'sw inspect <app>'
     }
 
     It "Never deletes: the command uses no removal helper" {

@@ -1,4 +1,4 @@
-# freeMole - Purge Command
+# Sweepr - Purge Command
 # Aggressive cleanup of project build artifacts
 
 #Requires -Version 5.1
@@ -48,7 +48,7 @@ $script:DefaultSearchPaths = @(
     "D:\Development"
 )
 
-$script:ConfigFile = "$env:USERPROFILE\.config\freemole\purge_paths.txt"
+$script:ConfigFile = "$env:USERPROFILE\.config\sweepr\purge_paths.txt"
 
 # Artifact patterns to clean
 $script:ArtifactPatterns = @(
@@ -83,7 +83,7 @@ function Show-PurgeHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm purge$esc[0m - Clean project build artifacts"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm purge [options]"
+    Write-Host "$esc[33mUsage:$esc[0m sw purge [options]"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --dry-run    Show what would be removed, change nothing"
@@ -157,7 +157,7 @@ function Edit-SearchPaths {
 
     if (-not (Test-Path $script:ConfigFile)) {
         $defaultContent = @"
-# freeMole Purge - Custom Search Paths
+# Sweepr Purge - Custom Search Paths
 # Add directories to scan for project artifacts (one per line)
 # Lines starting with # are ignored
 #
@@ -265,7 +265,7 @@ function Test-PurgeArtifactKind {
 function Test-PurgeArtifactContent {
     param([string]$ProjectPath, [string]$Path)
     try {
-        $snapshot = Get-MolePathSnapshot -Path $Path
+        $snapshot = Get-SweeprPathSnapshot -Path $Path
         if (-not $snapshot -or -not (Test-PurgeArtifactKind $ProjectPath ([IO.Path]::GetFileName($Path)))) { return $false }
         $project = [IO.Path]::GetFullPath($ProjectPath).TrimEnd('\')
         if (-not [string]::Equals([IO.Path]::GetDirectoryName($snapshot.Path), $project, [StringComparison]::OrdinalIgnoreCase)) { return $false }
@@ -279,7 +279,7 @@ function Test-PurgeArtifactContent {
         $ancestor = $project
         $hasRepository = $false
         while ($ancestor) {
-            if (-not (Get-MolePathSnapshot -Path $ancestor)) { return $false }
+            if (-not (Get-SweeprPathSnapshot -Path $ancestor)) { return $false }
             try {
                 # PS 5.1's provider can return null without an error for a
                 # missing literal child of a bracket-named directory. Read the
@@ -306,7 +306,7 @@ function Test-PurgeArtifactContent {
             $tracked = Invoke-PurgeGit $project @('ls-files', '-z', '--', (':(top,literal,icase)' + $relative))
             if (-not $tracked -or $tracked.Output.Length -gt 0) { return $false }
         }
-        return Test-MolePathSnapshot $snapshot
+        return Test-SweeprPathSnapshot $snapshot
     }
     catch {
         Write-Debug "Could not verify purge artifact: $Path - $_"
@@ -323,11 +323,11 @@ function Get-PurgeProjectDirectories {
     while ($pending.Count -gt 0) {
         if ($timer.Elapsed.TotalSeconds -ge 15) { return }
         $directory = $pending.Pop()
-        $snapshot = Get-MolePathSnapshot -Path $directory.Path
+        $snapshot = Get-SweeprPathSnapshot -Path $directory.Path
         if (-not $snapshot) { continue }
         try { $children = @(Get-ChildItem -LiteralPath $directory.Path -Force -ErrorAction Stop) }
         catch { continue }
-        if (-not (Test-MolePathSnapshot $snapshot)) { continue }
+        if (-not (Test-SweeprPathSnapshot $snapshot)) { continue }
         $marker = $children | Where-Object {
             -not $_.PSIsContainer -and ($_.Name -match '^(package\.json|composer\.json|Cargo\.toml|go\.mod|pom\.xml|build\.gradle(\.kts)?|requirements\.txt|pyproject\.toml|.+\.(csproj|fsproj|vbproj|sln))$')
         } | Select-Object -First 1
@@ -406,12 +406,12 @@ function Find-ProjectArtifacts {
 
         foreach ($item in $items) {
             if (-not (Test-PurgeArtifactKind $ProjectPath $item.Name)) { continue }
-            $snapshot = Get-MolePathSnapshot -Path $item.FullName
+            $snapshot = Get-SweeprPathSnapshot -Path $item.FullName
             if (-not $snapshot) { continue }
             if ($pattern.Type -eq "Directory" -and $item.PSIsContainer) {
                 $sizeKB = Get-PathSizeKB -Path $item.FullName
 
-                if (-not (Test-MolePathSnapshot $snapshot) -or
+                if (-not (Test-SweeprPathSnapshot $snapshot) -or
                     -not (Test-PurgeArtifactContent $ProjectPath $item.FullName)) { continue }
                 $artifacts += [PSCustomObject]@{
                     Snapshot = $snapshot
@@ -426,7 +426,7 @@ function Find-ProjectArtifacts {
             elseif ($pattern.Type -eq "File" -and -not $item.PSIsContainer) {
                 $sizeKB = [Math]::Ceiling($item.Length / 1024)
 
-                if (-not (Test-MolePathSnapshot $snapshot) -or
+                if (-not (Test-SweeprPathSnapshot $snapshot) -or
                     -not (Test-PurgeArtifactContent $ProjectPath $item.FullName)) { continue }
                 $artifacts += [PSCustomObject]@{
                     Snapshot = $snapshot
@@ -457,7 +457,7 @@ function Show-ProjectSelectionMenu {
 
     $projectCount = if ($null -eq $Projects) { 0 } else { @($Projects).Count }
     if ($projectCount -eq 0) {
-        Write-MoleWarning "No projects with cleanable artifacts found"
+        Write-SweeprWarning "No projects with cleanable artifacts found"
         return @()
     }
 
@@ -613,13 +613,13 @@ function Remove-ProjectArtifacts {
 
         foreach ($artifact in $project.Artifacts) {
             if (Test-Path -LiteralPath $artifact.Path) {
-                if (-not (Test-MolePathSnapshot $artifact.Snapshot) -or
+                if (-not (Test-SweeprPathSnapshot $artifact.Snapshot) -or
                     -not (Test-PurgeArtifactContent $project.Path $artifact.Path)) { continue }
                 $projectPath = $project.Path
                 $previewSnapshot = $artifact.Snapshot
                 $guard = {
                     param($candidate)
-                    return (Test-MolePathSnapshot $previewSnapshot) -and
+                    return (Test-SweeprPathSnapshot $previewSnapshot) -and
                         (Test-PurgeArtifactContent $projectPath $candidate)
                 }
                 # Remove-SafeItem prints the result row and adds the size to
@@ -642,12 +642,12 @@ function Remove-ProjectArtifacts {
 # ============================================================================
 
 function Show-PurgeSummary {
-    $heading = if ($script:MoleDryRunMode) { 'Dry run complete - no changes made' } else { 'Purge complete' }
+    $heading = if ($script:SweeprDryRunMode) { 'Dry run complete - no changes made' } else { 'Purge complete' }
     $details = @()
     if ($script:TotalSizeCleaned -gt 0) {
         $size = Format-ByteSize -Bytes ($script:TotalSizeCleaned * 1024)
-        $label = if ($script:MoleDryRunMode) { 'Potential space' } else { 'Tracked cleanup' }
-        $details += "${label}: $(Get-MoleColor -Name Green)$size$(Get-MoleColor -Name NC) | Items: $($script:ItemsCleaned)"
+        $label = if ($script:SweeprDryRunMode) { 'Potential space' } else { 'Tracked cleanup' }
+        $details += "${label}: $(Get-SweeprColor -Name Green)$size$(Get-SweeprColor -Name NC) | Items: $($script:ItemsCleaned)"
     }
     else { $details += 'No artifacts to clean.' }
     $details += "Free space: $(Get-FreeSpace)"
@@ -678,7 +678,7 @@ function Main {
     }
 
     if ($DryRun) {
-        $env:MOLE_DRY_RUN = "1"
+        $env:SWEEPR_DRY_RUN = "1"
         Set-DryRunMode -Enabled $true
     }
 
@@ -694,8 +694,8 @@ function Main {
     $searchPaths = @(Get-SearchPaths)
 
     if ($null -eq $searchPaths -or $searchPaths.Count -eq 0) {
-        Write-MoleWarning "No valid search paths found"
-        Write-Host "Run 'fm purge --paths' to configure search directories"
+        Write-SweeprWarning "No valid search paths found"
+        Write-Host "Run 'sw purge --paths' to configure search directories"
         return
     }
 
@@ -746,7 +746,7 @@ function Main {
 
     Write-Host ""
     # A dry run only reports, so it needs no confirmation.
-    if ($script:MoleDryRunMode) {
+    if ($script:SweeprDryRunMode) {
         Remove-ProjectArtifacts -Projects $selected
         Show-PurgeSummary
         return

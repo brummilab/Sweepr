@@ -1,12 +1,12 @@
-# freeMole - Developer Tools Cleanup Module
+# Sweepr - Developer Tools Cleanup Module
 # Cleans development tool caches and build artifacts
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_CLEAN_DEV_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_CLEAN_DEV_LOADED) { return }
-$script:MOLE_CLEAN_DEV_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_CLEAN_DEV_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_DEV_LOADED) { return }
+$script:SWEEPR_CLEAN_DEV_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -22,7 +22,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Invoke an installed owner in a bounded child process. Encoded PowerShell keeps
 # executable paths and arguments as data, including spaces and quote characters.
-function Invoke-MoleOwnerProcess {
+function Invoke-SweeprOwnerProcess {
     param([string]$Name, [string[]]$Arguments, [int]$TimeoutSeconds = 5, [hashtable]$Outcome = $null)
 
     # Outcome.Reason says why a run returned nothing, including a forced stop,
@@ -94,26 +94,26 @@ function Invoke-MoleOwnerProcess {
     }
 }
 
-function Get-MoleOwnerCachePath {
+function Get-SweeprOwnerCachePath {
     param([string]$Name, [string[]]$Arguments)
 
-    $result = Invoke-MoleOwnerProcess -Name $Name -Arguments $Arguments
+    $result = Invoke-SweeprOwnerProcess -Name $Name -Arguments $Arguments
     if ($null -eq $result -or [string]::IsNullOrWhiteSpace($result.Output)) { return $null }
     $path = $result.Output.Trim()
     if ($path -match '[\r\n]' -or $path -notmatch '^[A-Za-z]:\\') { return $null }
     return $path
 }
 
-function Invoke-MoleOwnerCacheCleanup {
+function Invoke-SweeprOwnerCacheCleanup {
     param([string]$Name, [string[]]$Query, [string[]]$Arguments, [string]$Description)
 
-    $path = Get-MoleOwnerCachePath -Name $Name -Arguments $Query
+    $path = Get-SweeprOwnerCachePath -Name $Name -Arguments $Query
     if (-not $path -or -not (Test-SafePath $path)) { return }
-    $snapshot = Get-MolePathSnapshot -Path $path
+    $snapshot = Get-SweeprPathSnapshot -Path $path
     if (-not $snapshot) { return }
     # A whole-cache owner command must honor descendant whitelist entries too.
     $tree = Get-SafeDirectoryTreeItems -Path $path
-    if (-not $tree.Success -or -not (Test-MolePathSnapshot $snapshot)) { return }
+    if (-not $tree.Success -or -not (Test-SweeprPathSnapshot $snapshot)) { return }
     foreach ($item in $tree.Items) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return }
     }
@@ -127,29 +127,29 @@ function Invoke-MoleOwnerCacheCleanup {
     }
     # Query again at the boundary; a changed configuration is not the previewed root.
     # One fresh whitelist read for the boundary, not one per cache entry.
-    $current = Get-MoleOwnerCachePath -Name $Name -Arguments $Query
+    $current = Get-SweeprOwnerCachePath -Name $Name -Arguments $Query
     $whitelistState = Get-WhitelistState
     if ($current -ne $path -or -not (Test-SafePath $path -WhitelistState $whitelistState) -or
-        -not (Test-MolePathSnapshot $snapshot)) { return }
+        -not (Test-SweeprPathSnapshot $snapshot)) { return }
     foreach ($item in $tree.Items) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return }
         if (-not (Test-SafePath $item.FullName -WhitelistState $whitelistState) -or
-            -not (Test-MolePathSnapshot $item.MolePathSnapshot)) { return }
+            -not (Test-SweeprPathSnapshot $item.SweeprPathSnapshot)) { return }
     }
     $beforeFiles = @($tree.Items | Where-Object { -not $_.PSIsContainer })
     $beforeBytes = 0L
     foreach ($file in $beforeFiles) { $beforeBytes += $file.Length }
     $commandDetail = (@($Name) + $Arguments) -join ' '
     $ownerOutcome = @{}
-    $result = Invoke-MoleOwnerProcess -Name $Name -Arguments $Arguments -TimeoutSeconds 120 -Outcome $ownerOutcome
+    $result = Invoke-SweeprOwnerProcess -Name $Name -Arguments $Arguments -TimeoutSeconds 120 -Outcome $ownerOutcome
     if ($null -ne $result) {
-        Write-MoleOperation -Action "OWNER" -Path $path -Detail $commandDetail
+        Write-SweeprOperation -Action "OWNER" -Path $path -Detail $commandDetail
         $script:OwnerCleanups++
         # Count only a complete before/after measurement of the same root.
         # Missing or replaced roots are unmeasured, never assumed empty.
-        if (Test-MolePathSnapshot $snapshot) {
+        if (Test-SweeprPathSnapshot $snapshot) {
             $after = Get-SafeDirectoryTreeItems -Path $path
-            if ($after.Success -and (Test-MolePathSnapshot $snapshot)) {
+            if ($after.Success -and (Test-SweeprPathSnapshot $snapshot)) {
                 $afterFiles = @($after.Items | Where-Object { -not $_.PSIsContainer })
                 $afterBytes = 0L
                 foreach ($file in $afterFiles) { $afterBytes += $file.Length }
@@ -165,7 +165,7 @@ function Invoke-MoleOwnerCacheCleanup {
     else {
         # Indexed: under StrictMode a missing key read as a property throws.
         $why = if ($ownerOutcome['Reason']) { "; $($ownerOutcome['Reason'])" } else { "" }
-        Write-MoleOperation -Action "FAILED" -Path $path -Detail "${commandDetail}: incomplete$why"
+        Write-SweeprOperation -Action "FAILED" -Path $path -Detail "${commandDetail}: incomplete$why"
         Write-Debug "$Name cache cleanup did not complete"
     }
 }
@@ -176,8 +176,8 @@ function Clear-NpmCache {
         Clean npm, pnpm, yarn, and bun caches
     #>
     
-    Invoke-MoleOwnerCacheCleanup -Name 'npm' -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
-    Invoke-MoleOwnerCacheCleanup -Name 'pnpm' -Query @('store', 'path') -Arguments @('store', 'prune') -Description 'pnpm store'
+    Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
+    Invoke-SweeprOwnerCacheCleanup -Name 'pnpm' -Query @('store', 'path') -Arguments @('store', 'prune') -Description 'pnpm store'
 
     # Yarn cache
     $yarnCachePaths = @(
@@ -232,7 +232,7 @@ function Clear-PythonCaches {
         Clean Python and pip caches
     #>
     
-    Invoke-MoleOwnerCacheCleanup -Name 'pip' -Query @('cache', 'dir') -Arguments @('cache', 'purge') -Description 'pip cache'
+    Invoke-SweeprOwnerCacheCleanup -Name 'pip' -Query @('cache', 'dir') -Arguments @('cache', 'purge') -Description 'pip cache'
 
     # Python bytecode caches (__pycache__)
     # Note: These are typically in project directories, cleaned by purge command
@@ -246,7 +246,7 @@ function Clear-PythonCaches {
     # Poetry cache
     $poetryCachePath = "$env:LOCALAPPDATA\pypoetry\Cache"
     foreach ($leaf in @('artifacts', 'cache')) {
-        Clear-MoleAppCache -Path (Join-Path $poetryCachePath $leaf) -Description "Poetry cache" -Processes @('python', 'pythonw', 'poetry')
+        Clear-SweeprAppCache -Path (Join-Path $poetryCachePath $leaf) -Description "Poetry cache" -Processes @('python', 'pythonw', 'poetry')
     }
     
     # conda packages
@@ -318,16 +318,16 @@ function Clear-GoCaches {
         Clean Go build and module caches
     #>
     
-    Invoke-MoleOwnerCacheCleanup -Name 'go' -Query @('env', 'GOCACHE') -Arguments @('clean', '-cache') -Description 'Go build cache'
+    Invoke-SweeprOwnerCacheCleanup -Name 'go' -Query @('env', 'GOCACHE') -Arguments @('clean', '-cache') -Description 'Go build cache'
 
-    $moduleRoot = Get-MoleOwnerCachePath -Name 'go' -Arguments @('env', 'GOMODCACHE')
+    $moduleRoot = Get-SweeprOwnerCachePath -Name 'go' -Arguments @('env', 'GOMODCACHE')
     if ($moduleRoot) {
         Clear-DirectoryContents -Path (Join-Path $moduleRoot 'cache') -Description 'Go module cache'
     }
 }
 
 function Clear-MiseCache {
-    Invoke-MoleOwnerCacheCleanup -Name 'mise' -Query @('cache', 'path') -Arguments @('cache', 'clear') -Description 'mise cache'
+    Invoke-SweeprOwnerCacheCleanup -Name 'mise' -Query @('cache', 'path') -Arguments @('cache', 'clear') -Description 'mise cache'
 }
 
 # ============================================================================
@@ -590,7 +590,7 @@ function Clear-EditorCaches {
     
     # Sublime Text cache
     foreach ($sublimeCachePath in @("$env:LOCALAPPDATA\Sublime Text\Cache", "$env:APPDATA\Sublime Text\Cache")) {
-        Clear-MoleAppCache -Path $sublimeCachePath -Description "Sublime Text cache" -Processes @('sublime_text', 'plugin_host')
+        Clear-SweeprAppCache -Path $sublimeCachePath -Description "Sublime Text cache" -Processes @('sublime_text', 'plugin_host')
     }
     
     # Atom cache (legacy)
@@ -705,7 +705,7 @@ function Invoke-DevToolsCleanup {
     # builds and downloads, and neither their age nor an idle process proves
     # removing one is safe. ~\.m2\repository is a default whitelist entry, so
     # the .lastUpdated markers inside it were never removable, and they free no
-    # space; the macOS CLI leaves the Maven repository alone too.
+    # space.
 
     # Elixir/Erlang ecosystem
     Clear-ElixirCaches

@@ -1,4 +1,4 @@
-# freeMole - History Command
+# Sweepr - History Command
 # Review recent cleanup, purge, optimize and uninstall activity.
 
 #Requires -Version 5.1
@@ -26,9 +26,9 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 . "$libDir\core\history.ps1"
 
 function Show-HistoryHelp {
-    Write-Host "Usage: fm history [OPTIONS]"
+    Write-Host "Usage: sw history [OPTIONS]"
     Write-Host ""
-    Write-Host "Review recent freeMole cleanup and removal activity."
+    Write-Host "Review recent Sweepr cleanup and removal activity."
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  --json           Output history as JSON"
@@ -42,7 +42,7 @@ if ($ShowHelp) {
 }
 
 $extra = @($Rest | Where-Object { $null -ne $_ })
-$limitValue = $script:MoleHistoryDefaultLimit
+$limitValue = $script:SweeprHistoryDefaultLimit
 if ($null -ne $Limit) {
     $raw = if ($Limit -is [bool] -or $Limit -is [switch]) {
         if ($extra.Count -eq 0) {
@@ -54,23 +54,23 @@ if ($null -ne $Limit) {
         $first
     }
     else { [string]$Limit }
-    $limitValue = ConvertTo-MoleHistoryLimit $raw
+    $limitValue = ConvertTo-SweeprHistoryLimit $raw
     if ($null -eq $limitValue) {
         Write-Host "Invalid value for --limit: $raw"
         exit 2
     }
 }
 if ($extra.Count -gt 0) {
-    Write-Host "Unexpected argument for fm history: $($extra[0])"
-    Write-Host "Run 'fm history --help' for usage."
+    Write-Host "Unexpected argument for sw history: $($extra[0])"
+    Write-Host "Run 'sw history --help' for usage."
     exit 2
 }
 
-$logPath = $script:MoleOperationsLogFile
-$history = Read-MoleHistory -Path $logPath
+$logPath = $script:SweeprOperationsLogFile
+$history = Read-SweeprHistory -Path $logPath
 if ($Json) {
-    ConvertTo-MoleHistoryJson -History $history -Limit $limitValue -LogPath $logPath
+    ConvertTo-SweeprHistoryJson -History $history -Limit $limitValue -LogPath $logPath
 }
 else {
-    Show-MoleHistoryText -History $history -Limit $limitValue -LogPath $logPath
+    Show-SweeprHistoryText -History $history -Limit $limitValue -LogPath $logPath
 }

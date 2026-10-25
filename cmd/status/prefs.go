@@ -1,7 +1,7 @@
 // Package main: status preferences store.
 //
 // Persisted preferences live in a tiny `key=value` file (one pair per line) at
-// %USERPROFILE%\.config\freemole\status_prefs, beside the whitelist the PowerShell
+// %USERPROFILE%\.config\sweepr\status_prefs, beside the whitelist the PowerShell
 // commands keep in the same folder. Writing one key preserves all the others.
 package main
 
@@ -21,7 +21,7 @@ func getConfigPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "freemole", "status_prefs")
+	return filepath.Join(home, ".config", "sweepr", "status_prefs")
 }
 
 // loadPrefs reads the preferences file into a map. A missing or unreadable file

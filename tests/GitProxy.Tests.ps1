@@ -1,4 +1,4 @@
-# freeMole Windows - git system proxy tests
+# Sweepr Windows - git system proxy tests
 # Git does not read the Windows system proxy, so a machine that reaches GitHub
 # only through it fails to clone or pull while PowerShell downloads work.
 
@@ -19,25 +19,25 @@ BeforeAll {
 
     $script:Updater = Join-Path $script:WindowsDir "bin\update.ps1"
     $script:QuickInstall = Join-Path $script:WindowsDir "quick-install.ps1"
-    foreach ($name in @("Get-MoleSystemProxy", "Get-GitProxyArguments")) {
+    foreach ($name in @("Get-SweeprSystemProxy", "Get-GitProxyArguments")) {
         . ([scriptblock]::Create((Get-FunctionText -Path $script:Updater -Name $name)))
     }
 }
 
 Describe "Get-GitProxyArguments" {
     BeforeEach {
-        $script:MoleGitProxyArguments = $null
+        $script:SweeprGitProxyArguments = $null
         $script:SavedProxyEnv = @{}
         foreach ($name in @("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy")) {
             $script:SavedProxyEnv[$name] = [Environment]::GetEnvironmentVariable($name)
             [Environment]::SetEnvironmentVariable($name, $null)
         }
-        $global:MoleTestGitConfigProxy = $null
+        $global:SweeprTestGitConfigProxy = $null
         Mock git {
-            if ($args[0] -eq "config" -and $global:MoleTestGitConfigProxy) { return $global:MoleTestGitConfigProxy }
+            if ($args[0] -eq "config" -and $global:SweeprTestGitConfigProxy) { return $global:SweeprTestGitConfigProxy }
             $global:LASTEXITCODE = 1
         }
-        Mock Get-MoleSystemProxy { "http://127.0.0.1:7890" }
+        Mock Get-SweeprSystemProxy { "http://127.0.0.1:7890" }
     }
 
     AfterEach {
@@ -52,31 +52,31 @@ Describe "Get-GitProxyArguments" {
     }
 
     It "Adds nothing when GitHub is reached directly" {
-        Mock Get-MoleSystemProxy { $null }
+        Mock Get-SweeprSystemProxy { $null }
         @(Get-GitProxyArguments).Count | Should -Be 0
     }
 
     It "Keeps a proxy the user set through the environment" {
         [Environment]::SetEnvironmentVariable("HTTPS_PROXY", "http://10.0.0.1:3128")
         @(Get-GitProxyArguments).Count | Should -Be 0
-        Should -Invoke Get-MoleSystemProxy -Times 0
+        Should -Invoke Get-SweeprSystemProxy -Times 0
     }
 
     It "Keeps a proxy the user configured for git" {
-        $global:MoleTestGitConfigProxy = "socks5://127.0.0.1:1080"
+        $global:SweeprTestGitConfigProxy = "socks5://127.0.0.1:1080"
         @(Get-GitProxyArguments).Count | Should -Be 0
-        Should -Invoke Get-MoleSystemProxy -Times 0
+        Should -Invoke Get-SweeprSystemProxy -Times 0
     }
 
     It "Looks the proxy up once per run" {
         $null = Get-GitProxyArguments
         $null = Get-GitProxyArguments
-        Should -Invoke Get-MoleSystemProxy -Times 1 -Exactly
+        Should -Invoke Get-SweeprSystemProxy -Times 1 -Exactly
     }
 }
 
 Describe "Git proxy helpers stay identical in the installer and the updater" {
-    It "Defines <_> the same way in both scripts" -ForEach @("Get-MoleSystemProxy", "Get-GitProxyArguments") {
+    It "Defines <_> the same way in both scripts" -ForEach @("Get-SweeprSystemProxy", "Get-GitProxyArguments") {
         Get-FunctionText -Path $script:QuickInstall -Name $_ | Should -BeExactly (Get-FunctionText -Path $script:Updater -Name $_)
     }
 

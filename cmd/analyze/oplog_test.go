@@ -10,9 +10,9 @@ import (
 )
 
 // Every test in this package writes its operation log to a temporary file, so
-// a test run never adds rows to the real ~/.config/freemole/operations.log.
+// a test run never adds rows to the real ~/.config/sweepr/operations.log.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "freemole-analyze-oplog-")
+	dir, err := os.MkdirTemp("", "sweepr-analyze-oplog-")
 	if err != nil {
 		panic(err)
 	}
@@ -24,14 +24,14 @@ func TestMain(m *testing.M) {
 
 func useTestOperationsLog(t *testing.T) string {
 	t.Helper()
-	file := filepath.Join(t.TempDir(), "mole", "operations.log")
+	file := filepath.Join(t.TempDir(), "sweepr", "operations.log")
 	previousPath, previousNow, previousStarted := operationsLogPath, operationsLogNow, operationsLogStarted
 	operationsLogPath = func() string { return file }
 	operationsLogNow = func() time.Time { return time.Date(2026, 10, 16, 9, 30, 5, 0, time.Local) }
 	operationsLogStarted = false
-	t.Setenv("MO_NO_OPLOG", "")
-	t.Setenv("_MOLE_OPLOG_RUN_COMMAND", "analyze")
-	t.Setenv("_MOLE_OPLOG_RUN_ID", "run-canary")
+	t.Setenv("SWEEPR_NO_OPLOG", "")
+	t.Setenv("_SWEEPR_OPLOG_RUN_COMMAND", "analyze")
+	t.Setenv("_SWEEPR_OPLOG_RUN_ID", "run-canary")
 	t.Cleanup(func() {
 		operationsLogPath, operationsLogNow, operationsLogStarted = previousPath, previousNow, previousStarted
 	})
@@ -73,10 +73,10 @@ func TestOperationLogEscapesControlCharacters(t *testing.T) {
 
 func TestOperationLogHonorsMoNoOplog(t *testing.T) {
 	file := useTestOperationsLog(t)
-	t.Setenv("MO_NO_OPLOG", "1")
+	t.Setenv("SWEEPR_NO_OPLOG", "1")
 	logDeleteResult(`C:\x`, "1 B", recycledVerified, nil)
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
-		t.Fatalf("log written with MO_NO_OPLOG=1: %v", err)
+		t.Fatalf("log written with SWEEPR_NO_OPLOG=1: %v", err)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestOperationLogFailureReachesDebugSession(t *testing.T) {
 	file := useTestOperationsLog(t)
 	home := t.TempDir()
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("MOLE_DEBUG", "1")
-	debugFile := filepath.Join(home, ".config", "freemole", "mole_debug_session.log")
+	t.Setenv("SWEEPR_DEBUG", "1")
+	debugFile := filepath.Join(home, ".config", "sweepr", "sweepr_debug_session.log")
 	if err := os.MkdirAll(filepath.Dir(debugFile), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -153,12 +153,12 @@ func TestOperationLogFailureStaysQuietWithoutDebug(t *testing.T) {
 	file := useTestOperationsLog(t)
 	home := t.TempDir()
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("MOLE_DEBUG", "")
+	t.Setenv("SWEEPR_DEBUG", "")
 	if err := os.MkdirAll(file, 0755); err != nil {
 		t.Fatal(err)
 	}
 	writeOperation("RECYCLED", "fixture", "")
-	if _, err := os.Stat(filepath.Join(home, ".config", "freemole", "mole_debug_session.log")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".config", "sweepr", "sweepr_debug_session.log")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected debug log: %v", err)
 	}
 }

@@ -74,7 +74,7 @@ func TestBackspaceGoesBackAndDeleteKeyConfirms(t *testing.T) {
 	}
 	view := stripANSI(got.View())
 	if !strings.Contains(view, "Delete: file.bin, 10 B  Press Enter to confirm  |  ESC cancel") {
-		t.Fatalf("expected the macOS confirmation line, got:\n%s", view)
+		t.Fatalf("expected the confirmation line, got:\n%s", view)
 	}
 
 	updated, _ = got.updateKey(tea.KeyMsg{Type: tea.KeyEsc})
@@ -242,7 +242,7 @@ func TestDirectoryViewKeepsLowPercentRowsAligned(t *testing.T) {
 	}
 }
 
-// The directory row layout is the macOS one: prefix, select dot, rank, bar,
+// The directory row layout: prefix, select dot, rank, bar,
 // percent, divider, icon and name, then the 10-column size field.
 func TestDirectoryRowLayout(t *testing.T) {
 	dir := t.TempDir()

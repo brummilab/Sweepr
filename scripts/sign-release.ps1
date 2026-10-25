@@ -1,12 +1,12 @@
-# freeMole Windows - signs the release assets the workflow built.
+# Sweepr Windows - signs the release assets the workflow built.
 #
 # Runs on Windows with the maintainer's code-signing certificate available,
 # for example a Certum cloud certificate after a SimplySign Desktop login.
-# It signs every .ps1 and .exe inside freemole-<version>-x64.zip and the two raw
+# It signs every .ps1 and .exe inside sweepr-<version>-x64.zip and the two raw
 # TUI executables, verifies each signature and its timestamp, rebuilds the zip
 # and rewrites SHA256SUMS.txt. Nothing is uploaded; see RELEASE.md.
 #
-#   $env:MOLE_SIGN_PARAMS = "/fd sha256 /tr http://time.certum.pl /td sha256 /sha1 <thumbprint>"
+#   $env:SWEEPR_SIGN_PARAMS = "/fd sha256 /tr http://time.certum.pl /td sha256 /sha1 <thumbprint>"
 #   .\scripts\sign-release.ps1 -Path C:\path\to\downloaded\assets
 
 #Requires -Version 5.1
@@ -15,10 +15,10 @@ param(
     [string]$Path,
 
     # signtool arguments placed between "sign" and the file name.
-    [string]$SignParams = $env:MOLE_SIGN_PARAMS,
+    [string]$SignParams = $env:SWEEPR_SIGN_PARAMS,
 
     # Optional explicit signtool.exe; otherwise an x64 copy is located.
-    [string]$SignTool = $env:MOLE_SIGNTOOL
+    [string]$SignTool = $env:SWEEPR_SIGNTOOL
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +40,7 @@ function Resolve-SignTool {
 
     if ($Explicit) {
         if (-not (Test-Path -LiteralPath $Explicit)) {
-            throw "MOLE_SIGNTOOL points to a missing file: $Explicit"
+            throw "SWEEPR_SIGNTOOL points to a missing file: $Explicit"
         }
         return $Explicit
     }
@@ -62,7 +62,7 @@ function Resolve-SignTool {
             }
         }
     }
-    throw "No x64 signtool.exe found. Install the Windows SDK build tools or set MOLE_SIGNTOOL."
+    throw "No x64 signtool.exe found. Install the Windows SDK build tools or set SWEEPR_SIGNTOOL."
 }
 
 function Invoke-SignFile {
@@ -112,7 +112,7 @@ function Assert-Signature {
 }
 
 if (-not $SignParams) {
-    throw "Set MOLE_SIGN_PARAMS to the signtool arguments, for example '/fd sha256 /tr http://time.certum.pl /td sha256 /sha1 <thumbprint>'."
+    throw "Set SWEEPR_SIGN_PARAMS to the signtool arguments, for example '/fd sha256 /tr http://time.certum.pl /td sha256 /sha1 <thumbprint>'."
 }
 $signArguments = @($SignParams -split '\s+' | Where-Object { $_ })
 $thumbprint = $null
@@ -122,9 +122,9 @@ if ($sha1Index -ge 0 -and $sha1Index + 1 -lt $signArguments.Count) {
 }
 
 $assetDir = (Resolve-Path -LiteralPath $Path).Path
-$zips = @(Get-ChildItem -LiteralPath $assetDir -Filter "freemole-*-x64.zip" -File)
+$zips = @(Get-ChildItem -LiteralPath $assetDir -Filter "sweepr-*-x64.zip" -File)
 if ($zips.Count -ne 1) {
-    throw "Expected exactly one freemole-<version>-x64.zip in $assetDir, found $($zips.Count)"
+    throw "Expected exactly one sweepr-<version>-x64.zip in $assetDir, found $($zips.Count)"
 }
 $zip = $zips[0]
 foreach ($asset in $tuiAssets) {
@@ -136,7 +136,7 @@ foreach ($asset in $tuiAssets) {
 $tool = Resolve-SignTool -Explicit $SignTool
 Write-Host "signtool: $tool"
 
-$workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("freemole-sign-" + [guid]::NewGuid().ToString("N"))
+$workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("sweepr-sign-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $workDir | Out-Null
 try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem

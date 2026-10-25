@@ -1,4 +1,4 @@
-# freeMole Windows - MSI Installer Builder
+# Sweepr Windows - MSI Installer Builder
 # Creates Windows Installer (.msi) package using WiX Toolset
 # Requires: WiX Toolset v3 or v4 (https://wixtoolset.org/)
 
@@ -20,7 +20,7 @@ Set-StrictMode -Version Latest
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
 $releaseDir = Join-Path $projectRoot "release"
-$wixSource = Join-Path $scriptDir "freemole-installer.wxs"
+$wixSource = Join-Path $scriptDir "sweepr-installer.wxs"
 $versionFile = Join-Path $projectRoot "VERSION"
 
 # Read version from VERSION if not provided
@@ -34,9 +34,9 @@ if (-not $Version) {
     }
 }
 
-$msiName = "freemole-$Version-x64.msi"
+$msiName = "sweepr-$Version-x64.msi"
 $msiPath = Join-Path $releaseDir $msiName
-$wixObjPath = Join-Path $releaseDir "freemole-installer.wixobj"
+$wixObjPath = Join-Path $releaseDir "sweepr-installer.wixobj"
 
 # ============================================================================
 # Help
@@ -44,7 +44,7 @@ $wixObjPath = Join-Path $releaseDir "freemole-installer.wixobj"
 
 function Show-BuildHelp {
     Write-Host ""
-    Write-Host "freeMole Windows MSI Builder" -ForegroundColor Cyan
+    Write-Host "Sweepr Windows MSI Builder" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Usage: .\build-msi.ps1 [-Version <version>]"
     Write-Host ""
@@ -69,7 +69,7 @@ if ($ShowHelp) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  freeMole - MSI Installer Builder" -ForegroundColor Cyan
+Write-Host "  Sweepr - MSI Installer Builder" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Version: $Version" -ForegroundColor Yellow
@@ -163,7 +163,7 @@ $wixContent = $utf8NoBom.GetString($sourceBytes)
 $wixContent = $wixContent -replace 'Version="[^"]+"', "Version=`"$Version`""
 
 # Write back as bytes without BOM
-$tempWxs = Join-Path $releaseDir "freemole-installer-temp.wxs"
+$tempWxs = Join-Path $releaseDir "sweepr-installer-temp.wxs"
 $outputBytes = $utf8NoBom.GetBytes($wixContent)
 [System.IO.File]::WriteAllBytes($tempWxs, $outputBytes)
 
@@ -193,7 +193,7 @@ try {
         exit 1
     }
     
-    Write-Host "  Compiled: freemole-installer.wixobj" -ForegroundColor Green
+    Write-Host "  Compiled: sweepr-installer.wixobj" -ForegroundColor Green
 }
 finally {
     Pop-Location
@@ -261,8 +261,8 @@ Write-Host ""
 # Cleanup temp files
 if (Test-Path $tempWxs) { Remove-Item $tempWxs -Force }
 if (Test-Path $wixObjPath) { Remove-Item $wixObjPath -Force }
-if (Test-Path "$releaseDir\freemole-installer.wixpdb") { 
-    Remove-Item "$releaseDir\freemole-installer.wixpdb" -Force 
+if (Test-Path "$releaseDir\sweepr-installer.wixpdb") { 
+    Remove-Item "$releaseDir\sweepr-installer.wixpdb" -Force 
 }
 
 # ============================================================================

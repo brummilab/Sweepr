@@ -1,14 +1,14 @@
 ﻿BeforeAll {
     . "$PSScriptRoot\..\lib\core\ui.ps1"
-    if (-not (Get-Command Test-MoleInteractiveOutput -ErrorAction SilentlyContinue)) {
-        function Test-MoleInteractiveOutput { $false }
+    if (-not (Get-Command Test-SweeprInteractiveOutput -ErrorAction SilentlyContinue)) {
+        function Test-SweeprInteractiveOutput { $false }
     }
 }
 
 Describe 'Terminal presentation' {
     BeforeEach {
         Mock Write-Host {}
-        Mock Test-MoleInteractiveOutput { $false }
+        Mock Test-SweeprInteractiveOutput { $false }
     }
 
     It 'accepts the native progress parameter contract used by both scanners' {
@@ -27,7 +27,7 @@ Describe 'Terminal presentation' {
         Should -Invoke Write-Host -Times 0 -Exactly
     }
 
-    It 'uses the Mac summary frame and keeps a narrow terminal within its width' {
+    It 'uses the summary frame and keeps a narrow terminal within its width' {
         Mock Get-TerminalSize { @{ Width = 40; Height = 24 } }
         Show-SummaryBlock -Heading 'Cleanup complete' -Details @('Space freed: 128 MB')
         Should -Invoke Write-Host -Times 2 -Exactly -ParameterFilter { $Object -eq ('=' * 40) }
@@ -43,7 +43,7 @@ Describe 'Terminal presentation' {
         $script:HostLines[$script:HostLines.Count - 1] | Should -Be ''
     }
 
-    It 'caps the summary divider at the Mac width' {
+    It 'caps the summary divider at its maximum width' {
         Mock Get-TerminalSize { @{ Width = 120; Height = 24 } }
         Show-SummaryBlock -Heading 'Preview' -Details @()
         Should -Invoke Write-Host -Times 2 -Exactly -ParameterFilter { $Object -eq ('=' * 70) }
@@ -62,23 +62,23 @@ Describe 'Terminal presentation' {
 
 Describe 'Background loading lifecycle' {
     It 'fits loading labels to terminal cells, not UTF-16 length' {
-        Initialize-MoleSpinner
+        Initialize-SweeprSpinner
         $cjk = [string]([char]0x4E2D) + [char]0x6587
-        [freeMole.TerminalSpinner]::Fit("$cjk" + 'abc', 5) | Should -BeExactly ("$cjk" + 'a')
-        [freeMole.TerminalSpinner]::Fit("$cjk", 3) | Should -BeExactly ([string]([char]0x4E2D))
+        [Sweepr.TerminalSpinner]::Fit("$cjk" + 'abc', 5) | Should -BeExactly ("$cjk" + 'a')
+        [Sweepr.TerminalSpinner]::Fit("$cjk", 3) | Should -BeExactly ([string]([char]0x4E2D))
         $emoji = [char]::ConvertFromUtf32(0x1F600)
-        [freeMole.TerminalSpinner]::Fit("a$emoji" + 'b', 2) | Should -BeExactly 'a'
-        [freeMole.TerminalSpinner]::Fit('plain', 80) | Should -BeExactly 'plain'
+        [Sweepr.TerminalSpinner]::Fit("a$emoji" + 'b', 2) | Should -BeExactly 'a'
+        [Sweepr.TerminalSpinner]::Fit('plain', 80) | Should -BeExactly 'plain'
     }
 
     It 'writes Unicode frames directly to a console buffer regardless of its legacy code page' {
-        Initialize-MoleSpinner
-        if (-not ('freeMole.SpinnerConsoleFixture' -as [type])) {
+        Initialize-SweeprSpinner
+        if (-not ('Sweepr.SpinnerConsoleFixture' -as [type])) {
             Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-namespace freeMole {
+namespace Sweepr {
     public static class SpinnerConsoleFixture {
         [DllImport("kernel32.dll", SetLastError=true)]
         public static extern IntPtr CreateConsoleScreenBuffer(uint access, uint share, IntPtr security, uint flags, IntPtr data);
@@ -98,43 +98,43 @@ namespace freeMole {
 }
 '@
         }
-        $original = [freeMole.SpinnerConsoleFixture]::GetStdHandle(-11)
-        $buffer = [freeMole.SpinnerConsoleFixture]::CreateConsoleScreenBuffer(3221225472, 3, [IntPtr]::Zero, 1, [IntPtr]::Zero)
+        $original = [Sweepr.SpinnerConsoleFixture]::GetStdHandle(-11)
+        $buffer = [Sweepr.SpinnerConsoleFixture]::CreateConsoleScreenBuffer(3221225472, 3, [IntPtr]::Zero, 1, [IntPtr]::Zero)
         $ownedConsole = $false
         try {
             if ($buffer -eq [IntPtr](-1)) {
                 # Headless CI may have no console. Own and release only this fixture's console.
-                $ownedConsole = [freeMole.SpinnerConsoleFixture]::AllocConsole()
+                $ownedConsole = [Sweepr.SpinnerConsoleFixture]::AllocConsole()
                 $ownedConsole | Should -BeTrue
-                $buffer = [freeMole.SpinnerConsoleFixture]::CreateConsoleScreenBuffer(3221225472, 3, [IntPtr]::Zero, 1, [IntPtr]::Zero)
+                $buffer = [Sweepr.SpinnerConsoleFixture]::CreateConsoleScreenBuffer(3221225472, 3, [IntPtr]::Zero, 1, [IntPtr]::Zero)
             }
             $buffer | Should -Not -Be ([IntPtr](-1))
-            [freeMole.SpinnerConsoleFixture]::SetStdHandle(-11, $buffer) | Should -BeTrue
-            [freeMole.TerminalSpinner]::Start('Scanning')
+            [Sweepr.SpinnerConsoleFixture]::SetStdHandle(-11, $buffer) | Should -BeTrue
+            [Sweepr.TerminalSpinner]::Start('Scanning')
             Start-Sleep -Milliseconds 250
             $text = New-Object System.Text.StringBuilder 256
             [uint32]$read = 0
-            [freeMole.SpinnerConsoleFixture]::ReadConsoleOutputCharacterW($buffer, $text, 256, 0, [ref]$read) | Should -BeTrue
+            [Sweepr.SpinnerConsoleFixture]::ReadConsoleOutputCharacterW($buffer, $text, 256, 0, [ref]$read) | Should -BeTrue
             $text.ToString() | Should -Match ('[' + [char]0x2816 + [char]0x2832 + [char]0x2834 + [char]0x2826 + ']')
             $text.ToString() | Should -Match 'Scanning'
         }
         finally {
-            [freeMole.TerminalSpinner]::Stop()
-            if ($buffer -ne [IntPtr](-1)) { [void][freeMole.SpinnerConsoleFixture]::CloseHandle($buffer) }
-            if ($ownedConsole) { [void][freeMole.SpinnerConsoleFixture]::FreeConsole() }
-            [void][freeMole.SpinnerConsoleFixture]::SetStdHandle(-11, $original)
+            [Sweepr.TerminalSpinner]::Stop()
+            if ($buffer -ne [IntPtr](-1)) { [void][Sweepr.SpinnerConsoleFixture]::CloseHandle($buffer) }
+            if ($ownedConsole) { [void][Sweepr.SpinnerConsoleFixture]::FreeConsole() }
+            [void][Sweepr.SpinnerConsoleFixture]::SetStdHandle(-11, $original)
         }
     }
 
     It 'animates while the calling thread waits and stops before returning' {
-        Initialize-MoleSpinner
+        Initialize-SweeprSpinner
         $original = [Console]::Out
         $capture = New-Object System.IO.StringWriter
         try {
             [Console]::SetOut($capture)
-            [freeMole.TerminalSpinner]::Start('Scanning')
+            [Sweepr.TerminalSpinner]::Start('Scanning')
             Start-Sleep -Milliseconds 350
-            [freeMole.TerminalSpinner]::Stop()
+            [Sweepr.TerminalSpinner]::Stop()
             $finished = $capture.ToString()
             $finished | Should -Match ([string][char]0x2816)
             $finished | Should -Match ([string][char]0x2832)
@@ -142,7 +142,7 @@ namespace freeMole {
             $capture.ToString() | Should -BeExactly $finished
         }
         finally {
-            [freeMole.TerminalSpinner]::Stop()
+            [Sweepr.TerminalSpinner]::Stop()
             [Console]::SetOut($original)
             $capture.Dispose()
         }
@@ -178,10 +178,10 @@ Describe 'Display-cell list columns' {
         Mock Write-Host {}
         Mock Stop-Spinner {}
         Mock Start-Sleep {}
-        Mock Test-MoleInteractiveOutput { $false }
+        Mock Test-SweeprInteractiveOutput { $false }
         Show-SummaryBlock -Heading 'Done'
         Should -Invoke Start-Sleep -Times 0 -Exactly
-        Mock Test-MoleInteractiveOutput { $true }
+        Mock Test-SweeprInteractiveOutput { $true }
         Show-SummaryBlock -Heading 'Done'
         Should -Invoke Start-Sleep -Times 1 -Exactly -ParameterFilter { $Milliseconds -eq 180 }
     }

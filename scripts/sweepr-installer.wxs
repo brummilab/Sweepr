@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- freeMole Windows MSI Installer Definition -->
+<!-- Sweepr Windows MSI Installer Definition -->
 <!-- Build with: WiX Toolset v3/v4 -->
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   
   <!-- Product Definition -->
   <Product Id="*" 
-           Name="freeMole" 
+           Name="Sweepr" 
            Language="1033" 
            Version="1.0.0" 
-           Manufacturer="freeMole Project" 
+           Manufacturer="Sweepr Project" 
            UpgradeCode="12345678-1234-1234-1234-123456789ABC">
     
     <!-- Package Information -->
@@ -30,11 +30,11 @@
       
       <!-- Program Files -->
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="freeMole">
+        <Directory Id="INSTALLFOLDER" Name="Sweepr">
           
           <!-- Main executable and scripts -->
           <Component Id="MainExecutable" Guid="*" Win64="yes">
-            <File Id="MolePS1" Source="..\freemole.ps1" KeyPath="yes" />
+            <File Id="SweeprPS1" Source="..\sweepr.ps1" KeyPath="yes" />
             <File Id="InstallPS1" Source="..\install.ps1" />
             
             <!-- Environment PATH modification -->
@@ -99,18 +99,18 @@
       
       <!-- Start Menu -->
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="freeMole">
+        <Directory Id="ApplicationProgramsFolder" Name="Sweepr">
           <Component Id="ApplicationShortcut" Guid="*">
-            <Shortcut Id="MoleShortcut" 
-                      Name="freeMole" 
+            <Shortcut Id="SweeprShortcut" 
+                      Name="Sweepr" 
                       Description="Windows System Maintenance Toolkit"
                       Target="[System64Folder]WindowsPowerShell\v1.0\powershell.exe" 
-                      Arguments="-NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]freemole.ps1&quot;"
+                      Arguments="-NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]sweepr.ps1&quot;"
                       WorkingDirectory="INSTALLFOLDER" />
             
             <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
             <RegistryValue Root="HKCU" 
-                          Key="Software\freeMole" 
+                          Key="Software\Sweepr" 
                           Name="installed" 
                           Type="integer" 
                           Value="1" 
@@ -122,7 +122,7 @@
     </Directory>
     
     <!-- Features -->
-    <Feature Id="ProductFeature" Title="freeMole" Level="1">
+    <Feature Id="ProductFeature" Title="Sweepr" Level="1">
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="Documentation" />
       <ComponentRef Id="BinaryFiles" />
@@ -143,9 +143,9 @@
     <!-- <Property Id="ARPPRODUCTICON" Value="icon.ico" /> -->
     
     <!-- Add/Remove Programs customization -->
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/bhadraagada/mole" />
-    <Property Id="ARPCONTACT" Value="https://github.com/bhadraagada/mole/issues" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/bhadraagada/mole" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/brummilab/sweepr" />
+    <Property Id="ARPCONTACT" Value="https://github.com/brummilab/sweepr/issues" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/brummilab/sweepr" />
     
   </Product>
   

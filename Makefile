@@ -1,4 +1,4 @@
-# freeMole Windows - Makefile
+# Sweepr Windows - Makefile
 # Build Go tools for Windows
 
 .PHONY: all build clean analyze status

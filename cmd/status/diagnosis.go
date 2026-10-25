@@ -74,7 +74,7 @@ func leadingMemoryProcess(procs []ProcessInfo) (ProcessInfo, bool) {
 	return best, len(procs) > 0
 }
 
-// rootDisk is the Windows system drive, the counterpart of "/" on macOS.
+// rootDisk is the Windows system drive.
 func rootDisk(disks []DiskStatus) (DiskStatus, bool) {
 	system := systemDriveMount()
 	for _, disk := range disks {

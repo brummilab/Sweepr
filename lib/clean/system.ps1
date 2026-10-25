@@ -1,12 +1,12 @@
-# freeMole - System Cleanup Module
+# Sweepr - System Cleanup Module
 # Cleans Windows system files that require administrator access
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_CLEAN_SYSTEM_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_CLEAN_SYSTEM_LOADED) { return }
-$script:MOLE_CLEAN_SYSTEM_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_CLEAN_SYSTEM_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_SYSTEM_LOADED) { return }
+$script:SWEEPR_CLEAN_SYSTEM_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -285,7 +285,7 @@ function Invoke-SystemCleanup {
     Start-Section "System cleanup"
 
     if (-not (Test-IsAdmin)) {
-        Write-MoleWarning "Running without admin - some cleanup tasks will be skipped"
+        Write-SweeprWarning "Running without admin - some cleanup tasks will be skipped"
     }
 
     # System temp files

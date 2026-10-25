@@ -1,9 +1,9 @@
 # Shared guards for exact, rebuildable application cache directories.
 #Requires -Version 5.1
-if (Get-Variable MOLE_CACHE_GUARD_LOADED -Scope Script -ErrorAction SilentlyContinue) { return }
-$script:MOLE_CACHE_GUARD_LOADED = $true
+if (Get-Variable SWEEPR_CACHE_GUARD_LOADED -Scope Script -ErrorAction SilentlyContinue) { return }
+$script:SWEEPR_CACHE_GUARD_LOADED = $true
 
-function Test-MoleCacheOwnerIdle {
+function Test-SweeprCacheOwnerIdle {
     param([string[]]$Names, [string]$LockPath = '')
     if (-not $Names -or $Names.Count -eq 0) { return $false }
     try {
@@ -24,22 +24,22 @@ function Test-MoleCacheOwnerIdle {
     catch { return $false }
 }
 
-function Clear-MoleAppCache {
+function Clear-SweeprAppCache {
     param([string]$Path, [string]$Description, [string[]]$Processes, [string]$LockPath = '')
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return }
-    if (-not (Test-SafePath $Path) -or -not (Get-MolePathSnapshot $Path)) { return }
+    if (-not (Test-SafePath $Path) -or -not (Get-SweeprPathSnapshot $Path)) { return }
     # The callback runs synchronously while this scope is alive. It is not a
     # cached idle answer: the sink calls it again after sizing and before deletion.
     $cacheOwnerNames = $Processes
     $cacheOwnerLock = $LockPath
-    $condition = { Test-MoleCacheOwnerIdle -Names $cacheOwnerNames -LockPath $cacheOwnerLock }
+    $condition = { Test-SweeprCacheOwnerIdle -Names $cacheOwnerNames -LockPath $cacheOwnerLock }
     Clear-DirectoryContents -Path $Path -Description $Description -CanRemove $condition
 }
 
-function Get-MoleCacheProfiles {
+function Get-SweeprCacheProfiles {
     param([string]$Root)
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) { return }
-    $snapshot = Get-MolePathSnapshot $Root
+    $snapshot = Get-SweeprPathSnapshot $Root
     if (-not $snapshot) { return }
     $timer = [Diagnostics.Stopwatch]::StartNew()
     try {
@@ -52,7 +52,7 @@ function Get-MoleCacheProfiles {
             $profile = Get-Item -LiteralPath $path -Force -ErrorAction Stop
             if (-not ($profile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $profiles.Add($profile) }
         }
-        if ($timer.Elapsed.TotalSeconds -gt 2 -or -not (Test-MolePathSnapshot $snapshot)) { return }
+        if ($timer.Elapsed.TotalSeconds -gt 2 -or -not (Test-SweeprPathSnapshot $snapshot)) { return }
         return $profiles.ToArray()
     }
     catch { return }

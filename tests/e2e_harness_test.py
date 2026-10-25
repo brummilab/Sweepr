@@ -28,16 +28,16 @@ class RemoteTests(unittest.TestCase):
         shell = shutil.which("powershell.exe")
         self.assertIsNotNone(shell)
         with tempfile.TemporaryDirectory() as tmp:
-            entry = Path(tmp) / "freemole.ps1"
-            entry.write_text('param([switch]$Version)\nWrite-Output "MOLE_FIXTURE:$Version"\n')
+            entry = Path(tmp) / "sweepr.ps1"
+            entry.write_text('param([switch]$Version)\nWrite-Output "SWEEPR_FIXTURE:$Version"\n')
             run = object.__new__(E2E.Run)
-            run.info = {"mole": str(entry)}
-            script = "$ErrorActionPreference = 'Stop'\nfunction powershell { throw 'bare shell collision' }\n& " + run.mole("--version")
+            run.info = {"sweepr": str(entry)}
+            script = "$ErrorActionPreference = 'Stop'\nfunction powershell { throw 'bare shell collision' }\n& " + run.sweepr("--version")
             encoded = E2E.base64.b64encode(script.encode("utf-16-le")).decode()
             result = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
                                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout.strip(), "MOLE_FIXTURE:True")
+            self.assertEqual(result.stdout.strip(), "SWEEPR_FIXTURE:True")
 
     @unittest.skipUnless(os.name == "nt", "remote PowerShell runs in Windows Validation")
     def test_remote_output_survives_a_chinese_console_code_page(self):
@@ -70,30 +70,30 @@ class RemoteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp) / "Bob's tools $cash & 100% path"
             folder.mkdir()
-            entry = folder / "mole fixture.ps1"
+            entry = folder / "sweepr fixture.ps1"
             entry.write_text('param([int]$Code, [Parameter(ValueFromRemainingArguments=$true)][string[]]$Values)\n'
                              'ConvertTo-Json -InputObject @($Values) -Compress\nexit $Code\n')
             run = object.__new__(E2E.Run)
-            run.info = {"mole": str(entry)}
+            run.info = {"sweepr": str(entry)}
             run.token = "fixture-command-status"
             for shell, prefix in (("cmd", [cmd, "/d", "/s", "/c"]),
                                   ("powershell", [powershell, "-NoProfile", "-NonInteractive", "-Command"])):
                 for code in (0, 37):
                     with self.subTest(shell=shell, code=code):
-                        result = subprocess.run(prefix + [run.mole(str(code), *values, terminal=True)],
+                        result = subprocess.run(prefix + [run.sweepr(str(code), *values, terminal=True)],
                                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
                         # PowerShell's -Command shell maps a nonzero native exit
                         # to 1; the per-run marker must retain the original code.
                         self.assertEqual(result.returncode, code if shell == "cmd" else int(code != 0), result.stderr)
                         lines = [line for line in result.stdout.splitlines() if line.strip()]
                         self.assertEqual(json.loads(lines[0]), values)
-                        self.assertEqual(lines[-1], f"MOLE_EXIT={run.token}:{code}")
+                        self.assertEqual(lines[-1], f"SWEEPR_EXIT={run.token}:{code}")
 
 
 class TerminalTests(unittest.TestCase):
     def terminal(self, output, transport_code=0):
         term = object.__new__(E2E.Terminal)
-        term.exit_marker = "MOLE_EXIT=current-run:"
+        term.exit_marker = "SWEEPR_EXIT=current-run:"
         term.buf = output.encode()
         term.proc = Mock(returncode=transport_code)
         term.proc.poll.return_value = transport_code
@@ -101,20 +101,20 @@ class TerminalTests(unittest.TestCase):
         return term
 
     def test_finish_requires_this_runs_marker_not_ssh_success(self):
-        for output in ("", "MOLE_EXIT=old-run:0\n", "MOLE_EXIT=current-run:unknown\n"):
+        for output in ("", "SWEEPR_EXIT=old-run:0\n", "SWEEPR_EXIT=current-run:unknown\n"):
             with self.subTest(output=output):
                 with self.assertRaisesRegex(E2E.StepFailed, "without this run's command status"):
                     self.terminal(output).finish(1)
-        self.assertEqual(self.terminal("MOLE_EXIT=old-run:37\nMOLE_EXIT=current-run:0\n").finish(1), 0)
+        self.assertEqual(self.terminal("SWEEPR_EXIT=old-run:37\nSWEEPR_EXIT=current-run:0\n").finish(1), 0)
         # ConPTY can encode a preceding newline as a cursor move, which plain()
         # strips; the completion marker can follow earlier output directly.
-        self.assertEqual(self.terminal("previous outputMOLE_EXIT=current-run:0\n").finish(1), 0)
+        self.assertEqual(self.terminal("previous outputSWEEPR_EXIT=current-run:0\n").finish(1), 0)
 
     def test_finish_rejects_actual_failure_even_when_ssh_returns_zero(self):
         with self.assertRaisesRegex(E2E.StepFailed, "exited 37"):
-            self.terminal("MOLE_EXIT=current-run:37\n").finish(1)
+            self.terminal("SWEEPR_EXIT=current-run:37\n").finish(1)
         with self.assertRaisesRegex(E2E.StepFailed, "ssh exited 255"):
-            self.terminal("MOLE_EXIT=current-run:0\n", 255).finish(1)
+            self.terminal("SWEEPR_EXIT=current-run:0\n", 255).finish(1)
 
     def test_finish_keeps_its_timeout_boundary(self):
         term = self.terminal("")
@@ -192,13 +192,13 @@ class DependencyTests(unittest.TestCase):
 
 
 class DeploymentTests(unittest.TestCase):
-    def deploy_fixture(self, *, unpacked=True, mkdir_code=0, version_code=0, version_text="freeMole 1.36.0", build_failure=None):
+    def deploy_fixture(self, *, unpacked=True, mkdir_code=0, version_code=0, version_text="Sweepr 1.36.0", build_failure=None):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             root = Path(tmp)
             (root / "source.txt").write_text("dirty working source")
             run = object.__new__(E2E.Run)
             commit = "1" * 40
-            run.info = {"goarch": "amd64", "work": "fixture", "mole": "fixture/freemole.ps1", "commit": commit}
+            run.info = {"goarch": "amd64", "work": "fixture", "sweepr": "fixture/sweepr.ps1", "commit": commit}
             run.remote = Mock()
             run.remote.ps.side_effect = [
                 subprocess.CompletedProcess([], mkdir_code, "", "mkdir failed"),
@@ -211,8 +211,8 @@ class DeploymentTests(unittest.TestCase):
                 if argv[:2] == ["git", "archive"]:
                     refs.append(argv[-1])
                     with zipfile.ZipFile(argv[argv.index("-o") + 1], "w") as archive:
-                        archive.writestr("mole/source.txt", "committed source")
-                        archive.writestr("mole/freemole.ps1", "committed script")
+                        archive.writestr("sweepr/source.txt", "committed source")
+                        archive.writestr("sweepr/sweepr.ps1", "committed script")
                 elif argv[:2] == ["go", "build"]:
                     source = (Path(kwargs["cwd"]) / "source.txt").read_text()
                     builds.append((source, kwargs["env"].get("GOWORK")))
@@ -226,7 +226,7 @@ class DeploymentTests(unittest.TestCase):
             def put(local, _remote):
                 with zipfile.ZipFile(local) as archive:
                     uploads.append({name: archive.read(name).decode() for name in (
-                        "mole/freemole.ps1", "mole/bin/analyze.exe", "mole/bin/status.exe")})
+                        "sweepr/sweepr.ps1", "sweepr/bin/analyze.exe", "sweepr/bin/status.exe")})
 
             run.remote.put.side_effect = put
             stack.enter_context(patch.object(E2E, "ROOT", root))
@@ -247,9 +247,9 @@ class DeploymentTests(unittest.TestCase):
         _, builds, uploads, _, error = self.deploy_fixture()
         self.assertIsNone(error)
         self.assertEqual(builds, [("committed source", "off")] * 2)
-        self.assertEqual(uploads, [{"mole/freemole.ps1": "committed script",
-                                   "mole/bin/analyze.exe": "committed source",
-                                   "mole/bin/status.exe": "committed source"}])
+        self.assertEqual(uploads, [{"sweepr/sweepr.ps1": "committed script",
+                                   "sweepr/bin/analyze.exe": "committed source",
+                                   "sweepr/bin/status.exe": "committed source"}])
 
     def test_failed_deployment_does_not_report_success(self):
         for failure in ({"unpacked": False}, {"mkdir_code": 1}, {"version_code": 1}, {"version_text": ""}):

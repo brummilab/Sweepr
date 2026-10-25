@@ -17,7 +17,7 @@ func resetFlags(t *testing.T) {
 	savedThreshold, savedWindow := *procCPUThreshold, *procCPUWindow
 	savedInterval := *watchInterval
 	t.Cleanup(func() {
-		flag.CommandLine.Init("fm status", flag.ExitOnError)
+		flag.CommandLine.Init("sw status", flag.ExitOnError)
 		*jsonOutput, *watchMode = savedJSON, savedWatch
 		*procCPUThreshold, *procCPUWindow = savedThreshold, savedWindow
 		*watchInterval = savedInterval
@@ -41,8 +41,8 @@ func TestParseArgsHelpGoesToStdout(t *testing.T) {
 			if stderr.Len() != 0 {
 				t.Errorf("stderr = %q, want empty: help is data, not an error", stderr.String())
 			}
-			if !strings.HasPrefix(stdout.String(), "Usage: fm status") {
-				t.Errorf("stdout = %q, want it to start with the fm status usage line", stdout.String())
+			if !strings.HasPrefix(stdout.String(), "Usage: sw status") {
+				t.Errorf("stdout = %q, want it to start with the sw status usage line", stdout.String())
 			}
 		})
 	}
@@ -103,7 +103,7 @@ func TestParseArgsRejectsBadInvocations(t *testing.T) {
 				t.Fatalf("parseArgs(%v) kept going, want early exit", tc.args)
 			}
 			// Every bash subcommand exits 1 on a bad option; the flag package's
-			// default is 2, which made fm status the odd one out.
+			// default is 2, which made sw status the odd one out.
 			if code != 1 {
 				t.Errorf("exit code = %d, want 1", code)
 			}
@@ -113,8 +113,8 @@ func TestParseArgsRejectsBadInvocations(t *testing.T) {
 			if !strings.Contains(stderr.String(), tc.want) {
 				t.Errorf("stderr = %q, want it to mention %q", stderr.String(), tc.want)
 			}
-			if !strings.Contains(stderr.String(), "fm status --help") {
-				t.Errorf("stderr = %q, want it to point at fm status --help", stderr.String())
+			if !strings.Contains(stderr.String(), "sw status --help") {
+				t.Errorf("stderr = %q, want it to point at sw status --help", stderr.String())
 			}
 		})
 	}

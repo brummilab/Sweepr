@@ -1,4 +1,4 @@
-﻿# freeMole Windows - uninstall regression tests
+﻿# Sweepr Windows - uninstall regression tests
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -30,8 +30,8 @@ BeforeAll {
     }
 
     # Permit old-source red runs; the old caller still invokes Start-Process directly.
-    if (-not (Get-Command Invoke-MoleUninstallProcess -ErrorAction SilentlyContinue)) {
-        function Invoke-MoleUninstallProcess { param($FilePath, $ArgumentList) }
+    if (-not (Get-Command Invoke-SweeprUninstallProcess -ErrorAction SilentlyContinue)) {
+        function Invoke-SweeprUninstallProcess { param($FilePath, $ArgumentList) }
     }
 
     $script:DeclaredCacheName = Split-Path -Leaf $script:AppCacheFile
@@ -39,7 +39,7 @@ BeforeAll {
     $script:AppCacheFile = Join-Path $script:CacheDir "apps.json"
 
     # A real, throwaway Uninstall-like key, so the "is it gone" check reads the registry.
-    $script:RegistryRoot = "HKCU:\Software\MoleCliTests\$([guid]::NewGuid().ToString('N'))"
+    $script:RegistryRoot = "HKCU:\Software\SweeprCliTests\$([guid]::NewGuid().ToString('N'))"
 
     function New-TestUninstallKey {
         param([string]$Name, [hashtable]$Values)
@@ -80,7 +80,7 @@ Describe "Uninstall selection under strict mode" {
         $Rescan = $false
         $List = $false
         $script:Icons = @{ List = "-" }
-        $script:MoleDryRunMode = $false
+        $script:SweeprDryRunMode = $false
         $script:TestApps = @(
             [PSCustomObject]@{ Name = "First app"; SizeHuman = "1MB" }
             [PSCustomObject]@{ Name = "Second app"; SizeHuman = "2MB" }
@@ -90,14 +90,14 @@ Describe "Uninstall selection under strict mode" {
         function Show-AppSelectionMenu { param([array]$Apps) }
         function Uninstall-SelectedApps { param([array]$Apps) throw "Real uninstall must never run" }
         function Write-Info { param([string]$Message) }
-        function Write-MoleWarning { param([string]$Message) }
+        function Write-SweeprWarning { param([string]$Message) }
     }
 
     BeforeEach {
         Mock Clear-Host {}
         Mock Write-Host {}
         Mock Write-Info {}
-        Mock Write-MoleWarning {}
+        Mock Write-SweeprWarning {}
         Mock Get-InstalledApplications { $script:TestApps }
         Mock Show-AppSelectionMenu { $script:TestApps[0] }
         Mock Read-Host { "y" }
@@ -156,7 +156,7 @@ Describe "Uninstall selection under strict mode" {
 
         & { Set-StrictMode -Version Latest; Main }
 
-        Should -Invoke Write-MoleWarning -Times 1 -Exactly -ParameterFilter { $Message -eq "No applications found" }
+        Should -Invoke Write-SweeprWarning -Times 1 -Exactly -ParameterFilter { $Message -eq "No applications found" }
         Should -Invoke Show-AppSelectionMenu -Times 0 -Exactly
         Should -Invoke Read-Host -Times 0 -Exactly
         Should -Invoke Uninstall-SelectedApps -Times 0 -Exactly
@@ -188,7 +188,7 @@ Describe "Install folder eligibility" {
         @{ Label = "a path with dot segments"; Path = "$env:ProgramFiles\Contoso\..\" }
         @{ Label = "an empty value"; Path = "" }
     ) {
-        Test-MoleInstallFolder -Path $Path | Should -BeFalse
+        Test-SweeprInstallFolder -Path $Path | Should -BeFalse
     }
 
     It "Rejects container and shared names on any drive: <Name>" -TestCases @(
@@ -203,18 +203,18 @@ Describe "Install folder eligibility" {
         $folder = Join-Path $TestDrive $Name
         New-Item -ItemType Directory -Path $folder -Force | Out-Null
 
-        Test-MoleInstallFolder -Path $folder | Should -BeFalse
+        Test-SweeprInstallFolder -Path $folder | Should -BeFalse
     }
 
     It "Accepts an app's own folder, quoted or with a trailing slash" {
         $folder = New-TestFolder -Name "Contoso App"
 
-        Test-MoleInstallFolder -Path $folder | Should -BeTrue
-        Test-MoleInstallFolder -Path "`"$folder\`"" | Should -BeTrue
+        Test-SweeprInstallFolder -Path $folder | Should -BeTrue
+        Test-SweeprInstallFolder -Path "`"$folder\`"" | Should -BeTrue
     }
 
     It "Rejects a folder that does not exist" {
-        Test-MoleInstallFolder -Path (Join-Path $TestDrive "Missing App") | Should -BeFalse
+        Test-SweeprInstallFolder -Path (Join-Path $TestDrive "Missing App") | Should -BeFalse
     }
 
     It "Never takes a Steam library or its steamapps folders for one app: <Label>" -TestCases @(
@@ -229,28 +229,28 @@ Describe "Install folder eligibility" {
         }
         Set-Content -Path (Join-Path $TestDrive "SteamLibrary\libraryfolder.vdf") -Value '"libraryfolder" {}'
 
-        Test-MoleInstallFolder -Path (Join-Path $TestDrive $Relative) | Should -BeFalse
+        Test-SweeprInstallFolder -Path (Join-Path $TestDrive $Relative) | Should -BeFalse
     }
 
     It "Accepts one game's folder inside a Steam library" {
         $game = Join-Path $TestDrive "SteamLibrary\steamapps\common\Some Game"
         New-Item -ItemType Directory -Path $game -Force | Out-Null
 
-        Test-MoleInstallFolder -Path $game | Should -BeTrue
+        Test-SweeprInstallFolder -Path $game | Should -BeTrue
     }
 
     It "Rejects a library root marked only by libraryfolder.vdf" {
         $root = New-TestFolder -Name "GamesDrive"
         Set-Content -Path (Join-Path $root "libraryfolder.vdf") -Value '"libraryfolder" {}'
 
-        Test-MoleInstallFolder -Path $root | Should -BeFalse
+        Test-SweeprInstallFolder -Path $root | Should -BeFalse
     }
 }
 
 Describe 'Generic game content in install folders' {
     BeforeEach {
         Mock Test-UninstallEntryGone { $true }
-        Mock Get-MoleInstallOwners { @{Complete=$true;Owners=@()} }
+        Mock Get-SweeprInstallOwners { @{Complete=$true;Owners=@()} }
         $script:ContentApp = [pscustomobject]@{RegistryKey='selected';MergedKeys=@()}
     }
     It 'Keeps a content folder <Name> inside an otherwise ordinary install' -TestCases @(
@@ -259,7 +259,7 @@ Describe 'Generic game content in install folders' {
         param($Name)
         $root = New-TestFolder ('Emulator ' + $Name)
         New-Item -ItemType Directory -Path (Join-Path $root $Name) -Force | Out-Null
-        Test-MoleLeftoverOwnership $root $script:ContentApp | Should -BeFalse
+        Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeFalse
     }
     It 'Keeps content markers at the root or below one wrapper: <Marker>' -TestCases @(
         @{Marker='goggame-42.info'}, @{Marker='galaxy-2.0.db'},
@@ -271,37 +271,37 @@ Describe 'Generic game content in install folders' {
         New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
         if ($Marker -like '*steamapps') { New-Item -ItemType Directory -Path $path -Force | Out-Null }
         else { [IO.File]::WriteAllText($path,'content marker') }
-        Test-MoleLeftoverOwnership $root $script:ContentApp | Should -BeFalse
+        Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeFalse
     }
     It 'Retains an install folder when child identity is unknown' {
         $root = New-TestFolder 'Unknown install'
         $script:UnknownContentChild = Join-Path $root 'plugins'
         New-Item -ItemType Directory -Path $script:UnknownContentChild -Force | Out-Null
-        Mock Get-MolePathSnapshot { $null } -ParameterFilter { $Path -eq $script:UnknownContentChild }
-        Test-MoleLeftoverOwnership $root $script:ContentApp | Should -BeFalse
+        Mock Get-SweeprPathSnapshot { $null } -ParameterFilter { $Path -eq $script:UnknownContentChild }
+        Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeFalse
     }
     It 'Retains an incomplete bounded listing rather than accepting its early files' {
         $root = New-TestFolder 'Large install'
         foreach ($index in 1..257) { [IO.Directory]::CreateDirectory((Join-Path $root "component$index")) | Out-Null }
-        Test-MoleLeftoverOwnership $root $script:ContentApp | Should -BeFalse
+        Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeFalse
     }
     It 'Keeps ordinary installs and a single Steam game eligible' {
         $root = New-TestFolder 'Ordinary'
         foreach ($name in @('program.dll','goggame-not-info.txt','galaxy-2.0.db.backup')) { [IO.File]::WriteAllText((Join-Path $root $name),'program') }
         [IO.Directory]::CreateDirectory((Join-Path $root 'bioshelpers')) | Out-Null
-        Test-MoleLeftoverOwnership $root $script:ContentApp | Should -BeTrue
+        Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeTrue
         $game = Join-Path $TestDrive 'SteamLibrary\steamapps\common\OneGame'
         [IO.Directory]::CreateDirectory($game) | Out-Null
-        Test-MoleLeftoverOwnership $game $script:ContentApp | Should -BeTrue
+        Test-SweeprLeftoverOwnership $game $script:ContentApp | Should -BeTrue
     }
     It 'Rechecks content in the existing final leftover ownership guard' {
         $root = New-TestFolder 'Content appears later'
         $app = [pscustomobject]@{RegistryKey='selected';MergedKeys=@()}
         Mock Test-UninstallEntryGone { $true }
-        Mock Get-MoleInstallOwners { @{Complete=$true;Owners=@()} }
-        Test-MoleLeftoverOwnership $root $app | Should -BeTrue
+        Mock Get-SweeprInstallOwners { @{Complete=$true;Owners=@()} }
+        Test-SweeprLeftoverOwnership $root $app | Should -BeTrue
         [IO.Directory]::CreateDirectory((Join-Path $root 'saves')) | Out-Null
-        Test-MoleLeftoverOwnership $root $app | Should -BeFalse
+        Test-SweeprLeftoverOwnership $root $app | Should -BeFalse
     }
 }
 
@@ -331,15 +331,15 @@ Describe "Uninstall entry removal check" {
 Describe "Uninstalling registry apps" {
     BeforeAll {
         Set-DryRunMode -Enabled $false
-        $script:Icons = Get-MoleDefaultIcons
+        $script:Icons = Get-SweeprDefaultIcons
     }
 
     BeforeEach {
         Set-DryRunMode -Enabled $false
         Mock Write-Host {}
-        Mock Invoke-MoleUninstallProcess { [PSCustomObject]@{ ExitCode = 1 } }
+        Mock Invoke-SweeprUninstallProcess { [PSCustomObject]@{ ExitCode = 1 } }
         Mock Remove-SafeItem { $true }
-        Mock Get-MoleInstallOwners { @{ Complete = $true; Owners = @() } }
+        Mock Get-SweeprInstallOwners { @{ Complete = $true; Owners = @() } }
         Mock Remove-AppxPackage { throw "Remove-AppxPackage must not run" }
 
         $script:AppFolder = New-TestFolder -Name "Contoso Tool"
@@ -350,7 +350,7 @@ Describe "Uninstalling registry apps" {
     }
 
     It "Stops the batch on an uninstaller timeout even after registration disappears" {
-        Mock Invoke-MoleUninstallProcess { throw [TimeoutException]::new('test timeout') }
+        Mock Invoke-SweeprUninstallProcess { throw [TimeoutException]::new('test timeout') }
         Mock Start-Process { [pscustomobject]@{ ExitCode = 0 } }
         $app = [pscustomobject]@{
             Name = 'Resident'; Source = 'Registry'; UninstallString = "`"$script:Uninstaller`""
@@ -358,7 +358,7 @@ Describe "Uninstalling registry apps" {
         }
         Uninstall-SelectedApps -Apps @($app, $app)
         Should -Invoke Remove-SafeItem -Times 0 -Exactly
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly
         Should -Invoke Start-Process -Times 0 -Exactly
     }
 
@@ -370,8 +370,8 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly -ParameterFilter {
             $FilePath -eq $script:Uninstaller -and $null -eq $ArgumentList
         }
     }
@@ -425,7 +425,7 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly -ParameterFilter {
             $FilePath -like "*\System32\msiexec.exe" -and
             ($ArgumentList -join " ") -eq "/x $code /passive REBOOT=ReallySuppress /norestart"
         }
@@ -440,7 +440,7 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly -ParameterFilter {
             $FilePath -eq $script:Uninstaller -and ($ArgumentList -join " ") -eq "--mode unattended"
         }
     }
@@ -456,7 +456,7 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly -ParameterFilter {
             $FilePath -eq $inno -and ($ArgumentList -join " ") -eq "/SILENT /SUPPRESSMSGBOXES /NORESTART"
         }
     }
@@ -471,13 +471,13 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 1 -Exactly -ParameterFilter {
             $FilePath -eq $nsis -and ($ArgumentList -join " ") -eq "/S"
         }
     }
 
     It "Records the install folder, registry key and command with each outcome" {
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
         $app = [PSCustomObject]@{
             Name = "Contoso Tool"; Source = "Registry"; UninstallString = "`"$script:Uninstaller`""
             InstallLocation = $script:AppFolder; RegistryKey = $script:GoneKey; PackageFullName = $null
@@ -485,14 +485,14 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter {
             $Action -eq "UNINSTALLED" -and $Path -eq "Contoso Tool" -and
             $Detail -like "exit code 1; location $($script:AppFolder); key HKEY_CURRENT_USER\*\removed-by-uninstaller; command $($script:Uninstaller)"
         }
     }
 
     It "Records a still-installed app with the same detail" {
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
         $app = [PSCustomObject]@{
             Name = "Contoso Tool"; Source = "Registry"; UninstallString = "`"$script:Uninstaller`""
             InstallLocation = $script:AppFolder; RegistryKey = $script:PresentKey; PackageFullName = $null
@@ -500,13 +500,13 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter {
             $Action -eq "FAILED" -and $Detail -like "still installed, exit code 1; location *; key *; command $($script:Uninstaller)"
         }
     }
 
     It "Records an app with no runnable uninstaller" {
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
         $app = [PSCustomObject]@{
             Name = "Missing App"; Source = "Registry"; UninstallString = "`"$TestDrive\gone\uninstall.exe`""
             InstallLocation = $script:AppFolder; RegistryKey = $script:GoneKey; PackageFullName = $null
@@ -514,7 +514,7 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter {
             $Action -eq "FAILED" -and $Detail -like "no runnable uninstaller; location *; key *; registered *gone\uninstall.exe*"
         }
     }
@@ -527,7 +527,7 @@ Describe "Uninstalling registry apps" {
 
         Uninstall-SelectedApps -Apps @($app)
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 0 -Exactly
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 0 -Exactly
         Should -Invoke Remove-SafeItem -Times 0 -Exactly
     }
 }
@@ -535,11 +535,11 @@ Describe "Uninstalling registry apps" {
 Describe "Uninstall dry run leftovers" {
     BeforeEach {
         Set-DryRunMode -Enabled $true
-        $script:Icons = Get-MoleDefaultIcons
+        $script:Icons = Get-SweeprDefaultIcons
         Mock Write-Host {}
-        Mock Invoke-MoleUninstallProcess { throw "Start-Process must not run in a dry run" }
+        Mock Invoke-SweeprUninstallProcess { throw "Start-Process must not run in a dry run" }
         Mock Remove-SafeItem { $true }
-        Mock Get-MoleInstallOwners { @{ Complete = $true; Owners = @() } }
+        Mock Get-SweeprInstallOwners { @{ Complete = $true; Owners = @() } }
     }
 
     AfterEach {
@@ -555,7 +555,7 @@ Describe "Uninstall dry run leftovers" {
         Uninstall-SelectedApps -Apps @($app)
 
         Should -Invoke Remove-SafeItem -Times 0 -Exactly
-        Should -Invoke Invoke-MoleUninstallProcess -Times 0 -Exactly
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 0 -Exactly
     }
 
     It "Previews an app's own folder" {
@@ -621,7 +621,7 @@ Describe "Scanning installed apps" {
         $apps = @(Get-InstalledApplications -ForceRescan -Quiet)
         $apps.Count | Should -Be 2
         @($apps.InstallLocation | Sort-Object) | Should -Be @($folders | Sort-Object)
-        foreach ($app in $apps) { Test-MoleLeftoverOwnership $app.InstallLocation $app | Should -BeFalse }
+        foreach ($app in $apps) { Test-SweeprLeftoverOwnership $app.InstallLocation $app | Should -BeFalse }
         Should -Invoke Get-PathSizeKB -Times 0 -Exactly
     }
 
@@ -635,7 +635,7 @@ Describe "Scanning installed apps" {
         $app = @(Get-InstalledApplications -ForceRescan -Quiet)[0]
         $app.InstallLocation | Should -Be (Get-NormalizedFolderPath $folder)
         $app.SizeKB | Should -Be 70987979
-        Test-MoleLeftoverOwnership $folder $app | Should -BeFalse
+        Test-SweeprLeftoverOwnership $folder $app | Should -BeFalse
         Should -Invoke Get-PathSizeKB -Times 0 -Exactly
     }
 
@@ -649,11 +649,11 @@ Describe "Scanning installed apps" {
         $app.SizeKB | Should -Be $measured
         $app.SizeChecked | Should -BeTrue
         Mock Test-UninstallEntryGone { $true }
-        Mock Get-MoleInstallOwners { @{Complete=$true;Owners=@()} }
-        Test-MoleLeftoverOwnership $folder $app | Should -BeFalse
+        Mock Get-SweeprInstallOwners { @{Complete=$true;Owners=@()} }
+        Test-SweeprLeftoverOwnership $folder $app | Should -BeFalse
     }
 
-    It "Shows a RustDesk-like outlier size as measured, once, beside its duplicate key (#1717)" {
+    It "Shows a RustDesk-like outlier size as measured, once, beside its duplicate key" {
         $folder = New-TestFolder -Name "RustDesk"
         $code = "{3BF1D48C-7A7B-4E4F-9D1F-0123456789AB}"
         $base = "Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -850,8 +850,8 @@ Describe "Selecting apps that share a name" {
 Describe 'Leftover install folder ownership' {
     BeforeAll {
         # The stub lets the pre-fix command run the same behavior fixtures.
-        if (-not (Get-Command Get-MoleInstallOwners -ErrorAction SilentlyContinue)) {
-            function Get-MoleInstallOwners { @{ Complete = $true; Owners = @() } }
+        if (-not (Get-Command Get-SweeprInstallOwners -ErrorAction SilentlyContinue)) {
+            function Get-SweeprInstallOwners { @{ Complete = $true; Owners = @() } }
         }
     }
     BeforeEach {
@@ -861,9 +861,9 @@ Describe 'Leftover install folder ownership' {
             RegistryKey = 'selected-key'; UninstallString = 'mock.exe'; PackageFullName = $null
         }
         $script:Owners = @()
-        Mock Get-MoleInstallOwners { @{ Complete = $true; Owners = $script:Owners } }
+        Mock Get-SweeprInstallOwners { @{ Complete = $true; Owners = $script:Owners } }
         Mock Get-UninstallLaunch { @{ FilePath = 'mock.exe'; Arguments = '' } }
-        Mock Invoke-MoleUninstallProcess { [pscustomobject]@{ ExitCode = 0 } }
+        Mock Invoke-SweeprUninstallProcess { [pscustomobject]@{ ExitCode = 0 } }
         Mock Test-UninstallEntryGone { $true }
         Mock Remove-SafeItem { $true }
         Mock Write-Host {}
@@ -885,7 +885,7 @@ Describe 'Leftover install folder ownership' {
         Should -Invoke Remove-SafeItem -Times 0 -Exactly
     }
     It 'Keeps leftovers when the ownership inventory is incomplete' {
-        Mock Get-MoleInstallOwners { @{ Complete = $false; Owners = @() } }
+        Mock Get-SweeprInstallOwners { @{ Complete = $false; Owners = @() } }
         Uninstall-SelectedApps @($script:SelectedApp)
         Set-DryRunMode -Enabled $true
         Uninstall-SelectedApps @($script:SelectedApp)
@@ -949,20 +949,20 @@ Describe 'Complete install owner probes' {
     It 'Includes hidden registered components without applying the menu filter' {
         Mock Get-ChildItem { @([pscustomobject]@{ PSPath = 'owner-entry' }) } -ParameterFilter { $LiteralPath -like 'HK*' }
         Mock Get-ItemProperty { [pscustomobject]@{ InstallLocation = 'D:\Tools\Shared'; SystemComponent = 1 } } -ParameterFilter { $LiteralPath -eq 'owner-entry' }
-        $result = Get-MoleInstallOwners
+        $result = Get-SweeprInstallOwners
         $result.Complete | Should -BeTrue
         @($result.Owners | Where-Object { $_.Path -eq 'D:\Tools\Shared' }).Count | Should -Be 4
     }
     It 'Reports registry read failures as incomplete' {
         Mock Get-ChildItem { throw 'unreadable registry' } -ParameterFilter { $LiteralPath -like 'HK*' }
-        (Get-MoleInstallOwners).Complete | Should -BeFalse
+        (Get-SweeprInstallOwners).Complete | Should -BeFalse
     }
     It 'Reports Store enumeration failures as incomplete' {
         Mock Get-AppxPackage { throw 'package inventory unavailable' }
-        (Get-MoleInstallOwners).Complete | Should -BeFalse
+        (Get-SweeprInstallOwners).Complete | Should -BeFalse
     }
     It 'Allows an empty complete inventory' {
-        $result = Get-MoleInstallOwners
+        $result = Get-SweeprInstallOwners
         $result.Complete | Should -BeTrue
         @($result.Owners).Count | Should -Be 0
     }
@@ -971,9 +971,9 @@ Describe 'Complete install owner probes' {
 Describe 'Store display sizes without deletion authority' {
     It 'measures readable packages when ancestor deletion identity is unavailable' {
         $folder = New-TestFolder 'read-only-package'
-        Mock Get-MolePathSnapshot { $null }
+        Mock Get-SweeprPathSnapshot { $null }
         (Get-AppxInstallSizeKB -Path $folder) | Should -BeGreaterThan 0
-        Should -Invoke Get-MolePathSnapshot -Times 0 -Exactly
+        Should -Invoke Get-SweeprPathSnapshot -Times 0 -Exactly
     }
 
     It 'retains unknown size for missing packages and never follows a junction' {
@@ -1029,7 +1029,7 @@ Describe 'Uninstall rendered regression' {
         Mock Write-Info {}
         Mock Write-Progress {}
         Mock Get-ItemProperty { @() } -ParameterFilter { "$Path" -like 'HK*' }
-        Mock Get-MolePathSnapshot { $null }
+        Mock Get-SweeprPathSnapshot { $null }
         Mock Get-AppxPackageManifest { $null }
         Mock Get-AppxPackage {
             [pscustomobject]@{Name='Contoso.Notes';PackageFullName='Contoso.Notes_1.0_x64__abc';
@@ -1073,7 +1073,7 @@ Describe 'Registered Proton Pass uninstall compatibility' {
     }
 }
 
-Describe "fm uninstall --list" {
+Describe "sw uninstall --list" {
     BeforeAll {
         $DryRun = $false
         $DebugMode = $false
@@ -1100,10 +1100,10 @@ Describe "fm uninstall --list" {
         Mock Show-AppSelectionMenu { throw "--list must not open the menu" }
         Mock Read-Host { throw "--list must not prompt" }
         Mock Uninstall-SelectedApps { throw "--list must not uninstall" }
-        Mock Invoke-MoleUninstallProcess { throw "--list must not start a process" }
+        Mock Invoke-SweeprUninstallProcess { throw "--list must not start a process" }
         Mock Remove-AppxPackage { throw "--list must not remove a package" }
-        Mock Write-MoleOperation { throw "--list must not write operations.log" }
-        Mock Add-MoleOperationText { throw "--list must not write operations.log" }
+        Mock Write-SweeprOperation { throw "--list must not write operations.log" }
+        Mock Add-SweeprOperationText { throw "--list must not write operations.log" }
     }
 
     It "Prints the inventory as a JSON array when output is redirected" {
@@ -1201,13 +1201,13 @@ Describe "fm uninstall --list" {
     It "Never runs an uninstaller, prompts or writes the log" {
         $null = & { Set-StrictMode -Version Latest; Main }
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 0 -Exactly
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 0 -Exactly
         Should -Invoke Remove-AppxPackage -Times 0 -Exactly
         Should -Invoke Uninstall-SelectedApps -Times 0 -Exactly
         Should -Invoke Show-AppSelectionMenu -Times 0 -Exactly
         Should -Invoke Read-Host -Times 0 -Exactly
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly
-        Should -Invoke Add-MoleOperationText -Times 0 -Exactly
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
+        Should -Invoke Add-SweeprOperationText -Times 0 -Exactly
     }
 }
 
@@ -1240,9 +1240,9 @@ Describe 'Store package eligibility at the removal boundary' {
         Set-DryRunMode -Enabled $false
         Mock Write-Host {}
         Mock Show-SummaryBlock {}
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
         Mock Remove-AppxPackage {}
-        Mock Invoke-MoleUninstallProcess { throw 'No vendor uninstaller is allowed' }
+        Mock Invoke-SweeprUninstallProcess { throw 'No vendor uninstaller is allowed' }
         $script:CurrentStorePackage = [pscustomobject]@{
             Name='Contoso.Notes';PackageFullName='Contoso.Notes_1.0.0.0_x64__abc';SignatureKind='Store'
             IsFramework=$false;IsResourcePackage=$false;IsBundle=$false
@@ -1264,10 +1264,10 @@ Describe 'Store package eligibility at the removal boundary' {
         Uninstall-SelectedApps @($script:SelectedStoreApp)
         Should -Invoke Remove-AppxPackage -Times 0 -Exactly
         if ($Preview) {
-            Should -Invoke Write-MoleOperation -Times 0 -Exactly
+            Should -Invoke Write-SweeprOperation -Times 0 -Exactly
             Should -Invoke Show-SummaryBlock -Times 1 -Exactly -ParameterFilter { $Details -contains 'Would uninstall: 0' }
         }
-        else { Should -Invoke Write-MoleOperation -Times 0 -Exactly -ParameterFilter { $Action -eq 'UNINSTALLED' } }
+        else { Should -Invoke Write-SweeprOperation -Times 0 -Exactly -ParameterFilter { $Action -eq 'UNINSTALLED' } }
     }
     It 'Retains a stale Store selection when current evidence is <State>' -TestCases @(@{State='missing'},@{State='unreadable'},@{State='system'},@{State='different version'}) {
         param($State)
@@ -1285,14 +1285,14 @@ Describe 'Store package eligibility at the removal boundary' {
         Mock Get-AppxPackage { throw 'inventory unavailable' }
         Uninstall-SelectedApps @($script:SelectedStoreApp)
         Should -Invoke Remove-AppxPackage -Times 0 -Exactly
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
         Should -Invoke Show-SummaryBlock -Times 1 -Exactly -ParameterFilter { $Details -contains 'Would uninstall: 0' }
     }
     It 'Previews an eligible ordinary Store package without writing' {
         Set-DryRunMode -Enabled $true
         Uninstall-SelectedApps @($script:SelectedStoreApp)
         Should -Invoke Remove-AppxPackage -Times 0 -Exactly
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
         Should -Invoke Show-SummaryBlock -Times 1 -Exactly -ParameterFilter { $Details -contains 'Would uninstall: 1' }
     }
     It 'Rechecks an explicit sparse manifest even when the cached full identity still matches' {

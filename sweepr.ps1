@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# freeMole - Windows System Maintenance Toolkit
+# Sweepr - Windows System Maintenance Toolkit
 # Main CLI entry point
 
 #Requires -Version 5.1
@@ -29,37 +29,37 @@ if ($PSBoundParameters.ContainsKey('Debug') -and $PSBoundParameters['Debug']) {
 }
 
 # Get script directory
-$script:MOLE_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:MOLE_BIN = Join-Path $script:MOLE_ROOT "bin"
-$script:MOLE_LIB = Join-Path $script:MOLE_ROOT "lib"
-$script:MOLE_CORE = Join-Path $script:MOLE_LIB "core"
+$script:SWEEPR_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
+$script:SWEEPR_BIN = Join-Path $script:SWEEPR_ROOT "bin"
+$script:SWEEPR_LIB = Join-Path $script:SWEEPR_ROOT "lib"
+$script:SWEEPR_CORE = Join-Path $script:SWEEPR_LIB "core"
 
 # Read the version before loading the rest of the runtime so every entrypoint
 # resolves the same release tag.
-. "$script:MOLE_CORE\version.ps1"
-Repair-MoleModulePath
-$script:MOLE_VER = Get-MoleVersionString -RootDir $script:MOLE_ROOT
+. "$script:SWEEPR_CORE\version.ps1"
+Repair-SweeprModulePath
+$script:SWEEPR_VER = Get-SweeprVersionString -RootDir $script:SWEEPR_ROOT
 
 # Import core
-. "$script:MOLE_LIB\core\common.ps1"
-. "$script:MOLE_LIB\core\update_check.ps1"
+. "$script:SWEEPR_LIB\core\common.ps1"
+. "$script:SWEEPR_LIB\core\update_check.ps1"
 
 # ============================================================================
 # Version Info
 # ============================================================================
 
 function Show-Version {
-    $info = Get-MoleVersion
+    $info = Get-SweeprVersion
     $windows = Get-WindowsVersion
-    Write-Host "freeMole version $($info.Version)"
+    Write-Host "Sweepr version $($info.Version)"
     Write-Host "Windows: $($windows.Name) $($windows.Version)"
     Write-Host "Architecture: $(Get-NativeArchitecture)"
     Write-Host "PowerShell: $($info.PowerShell)"
     Write-Host "Disk Free: $(Get-FreeSpace)"
-    Write-Host "Install: $(Get-MoleInstallDescription -RootDir $script:MOLE_ROOT)"
+    Write-Host "Install: $(Get-SweeprInstallDescription -RootDir $script:SWEEPR_ROOT)"
 }
 
-# The machine's own architecture. An x64 process on ARM64 Windows (fm.exe
+# The machine's own architecture. An x64 process on ARM64 Windows (sw.exe
 # runs PowerShell under emulation) sees AMD64 in its environment, so read the
 # system-wide value Windows keeps in the registry.
 function Get-NativeArchitecture {
@@ -72,18 +72,18 @@ function Get-NativeArchitecture {
 }
 
 # The facts a --debug session log opens with. No user or machine name.
-function Get-MoleDebugHeader {
+function Get-SweeprDebugHeader {
     param([string]$CommandLine)
 
-    $lines = @("freeMole Debug Session, $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')", "Command: fm $CommandLine")
+    $lines = @("Sweepr Debug Session, $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')", "Command: sw $CommandLine")
     try {
-        $info = Get-MoleVersion
+        $info = Get-SweeprVersion
         $windows = Get-WindowsVersion
-        $lines += "freeMole version: $($info.Version)"
+        $lines += "Sweepr version: $($info.Version)"
         $lines += "Windows: $($windows.Name) $($windows.Version)"
         $lines += "Architecture: $(Get-NativeArchitecture)"
         $lines += "PowerShell: $($info.PowerShell) $($PSVersionTable.PSEdition)"
-        $lines += "Install: $(Get-MoleInstallDescription -RootDir $script:MOLE_ROOT)"
+        $lines += "Install: $(Get-SweeprInstallDescription -RootDir $script:SWEEPR_ROOT)"
     }
     catch { $lines += "Environment: unavailable" }
     return $lines
@@ -91,7 +91,7 @@ function Get-MoleDebugHeader {
 
 # A source install checks out a release tag; naming its commit tells a report
 # exactly which source ran. Read from .git without starting git.
-function Get-MoleSourceCommit {
+function Get-SweeprSourceCommit {
     param([string]$RootDir)
 
     $gitDir = Join-Path $RootDir ".git"
@@ -119,24 +119,24 @@ function Get-MoleSourceCommit {
     return $null
 }
 
-function Get-MoleInstallDescription {
+function Get-SweeprInstallDescription {
     param([string]$RootDir)
 
-    $method = Get-MoleInstallMethod -RootDir $RootDir
+    $method = Get-SweeprInstallMethod -RootDir $RootDir
     if ($method -eq "Source") {
-        $commit = Get-MoleSourceCommit -RootDir $RootDir
+        $commit = Get-SweeprSourceCommit -RootDir $RootDir
         if ($commit) { return "Source ($commit)" }
     }
     return $method
 }
 
 # How this copy was installed, by the folder each channel installs into.
-function Get-MoleInstallMethod {
+function Get-SweeprInstallMethod {
     param([string]$RootDir)
 
     $path = $RootDir.TrimEnd('\') + '\'
-    if ($path -like "*\Microsoft\WinGet\Packages\tw93.MoleCLI_*") { return "winget" }
-    if ($path -like "*\scoop\apps\mole\*") { return "Scoop" }
+    if ($path -like "*\Microsoft\WinGet\Packages\brummilab.Sweepr_*") { return "winget" }
+    if ($path -like "*\scoop\apps\sweepr\*") { return "Scoop" }
     if (Test-Path -LiteralPath (Join-Path $RootDir ".git")) { return "Source" }
     return "Portable"
 }
@@ -156,31 +156,31 @@ function Show-MainHelp {
 
     Show-Banner
     Write-Host "${blue}COMMANDS${nc}"
-    Write-HelpRow "fm" "Main menu"
-    Write-HelpRow "fm clean" "Free up disk space"
-    Write-HelpRow "fm uninstall" "Remove apps completely"
-    Write-HelpRow "fm optimize" "Refresh caches and services"
-    Write-HelpRow "fm analyze" "Explore disk usage"
-    Write-HelpRow "fm status" "Monitor system health"
-    Write-HelpRow "fm purge" "Remove old project artifacts"
-    Write-HelpRow "fm inspect <app>" "Look inside an app with REA (read-only)"
-    Write-HelpRow "fm history" "Review cleanup activity"
-    Write-HelpRow "fm update" "Update to latest version"
-    Write-HelpRow "fm remove" "Remove freeMole from system"
-    Write-HelpRow "fm --help" "Show help"
-    Write-HelpRow "fm --version" "Show version"
+    Write-HelpRow "sw" "Main menu"
+    Write-HelpRow "sw clean" "Free up disk space"
+    Write-HelpRow "sw uninstall" "Remove apps completely"
+    Write-HelpRow "sw optimize" "Refresh caches and services"
+    Write-HelpRow "sw analyze" "Explore disk usage"
+    Write-HelpRow "sw status" "Monitor system health"
+    Write-HelpRow "sw purge" "Remove old project artifacts"
+    Write-HelpRow "sw inspect <app>" "Look inside an app with REA (read-only)"
+    Write-HelpRow "sw history" "Review cleanup activity"
+    Write-HelpRow "sw update" "Update to latest version"
+    Write-HelpRow "sw remove" "Remove Sweepr from system"
+    Write-HelpRow "sw --help" "Show help"
+    Write-HelpRow "sw --version" "Show version"
     Write-Host ""
-    Write-HelpRow "fm clean --dry-run" "Preview cleanup"
-    Write-HelpRow "fm clean --whitelist" "Manage protected paths"
-    Write-HelpRow "fm clean --system" "Include system cleanup (run as administrator)"
-    Write-HelpRow "fm optimize --dry-run" "Preview optimization"
-    Write-HelpRow "fm uninstall --dry-run" "Preview app uninstall"
-    Write-HelpRow "fm purge --dry-run" "Preview project purge"
-    Write-HelpRow "fm purge --paths" "Configure scan directories"
-    Write-HelpRow "fm history --json" "Export cleanup history"
-    Write-HelpRow "fm analyze D:\" "Analyze another drive"
-    Write-HelpRow "fm inspect Slack --deep" "Runtime, signer, DLLs and .NET metadata"
-    Write-HelpRow "fm inspect --setup" "Register REA with MCP clients"
+    Write-HelpRow "sw clean --dry-run" "Preview cleanup"
+    Write-HelpRow "sw clean --whitelist" "Manage protected paths"
+    Write-HelpRow "sw clean --system" "Include system cleanup (run as administrator)"
+    Write-HelpRow "sw optimize --dry-run" "Preview optimization"
+    Write-HelpRow "sw uninstall --dry-run" "Preview app uninstall"
+    Write-HelpRow "sw purge --dry-run" "Preview project purge"
+    Write-HelpRow "sw purge --paths" "Configure scan directories"
+    Write-HelpRow "sw history --json" "Export cleanup history"
+    Write-HelpRow "sw analyze D:\" "Analyze another drive"
+    Write-HelpRow "sw inspect Slack --deep" "Runtime, signer, DLLs and .NET metadata"
+    Write-HelpRow "sw inspect --setup" "Register REA with MCP clients"
     Write-Host ""
     Write-Host "${blue}OPTIONS${nc}"
     Write-HelpRow "--debug" "Show detailed operation logs"
@@ -191,7 +191,7 @@ function Show-MainHelp {
 # Interactive Menu
 # ============================================================================
 
-# The macOS CLI's main menu: five numbered commands, arrow keys or 1-5,
+# The main menu: five numbered commands, arrow keys or 1-5,
 # M for the full help, V for the version, Q to quit. Returns a command name,
 # "help", "version" or $null.
 function Show-MainMenu {
@@ -226,7 +226,7 @@ function Show-MainMenu {
             }
             Write-Host ""
             Write-Host $controls
-            Show-MoleUpdateNotice -Context $UpdateContext
+            Show-SweeprUpdateNotice -Context $UpdateContext
 
             $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             switch ($key.VirtualKeyCode) {
@@ -260,7 +260,7 @@ function Show-MainMenu {
 # Maps a command-line flag (dry-run, help, h) to the parameter its command
 # script declares. A flag nothing declares is refused rather than passed on:
 # scripts without [CmdletBinding()] ignore unknown parameters, so
-# `fm remove --help` used to uninstall freeMole.
+# `sw remove --help` used to uninstall Sweepr.
 function Resolve-CommandParameterName {
     param(
         $Parameters,
@@ -290,19 +290,19 @@ function Resolve-CommandParameterName {
     return $null
 }
 
-function Invoke-MoleCommand {
+function Invoke-SweeprCommand {
     param(
         [string]$CommandName,
         [string[]]$Arguments
     )
 
-    $scriptPath = Join-Path $script:MOLE_BIN "$CommandName.ps1"
+    $scriptPath = Join-Path $script:SWEEPR_BIN "$CommandName.ps1"
 
     if (-not (Test-Path $scriptPath)) {
-        $script:MoleExitCode = 2
-        Write-MoleError "Unknown command: $CommandName"
+        $script:SweeprExitCode = 2
+        Write-SweeprError "Unknown command: $CommandName"
         Write-Host ""
-        Write-Host "Run 'fm --help' for available commands"
+        Write-Host "Run 'sw --help' for available commands"
         return
     }
 
@@ -328,9 +328,9 @@ function Invoke-MoleCommand {
                 # its value (--interval 1s), as the command declares it.
                 $paramName = Resolve-CommandParameterName -Parameters $declared -Flag $Matches[1]
                 if (-not $paramName) {
-                    Write-MoleError "Unknown option for fm ${CommandName}: $cleanArg"
-                    Write-Host "Run 'fm $CommandName --help' to see its options"
-                    $script:MoleExitCode = 2
+                    Write-SweeprError "Unknown option for sw ${CommandName}: $cleanArg"
+                    Write-Host "Run 'sw $CommandName --help' to see its options"
+                    $script:SweeprExitCode = 2
                     return
                 }
                 $takesValue = $declared[$paramName].ParameterType -ne [System.Management.Automation.SwitchParameter]
@@ -347,9 +347,9 @@ function Invoke-MoleCommand {
                 # It's a named parameter with value (e.g., --name=value)
                 $paramName = Resolve-CommandParameterName -Parameters $declared -Flag $Matches[1]
                 if (-not $paramName) {
-                    Write-MoleError "Unknown option for fm ${CommandName}: $cleanArg"
-                    Write-Host "Run 'fm $CommandName --help' to see its options"
-                    $script:MoleExitCode = 2
+                    Write-SweeprError "Unknown option for sw ${CommandName}: $cleanArg"
+                    Write-Host "Run 'sw $CommandName --help' to see its options"
+                    $script:SweeprExitCode = 2
                     return
                 }
                 $paramValue = $Matches[2]
@@ -363,14 +363,14 @@ function Invoke-MoleCommand {
     }
 
     # The operation log reads the run from the environment in the command's own scope.
-    $env:_MOLE_OPLOG_RUN_COMMAND = $CommandName
-    $env:_MOLE_OPLOG_RUN_ID = "{0}-{1}-{2}" -f (Get-Date -Format "yyyyMMddHHmmss"), $PID, (Get-Random -Maximum 100000)
+    $env:_SWEEPR_OPLOG_RUN_COMMAND = $CommandName
+    $env:_SWEEPR_OPLOG_RUN_ID = "{0}-{1}-{2}" -f (Get-Date -Format "yyyyMMddHHmmss"), $PID, (Get-Random -Maximum 100000)
 
     # The command script loads the log module afresh, so the session has to
     # exist before it starts for its own debug lines to reach the file.
     $debugSession = $splatParams.ContainsKey("DebugMode")
     if ($debugSession) {
-        Start-MoleDebugSession -Header (Get-MoleDebugHeader -CommandLine ((@($CommandName) + @($Arguments)) -join " "))
+        Start-SweeprDebugSession -Header (Get-SweeprDebugHeader -CommandLine ((@($CommandName) + @($Arguments)) -join " "))
     }
     try {
         if ($positionalArgs.Count -gt 0) {
@@ -381,10 +381,10 @@ function Invoke-MoleCommand {
         }
     }
     finally {
-        if ($debugSession) { Complete-MoleDebugSession }
+        if ($debugSession) { Complete-SweeprDebugSession }
     }
     if ($CommandName -in @("analyze", "status", "history", "inspect")) {
-        $script:MoleExitCode = $LASTEXITCODE
+        $script:SweeprExitCode = $LASTEXITCODE
     }
 }
 
@@ -394,7 +394,7 @@ function Invoke-MoleCommand {
 
 function Main {
     # Initialize
-    Initialize-Mole
+    Initialize-Sweepr
 
     # Native -File and the executable launcher bind switches differently.
     # Normalize both forms before routing, keeping command options on the child.
@@ -448,27 +448,27 @@ function Main {
 
     # If command specified, route to it
     $updateContext = $null
-    if (Test-MoleUpdateNoticeAllowed -CommandName $effectiveCommand -Arguments $effectiveArguments) {
-        $updateContext = Start-MoleUpdateCheck -RootDir $script:MOLE_ROOT -Version $script:MOLE_VER -Method (Get-MoleInstallMethod -RootDir $script:MOLE_ROOT)
+    if (Test-SweeprUpdateNoticeAllowed -CommandName $effectiveCommand -Arguments $effectiveArguments) {
+        $updateContext = Start-SweeprUpdateCheck -RootDir $script:SWEEPR_ROOT -Version $script:SWEEPR_VER -Method (Get-SweeprInstallMethod -RootDir $script:SWEEPR_ROOT)
     }
     if ($effectiveCommand) {
         $validCommands = @("clean", "uninstall", "analyze", "status", "optimize", "purge", "inspect", "history", "update", "remove")
 
         if ($effectiveCommand -in $validCommands) {
-            Invoke-MoleCommand -CommandName $effectiveCommand -Arguments $effectiveArguments
-            if ($script:MoleExitCode -eq 0) { Show-MoleUpdateNotice -Context $updateContext }
+            Invoke-SweeprCommand -CommandName $effectiveCommand -Arguments $effectiveArguments
+            if ($script:SweeprExitCode -eq 0) { Show-SweeprUpdateNotice -Context $updateContext }
         }
         else {
-            $script:MoleExitCode = 2
-            Write-MoleError "Unknown command: $effectiveCommand"
+            $script:SweeprExitCode = 2
+            Write-SweeprError "Unknown command: $effectiveCommand"
             Write-Host ""
             Write-Host "Available commands: $($validCommands -join ', ')"
-            Write-Host "Run 'fm --help' for more information"
+            Write-Host "Run 'sw --help' for more information"
         }
         return
     }
 
-    # Interactive mode, as on macOS: pick once, run it, return to the shell.
+    # Interactive mode: pick once, run it, return to the shell.
     $choice = Show-MainMenu -UpdateContext $updateContext
     Clear-Host
     if ($null -eq $choice) {
@@ -481,22 +481,22 @@ function Main {
         Show-Version
     }
     else {
-        Invoke-MoleCommand -CommandName $choice -Arguments @()
-        if ($script:MoleExitCode -eq 0) { Show-MoleUpdateNotice -Context $updateContext }
+        Invoke-SweeprCommand -CommandName $choice -Arguments @()
+        if ($script:SweeprExitCode -eq 0) { Show-SweeprUpdateNotice -Context $updateContext }
     }
 }
 
 # Run
-$script:MoleExitCode = 0
+$script:SweeprExitCode = 0
 try {
     Main
 }
 catch {
     Write-Host ""
-    Write-MoleError "An error occurred: $_"
+    Write-SweeprError "An error occurred: $_"
     Write-Host ""
     exit 1
 }
-if ($script:MoleExitCode -ne 0) {
-    exit $script:MoleExitCode
+if ($script:SweeprExitCode -ne 0) {
+    exit $script:SweeprExitCode
 }

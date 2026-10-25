@@ -1,4 +1,4 @@
-# golangci-lint configuration for freeMole
+# golangci-lint configuration for Sweepr
 # https://golangci-lint.run/usage/configuration/
 
 version: "2"

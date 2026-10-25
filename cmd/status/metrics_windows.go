@@ -65,7 +65,7 @@ func cpuCounts() (physical, logical int) {
 // lastCPUSampleAt starts when gopsutil seeds its CPU baseline at package init.
 var lastCPUSampleAt = time.Now()
 
-// cpuSampleInterval is main's minimum usage window. Windows CPU times tick at
+// cpuSampleInterval is the minimum usage window. Windows CPU times tick at
 // the 15.6ms timer resolution, so a shorter window (the first sample of a
 // one-shot --json run) reads per-core values in coarse steps.
 const cpuSampleInterval = 100 * time.Millisecond
@@ -137,7 +137,7 @@ type performanceInformation struct {
 	threadCount       uint32
 }
 
-// readMemory maps Windows memory onto main's card: Used and Available come
+// readMemory maps Windows memory onto the memory card: Used and Available come
 // from GlobalMemoryStatusEx, Cached is the system file cache Task Manager
 // reports, and Swap is page file usage. Commit charge is deliberately not
 // called swap: it counts reserved memory that may never touch the page file.
@@ -485,7 +485,7 @@ type batteryInformation struct {
 }
 
 // readBatteries returns nothing on a machine without a system battery, which
-// the Power card renders as "No battery" exactly as main does on a Mac mini.
+// the Power card renders as "No battery".
 func readBatteries() ([]BatteryStatus, error) {
 	var sps systemPowerStatus
 	if ok, _, err := procGetSystemPowerStatus.Call(uintptr(unsafe.Pointer(&sps))); ok == 0 {

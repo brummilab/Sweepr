@@ -18,17 +18,17 @@ Describe 'Recoverable uninstall leftovers' {
     AfterEach { Set-DryRunMode $false }
 
     It 'Routes an accepted directory only to the recycle operation' {
-        Mock Move-MoleItemToRecycleBin { Move-Item -LiteralPath $Path -Destination $script:Destination }
+        Mock Move-SweeprItemToRecycleBin { Move-Item -LiteralPath $Path -Destination $script:Destination }
         Remove-SafeItem -Path $script:Source -Recurse -Recycle | Should -Be $true
         Test-Path $script:Source | Should -Be $false
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
         Test-Path (Join-Path $script:Destination 'fixture.txt') | Should -Be $true
-        Should -Invoke Move-MoleItemToRecycleBin -Times 1 -Exactly
+        Should -Invoke Move-SweeprItemToRecycleBin -Times 1 -Exactly
         Should -Invoke Remove-SafeDirectoryTree -Times 0 -Exactly
     }
 
     It 'Keeps leftovers and reports no cleaned items when recycling fails' {
-        Mock Move-MoleItemToRecycleBin { throw 'Recycle Bin unavailable or cancelled' }
+        Mock Move-SweeprItemToRecycleBin { throw 'Recycle Bin unavailable or cancelled' }
         Remove-SafeItem -Path $script:Source -Recurse -Recycle | Should -Be $false
         Test-Path (Join-Path $script:Source 'fixture.txt') | Should -Be $true
         (Get-CleanupStats).FilesCleaned | Should -Be 0
@@ -37,24 +37,24 @@ Describe 'Recoverable uninstall leftovers' {
     }
 
     It 'Previews without calling the shell or permanent deletion' {
-        Mock Move-MoleItemToRecycleBin { throw 'Dry run must not recycle' }
+        Mock Move-SweeprItemToRecycleBin { throw 'Dry run must not recycle' }
         Set-DryRunMode $true
         Remove-SafeItem -Path $script:Source -Recurse -Recycle | Should -Be $true
         Test-Path $script:Source | Should -Be $true
-        Should -Invoke Move-MoleItemToRecycleBin -Times 0 -Exactly
+        Should -Invoke Move-SweeprItemToRecycleBin -Times 0 -Exactly
         Should -Invoke Remove-SafeDirectoryTree -Times 0 -Exactly
     }
 
     It 'Honors a whitelisted root before recycling' {
         Mock Test-Whitelisted { $Path -eq $script:Source }
-        Mock Move-MoleItemToRecycleBin { throw 'Whitelisted root must stay' }
+        Mock Move-SweeprItemToRecycleBin { throw 'Whitelisted root must stay' }
         Remove-SafeItem -Path $script:Source -Recurse -Recycle | Should -Be $false
         Test-Path $script:Source | Should -Be $true
-        Should -Invoke Move-MoleItemToRecycleBin -Times 0 -Exactly
+        Should -Invoke Move-SweeprItemToRecycleBin -Times 0 -Exactly
     }
 
     It 'Keeps a replaced root after sizing' {
-        Mock Move-MoleItemToRecycleBin { throw 'Replacement must not be recycled' }
+        Mock Move-SweeprItemToRecycleBin { throw 'Replacement must not be recycled' }
         Mock Get-ValidatedTreeSize {
             Move-Item -LiteralPath $script:Source -Destination $script:Destination
             New-Item -ItemType Directory $script:Source | Out-Null
@@ -64,7 +64,7 @@ Describe 'Recoverable uninstall leftovers' {
         Remove-SafeItem -Path $script:Source -Recurse -Recycle | Should -Be $false
         Test-Path (Join-Path $script:Source 'replacement.txt') | Should -Be $true
         Test-Path (Join-Path $script:Destination 'fixture.txt') | Should -Be $true
-        Should -Invoke Move-MoleItemToRecycleBin -Times 0 -Exactly
+        Should -Invoke Move-SweeprItemToRecycleBin -Times 0 -Exactly
         Should -Invoke Remove-SafeDirectoryTree -Times 0 -Exactly
     }
 

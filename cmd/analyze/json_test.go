@@ -144,7 +144,7 @@ func TestRunJSONModeEmitsTheMacOSFieldNames(t *testing.T) {
 
 func TestJSONEntriesFromDirEntriesIncludesMetadata(t *testing.T) {
 	oldAccess := time.Now().AddDate(0, 0, -120)
-	// A relative path, so the host temporary directory, which fm clean
+	// A relative path, so the host temporary directory, which sw clean
 	// already covers on Windows, does not hide the cache evidence.
 	t.Chdir(t.TempDir())
 	cacheDir := "cache"

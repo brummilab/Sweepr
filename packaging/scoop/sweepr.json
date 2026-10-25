@@ -1,7 +1,7 @@
 {
     "version": "{{VERSION}}",
     "description": "Deep clean, uninstall apps, optimize, analyze disk, and monitor Windows from the terminal.",
-    "homepage": "https://github.com/brummilab/freeMole/tree/windows",
+    "homepage": "https://github.com/brummilab/sweepr/tree/main",
     "license": "GPL-3.0-or-later",
     "architecture": {
         "64bit": {
@@ -10,20 +10,20 @@
         }
     },
     "bin": [
-        "fm.exe",
+        "sw.exe",
         [
-            "fm.exe",
-            "mole"
+            "sw.exe",
+            "sweepr"
         ]
     ],
     "checkver": {
-        "url": "https://api.github.com/repos/brummilab/freeMole/releases?per_page=100",
+        "url": "https://api.github.com/repos/brummilab/sweepr/releases?per_page=100",
         "regex": "\"tag_name\":\\s*\"V([\\d.]+)-windows\""
     },
     "autoupdate": {
         "architecture": {
             "64bit": {
-                "url": "https://github.com/brummilab/freeMole/releases/download/V$version-windows/freemole-$version-x64.zip",
+                "url": "https://github.com/brummilab/sweepr/releases/download/V$version-windows/sweepr-$version-x64.zip",
                 "hash": {
                     "url": "$baseurl/SHA256SUMS.txt"
                 }

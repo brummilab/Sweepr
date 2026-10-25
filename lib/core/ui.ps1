@@ -1,12 +1,12 @@
-# freeMole - UI Module
+# Sweepr - UI Module
 # Provides interactive UI components (menus, confirmations, etc.)
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_UI_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_UI_LOADED) { return }
-$script:MOLE_UI_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_UI_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_UI_LOADED) { return }
+$script:SWEEPR_UI_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -100,17 +100,18 @@ function Format-SizeListEntry {
 function Show-Banner {
     <#
     .SYNOPSIS
-        Display the freeMole logo, website and tagline, as the macOS CLI does
+        Display the Sweepr logo, website and tagline
     #>
     $green = $script:Colors.Green
     $blue = $script:Colors.Blue
     $nc = $script:Colors.NC
 
-    Write-Host "$green  __               __  __       _      $nc"
-    Write-Host "$green / _|_ __ ___  ___|  \/  | ___ | | ___ $nc"
-    Write-Host "$green| |_| '__/ _ \/ _ \ |\/| |/ _ \| |/ _ \$nc"
-    Write-Host "$green|  _| | |  __/  __/ |  | | (_) | |  __/$nc  ${blue}https://github.com/brummilab/freeMole$nc"
-    Write-Host "$green|_| |_|  \___|\___|_|  |_|\___/|_|\___|$nc  ${green}Deep clean, inspect and optimize your PC.$nc"
+    Write-Host "$green ____                                     $nc"
+    Write-Host "$green/ ___| __      __  ___   ___  _ __   _ __ $nc"
+    Write-Host "$green\___ \ \ \ /\ / / / _ \ / _ \| '_ \ | '__|$nc"
+    Write-Host "$green ___) | \ V  V / |  __/|  __/| |_) || |   $nc  ${blue}https://github.com/brummilab/sweepr$nc"
+    Write-Host "$green|____/   \_/\_/   \___| \___|| .__/ |_|   $nc  ${green}Deep clean, inspect and optimize your PC.$nc"
+    Write-Host "$green                             |_|          $nc"
     Write-Host ""
 }
 
@@ -122,12 +123,12 @@ function Show-SummaryBlock {
     param([string]$Heading, [string[]]$Details = @())
     Stop-Spinner
     # Let the last result settle before the final frame, without faking work.
-    if (Test-MoleInteractiveOutput) { Start-Sleep -Milliseconds 180 }
+    if (Test-SweeprInteractiveOutput) { Start-Sleep -Milliseconds 180 }
     $width = [Math]::Max(1, [Math]::Min(70, (Get-TerminalSize).Width))
     $divider = '=' * $width
     Write-Host ""
     Write-Host $divider
-    Write-Host "$(Get-MoleColor -Name Blue)$Heading$(Get-MoleColor -Name NC)"
+    Write-Host "$(Get-SweeprColor -Name Blue)$Heading$(Get-SweeprColor -Name NC)"
     foreach ($detail in $Details) {
         if ($detail) { Write-Host $detail }
     }

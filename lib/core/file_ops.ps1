@@ -1,12 +1,12 @@
-# freeMole - Safe File Operations Module
+# Sweepr - Safe File Operations Module
 # Provides safe file deletion and manipulation functions with protection checks
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_FILEOPS_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_FILEOPS_LOADED) { return }
-$script:MOLE_FILEOPS_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_FILEOPS_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_FILEOPS_LOADED) { return }
+$script:SWEEPR_FILEOPS_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -17,7 +17,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Global State
 # ============================================================================
 
-$script:MoleDryRunMode = $env:MOLE_DRY_RUN -eq "1"
+$script:SweeprDryRunMode = $env:SWEEPR_DRY_RUN -eq "1"
 $script:TotalSizeCleaned = 0
 $script:FilesCleaned = 0
 $script:TotalItems = 0
@@ -29,17 +29,17 @@ $script:OwnerCleanups = 0
 
 # Bind each existing path component to its Windows volume/file identity. Path
 # spelling alone cannot distinguish a directory replaced after preview/sizing.
-function Get-MolePathSnapshot {
+function Get-SweeprPathSnapshot {
     param([string]$Path, [switch]$AllowLeafLink)
 
     try {
-        if (-not ('freeMole.SafePathIdentity' -as [type])) {
+        if (-not ('Sweepr.SafePathIdentity' -as [type])) {
             Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-namespace freeMole {
+namespace Sweepr {
     public sealed class SafePathIdentity {
         [StructLayout(LayoutKind.Sequential)]
         private struct Info {
@@ -74,7 +74,7 @@ namespace freeMole {
         if ($current -match '^[A-Za-z]:$') { $current += '\' }
         $leaf = $true
         while ($current) {
-            $info = [freeMole.SafePathIdentity]::Read($current)
+            $info = [Sweepr.SafePathIdentity]::Read($current)
             if ($info.Link -and (-not $leaf -or -not $AllowLeafLink)) { return $null }
             $entries[$current] = $info.Identity
             $parent = [IO.Path]::GetDirectoryName($current)
@@ -90,11 +90,11 @@ namespace freeMole {
     }
 }
 
-function Test-MolePathSnapshot {
+function Test-SweeprPathSnapshot {
     param($Snapshot)
 
     if ($null -eq $Snapshot) { return $false }
-    $now = Get-MolePathSnapshot -Path $Snapshot.Path -AllowLeafLink:$Snapshot.AllowLeafLink
+    $now = Get-SweeprPathSnapshot -Path $Snapshot.Path -AllowLeafLink:$Snapshot.AllowLeafLink
     if ($null -eq $now -or $now.Entries.Count -ne $Snapshot.Entries.Count) { return $false }
     foreach ($path in $Snapshot.Entries.Keys) {
         if ($now.Entries[$path] -ne $Snapshot.Entries[$path]) { return $false }
@@ -157,7 +157,7 @@ function Test-SafePath {
     return $true
 }
 
-# A junction or symbolic link points at someone else's files. freeMole lists and
+# A junction or symbolic link points at someone else's files. Sweepr lists and
 # removes the link itself but never walks into it: in Windows PowerShell 5.1,
 # Remove-Item on a junction with children stops at an "Are you sure?" prompt,
 # and answering Yes deletes the files the link points to.
@@ -172,8 +172,8 @@ function Test-IsReparsePoint {
 # just verified the parent chain, so reopening every ancestor for every entry
 # only repeats that check; the removal sink still rebuilds the whole chain and
 # compares it, so a parent swapped after the walk is refused there. $null means
-# "use Get-MolePathSnapshot instead".
-function Get-MoleChildSnapshot {
+# "use Get-SweeprPathSnapshot instead".
+function Get-SweeprChildSnapshot {
     param($ParentSnapshot, [string]$Path)
 
     try {
@@ -181,7 +181,7 @@ function Get-MoleChildSnapshot {
         if (-not $fullPath.StartsWith($ParentSnapshot.Path.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
             return $null
         }
-        $info = [freeMole.SafePathIdentity]::Read($fullPath)
+        $info = [Sweepr.SafePathIdentity]::Read($fullPath)
         $entries = $ParentSnapshot.Entries.Clone()
         $entries[$fullPath] = $info.Identity
         return @{ Path = $fullPath; Entries = $entries; AllowLeafLink = $true }
@@ -205,20 +205,20 @@ function Get-TreeItemsNoFollow {
     $errorAction = if ($SkipUnreadable) { "SilentlyContinue" } else { "Stop" }
     $walkTimer = [Diagnostics.Stopwatch]::StartNew()
     $pending = New-Object System.Collections.Generic.Stack[string]
-    $rootSnapshot = Get-MolePathSnapshot -Path $Path
+    $rootSnapshot = Get-SweeprPathSnapshot -Path $Path
     if (-not $rootSnapshot) { throw "Unverified directory: $Path" }
     $pending.Push($Path)
     $snapshots = @{ $Path = $rootSnapshot }
     while ($pending.Count -gt 0) {
         if ($walkTimer.Elapsed.TotalSeconds -ge 15) { throw 'Cleanup walk timed out' }
         $directory = $pending.Pop()
-        if (-not (Test-MolePathSnapshot $snapshots[$directory])) { throw "Directory changed: $directory" }
+        if (-not (Test-SweeprPathSnapshot $snapshots[$directory])) { throw "Directory changed: $directory" }
         foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction $errorAction)) {
             if ($walkTimer.Elapsed.TotalSeconds -ge 15) { throw 'Cleanup walk timed out' }
-            $snapshot = Get-MoleChildSnapshot -ParentSnapshot $snapshots[$directory] -Path $item.FullName
-            if (-not $snapshot) { $snapshot = Get-MolePathSnapshot -Path $item.FullName -AllowLeafLink }
+            $snapshot = Get-SweeprChildSnapshot -ParentSnapshot $snapshots[$directory] -Path $item.FullName
+            if (-not $snapshot) { $snapshot = Get-SweeprPathSnapshot -Path $item.FullName -AllowLeafLink }
             if (-not $snapshot) { throw "Unverified child: $($item.FullName)" }
-            $item | Add-Member -NotePropertyName MolePathSnapshot -NotePropertyValue $snapshot -Force
+            $item | Add-Member -NotePropertyName SweeprPathSnapshot -NotePropertyValue $snapshot -Force
             $item
             if ($item.PSIsContainer -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
                 $snapshots[$item.FullName] = $snapshot
@@ -262,7 +262,7 @@ function Get-PathSize {
     
     try {
         if (Test-Path -LiteralPath $Path -PathType Container) {
-            # A linked directory's files are not freeMole's to count.
+            # A linked directory's files are not Sweepr's to count.
             if (Test-IsReparsePoint -Path $Path) {
                 return 0
             }
@@ -323,7 +323,7 @@ function Get-SafeDirectoryTreeItems {
         $WhitelistState = $null
     )
 
-    $rootSnapshot = Get-MolePathSnapshot -Path $Path -AllowLeafLink
+    $rootSnapshot = Get-SweeprPathSnapshot -Path $Path -AllowLeafLink
     if (-not $rootSnapshot) { return @{ Success = $false; Items = @(); Reason = "path identity unavailable" } }
     # A linked directory is removed as a link; nothing under it is listed.
     if (Test-IsReparsePoint -Path $Path) {
@@ -368,7 +368,7 @@ function Get-SafeDirectoryTreeItems {
 
 # "incomplete: removed 12 of 40 entries; stopped at <path>: <why>", so a partly
 # removed folder says how far the removal got and why it stopped.
-function Format-MoleTreeRemovalDetail {
+function Format-SweeprTreeRemovalDetail {
     param([hashtable]$Report)
 
     # Indexed: under StrictMode a missing key read as a property throws.
@@ -377,7 +377,7 @@ function Format-MoleTreeRemovalDetail {
     return $detail
 }
 
-function Test-MoleRemovalCondition {
+function Test-SweeprRemovalCondition {
     param([scriptblock]$CanRemove)
     if ($null -eq $CanRemove) { return $true }
     try { return [bool](& $CanRemove) }
@@ -419,7 +419,7 @@ function Remove-SafeDirectoryTree {
     }
 
     if (-not $tree.Success -or -not (Test-SafePath $Path -WhitelistState $WhitelistState) -or
-        -not (Test-MolePathSnapshot $tree.RootSnapshot)) {
+        -not (Test-SweeprPathSnapshot $tree.RootSnapshot)) {
         $Report.Reason = if ($tree['Reason']) { "refused: $($tree['Reason'])" } else { "refused: the folder changed or is protected" }
         return $false
     }
@@ -430,7 +430,7 @@ function Remove-SafeDirectoryTree {
     }
     $Report.Total = $orderedItems.Count
 
-    if (-not (Test-MoleRemovalCondition $CanRemove)) {
+    if (-not (Test-SweeprRemovalCondition $CanRemove)) {
         $Report.Reason = "refused: cache owner is active or unknown"
         $Report.OwnerHeld = $true
         return $false
@@ -439,7 +439,7 @@ function Remove-SafeDirectoryTree {
     foreach ($item in $orderedItems) {
         try {
             if (-not (Test-SafePath $item.FullName -WhitelistState $WhitelistState) -or
-                -not (Test-MolePathSnapshot $item.MolePathSnapshot)) {
+                -not (Test-SweeprPathSnapshot $item.SweeprPathSnapshot)) {
                 $Report.Reason = "stopped at $($item.FullName): it changed or is protected"
                 return $false
             }
@@ -455,7 +455,7 @@ function Remove-SafeDirectoryTree {
     }
 
     try {
-        if (-not (Test-SafePath $Path -WhitelistState $WhitelistState) -or -not (Test-MolePathSnapshot $tree.RootSnapshot)) {
+        if (-not (Test-SafePath $Path -WhitelistState $WhitelistState) -or -not (Test-SweeprPathSnapshot $tree.RootSnapshot)) {
             $Report.Reason = "kept the folder itself: it changed or is protected"
             return $false
         }
@@ -471,16 +471,16 @@ function Remove-SafeDirectoryTree {
 }
 
 # The shell has a dedicated recycle operation, separate from permanent deletion.
-function Move-MoleItemToRecycleBin {
+function Move-SweeprItemToRecycleBin {
     param([string]$Path, $Snapshot)
 
-    if (-not ('freeMole.RecycleOnly' -as [type])) {
+    if (-not ('Sweepr.RecycleOnly' -as [type])) {
         Add-Type -TypeDefinition @'
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-namespace freeMole {
+namespace Sweepr {
     public static class RecycleOnly {
         // ITransferSource exposes recycling separately from permanent removal.
         // We never call RemoveItem or fall back to another deletion API.
@@ -548,16 +548,16 @@ namespace freeMole {
     }
     # Compilation and sizing may have taken time. Rebind the source and apply
     # the same protection/whitelist checks to its current children before moving.
-    if (-not (Test-SafePath $Path) -or -not (Test-MolePathSnapshot $Snapshot)) {
+    if (-not (Test-SafePath $Path) -or -not (Test-SweeprPathSnapshot $Snapshot)) {
         throw 'Leftover path changed or is protected.'
     }
     if (Test-Path -LiteralPath $Path -PathType Container) {
         $tree = Get-SafeDirectoryTreeItems -Path $Path
-        if (-not $tree.Success -or -not (Test-MolePathSnapshot $Snapshot)) {
+        if (-not $tree.Success -or -not (Test-SweeprPathSnapshot $Snapshot)) {
             throw 'Could not verify the leftover directory.'
         }
     }
-    $null = [freeMole.RecycleOnly]::Move($Snapshot.Path)
+    $null = [Sweepr.RecycleOnly]::Move($Snapshot.Path)
 }
 
 function Remove-SafeItem {
@@ -599,15 +599,15 @@ function Remove-SafeItem {
         return $false
     }
 
-    $pathSnapshot = Get-MolePathSnapshot -Path $Path -AllowLeafLink:(-not $Recycle)
+    $pathSnapshot = Get-SweeprPathSnapshot -Path $Path -AllowLeafLink:(-not $Recycle)
     if (-not $pathSnapshot) { return $false }
     $isDirectory = Test-Path -LiteralPath $Path -PathType Container
     $validatedTree = $null
     if ($isDirectory) {
         $validatedTree = Get-SafeDirectoryTreeItems -Path $Path -WhitelistState $whitelistState
         if (-not $validatedTree.Success) {
-            if (-not $script:MoleDryRunMode) {
-                Write-MoleOperation -Action "SKIPPED" -Path $Path -Detail "refused: $($validatedTree['Reason'])"
+            if (-not $script:SweeprDryRunMode) {
+                Write-SweeprOperation -Action "SKIPPED" -Path $Path -Detail "refused: $($validatedTree['Reason'])"
             }
             return $false
         }
@@ -618,19 +618,19 @@ function Remove-SafeItem {
     $sizeKB = [Math]::Ceiling($size / 1024)
     $sizeHuman = Format-ByteSize -Bytes $size
     
-    if (-not (Test-SafePath $Path -WhitelistState $whitelistState) -or -not (Test-MolePathSnapshot $pathSnapshot)) { return $false }
+    if (-not (Test-SafePath $Path -WhitelistState $whitelistState) -or -not (Test-SweeprPathSnapshot $pathSnapshot)) { return $false }
 
     if ($null -ne $Guard) {
         try { $allowed = & $Guard $Path } catch { return $false }
         if ($allowed -isnot [bool] -or -not $allowed) { return $false }
     }
-    if (-not (Test-MolePathSnapshot $pathSnapshot)) { return $false }
+    if (-not (Test-SweeprPathSnapshot $pathSnapshot)) { return $false }
 
     # Handle dry run
-    if ($script:MoleDryRunMode) {
+    if ($script:SweeprDryRunMode) {
         if ($Recycle -and $isDirectory) {
             $previewTree = Get-SafeDirectoryTreeItems -Path $Path -WhitelistState $whitelistState
-            if (-not $previewTree.Success -or -not (Test-MolePathSnapshot $pathSnapshot)) { return $false }
+            if (-not $previewTree.Success -or -not (Test-SweeprPathSnapshot $pathSnapshot)) { return $false }
         }
         if (-not $Recycle) { $script:TotalSizeCleaned += $sizeKB }
         $script:FilesCleaned++
@@ -645,19 +645,19 @@ function Remove-SafeItem {
     # Perform removal
     try {
         if ($Recycle) {
-            Move-MoleItemToRecycleBin -Path $Path -Snapshot $pathSnapshot
+            Move-SweeprItemToRecycleBin -Path $Path -Snapshot $pathSnapshot
         }
         elseif ($isDirectory) {
             $treeReport = @{}
             if (-not (Remove-SafeDirectoryTree -Path $Path -ValidatedTree $validatedTree -Report $treeReport -WhitelistState $whitelistState)) {
-                Write-MoleOperation -Action "FAILED" -Path $Path -Detail (Format-MoleTreeRemovalDetail $treeReport)
+                Write-SweeprOperation -Action "FAILED" -Path $Path -Detail (Format-SweeprTreeRemovalDetail $treeReport)
                 return $false
             }
         }
         else {
             Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
         }
-        Write-MoleOperation -Action $(if ($Recycle) { "RECYCLED" } else { "REMOVED" }) -Path $Path -Detail $sizeHuman
+        Write-SweeprOperation -Action $(if ($Recycle) { "RECYCLED" } else { "REMOVED" }) -Path $Path -Detail $sizeHuman
         
         # Update statistics
         if (-not $Recycle) { $script:TotalSizeCleaned += $sizeKB }
@@ -673,7 +673,7 @@ function Remove-SafeItem {
     }
     catch {
         Write-Debug "Failed to remove $Path : $_"
-        Write-MoleOperation -Action "FAILED" -Path $Path -Detail $_.Exception.Message
+        Write-SweeprOperation -Action "FAILED" -Path $Path -Detail $_.Exception.Message
         if ($Recycle) { Write-Warning "Could not recycle $Path. Review the remaining files manually." }
         return $false
     }
@@ -708,7 +708,7 @@ function Remove-SafeItems {
             continue
         }
 
-        $pathSnapshot = Get-MolePathSnapshot -Path $path -AllowLeafLink
+        $pathSnapshot = Get-SweeprPathSnapshot -Path $path -AllowLeafLink
         if (-not $pathSnapshot) { continue }
         $isDirectory = Test-Path -LiteralPath $path -PathType Container
         $validatedTree = $null
@@ -716,19 +716,19 @@ function Remove-SafeItems {
             $validatedTree = Get-SafeDirectoryTreeItems -Path $path -WhitelistState $whitelistState
             if (-not $validatedTree.Success) {
                 $failedCount++
-                if (-not $script:MoleDryRunMode) {
-                    Write-MoleOperation -Action "SKIPPED" -Path $path -Detail "refused: $($validatedTree['Reason'])"
+                if (-not $script:SweeprDryRunMode) {
+                    Write-SweeprOperation -Action "SKIPPED" -Path $path -Detail "refused: $($validatedTree['Reason'])"
                 }
                 continue
             }
         }
         
         $size = if ($null -ne $validatedTree) { Get-ValidatedTreeSize -Tree $validatedTree } else { Get-PathSize -Path $path }
-        if (-not (Test-SafePath $path -WhitelistState $whitelistState) -or -not (Test-MolePathSnapshot $pathSnapshot)) { continue }
+        if (-not (Test-SafePath $path -WhitelistState $whitelistState) -or -not (Test-SweeprPathSnapshot $pathSnapshot)) { continue }
 
-        if (-not (Test-MoleRemovalCondition $CanRemove)) { continue }
+        if (-not (Test-SweeprRemovalCondition $CanRemove)) { continue }
 
-        if ($script:MoleDryRunMode) {
+        if ($script:SweeprDryRunMode) {
             $totalSize += $size
             $removedCount++
             $dryRunPaths.Add($path)
@@ -740,25 +740,25 @@ function Remove-SafeItems {
                 $treeReport = @{}
                 if (-not (Remove-SafeDirectoryTree -Path $path -ValidatedTree $validatedTree -Report $treeReport -WhitelistState $whitelistState -CanRemove $CanRemove)) {
                     if ($treeReport['OwnerHeld']) {
-                        Write-MoleOperation -Action "SKIPPED" -Path $path -Detail $treeReport.Reason
+                        Write-SweeprOperation -Action "SKIPPED" -Path $path -Detail $treeReport.Reason
                         continue
                     }
                     $failedCount++
-                    Write-MoleOperation -Action "FAILED" -Path $path -Detail (Format-MoleTreeRemovalDetail $treeReport)
+                    Write-SweeprOperation -Action "FAILED" -Path $path -Detail (Format-SweeprTreeRemovalDetail $treeReport)
                     continue
                 }
             }
             else {
                 Remove-Item -LiteralPath $path -Force -ErrorAction Stop
             }
-            Write-MoleOperation -Action "REMOVED" -Path $path -Detail (Format-ByteSize -Bytes $size)
+            Write-SweeprOperation -Action "REMOVED" -Path $path -Detail (Format-ByteSize -Bytes $size)
             $totalSize += $size
             $removedCount++
         }
         catch {
             $failedCount++
             Write-Debug "Failed to remove: $path - $_"
-            Write-MoleOperation -Action "FAILED" -Path $path -Detail $_.Exception.Message
+            Write-SweeprOperation -Action "FAILED" -Path $path -Detail $_.Exception.Message
         }
     }
     
@@ -771,7 +771,7 @@ function Remove-SafeItems {
         $script:FilesCleaned += $removedCount
         $script:TotalItems++
         $noun = if ($removedCount -eq 1) { 'item' } else { 'items' }
-        if ($script:MoleDryRunMode) {
+        if ($script:SweeprDryRunMode) {
             Write-DryRun "$Description $($script:Colors.Yellow)($removedCount $noun, $sizeHuman dry)$($script:Colors.NC)"
             Add-DryRunListEntries -Description $Description -Paths $dryRunPaths.ToArray()
         }
@@ -824,14 +824,14 @@ function Remove-OldFiles {
         return
     }
     
-    $rootSnapshot = Get-MolePathSnapshot -Path $Path
+    $rootSnapshot = Get-SweeprPathSnapshot -Path $Path
     if (-not $rootSnapshot) { return }
     $cutoffDate = (Get-Date).AddDays(-$DaysOld)
     
     $oldFiles = Get-ChildItem -LiteralPath $Path -Filter $Filter -File -Force -ErrorAction SilentlyContinue |
                 Where-Object { $_.LastWriteTime -lt $cutoffDate }
     
-    if ($oldFiles -and (Test-MolePathSnapshot $rootSnapshot)) {
+    if ($oldFiles -and (Test-SweeprPathSnapshot $rootSnapshot)) {
         $paths = $oldFiles | ForEach-Object { $_.FullName }
         Remove-SafeItems -Paths $paths -Description "$Description (>${DaysOld}d old)"
     }
@@ -858,13 +858,13 @@ function Clear-DirectoryContents {
         return
     }
     
-    if (-not (Test-MoleRemovalCondition $CanRemove)) { return }
+    if (-not (Test-SweeprRemovalCondition $CanRemove)) { return }
 
-    $rootSnapshot = Get-MolePathSnapshot -Path $Path
+    $rootSnapshot = Get-SweeprPathSnapshot -Path $Path
     if (-not $rootSnapshot) { return }
     try { $items = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop) }
     catch { return }
-    if ($items -and (Test-MolePathSnapshot $rootSnapshot)) {
+    if ($items -and (Test-SweeprPathSnapshot $rootSnapshot)) {
         $paths = $items | ForEach-Object { $_.FullName }
         $desc = if ($Description) { $Description } else { Split-Path -Leaf $Path }
         Remove-SafeItems -Paths $paths -Description $desc -CanRemove $CanRemove
@@ -906,7 +906,7 @@ function Set-DryRunMode {
         Enable or disable dry-run mode
     #>
     param([bool]$Enabled)
-    $script:MoleDryRunMode = $Enabled
+    $script:SweeprDryRunMode = $Enabled
 }
 
 function Test-DryRunMode {
@@ -914,7 +914,7 @@ function Test-DryRunMode {
     .SYNOPSIS
         Check if dry-run mode is enabled
     #>
-    return $script:MoleDryRunMode
+    return $script:SweeprDryRunMode
 }
 
 # ============================================================================

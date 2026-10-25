@@ -1,4 +1,4 @@
-# freeMole Windows - Command Tests
+# Sweepr Windows - Command Tests
 # Pester tests for bin/ command scripts
 
 BeforeAll {
@@ -173,7 +173,7 @@ param(
     [object[]]$RemainingArguments
 )
 
-Set-Content -LiteralPath $env:MOLE_INSTALL_CAPTURE -Value $InstallDir -NoNewline
+Set-Content -LiteralPath $env:SWEEPR_INSTALL_CAPTURE -Value $InstallDir -NoNewline
 '@ | Set-Content (Join-Path $fixtureRoot "install.ps1")
 
             @'
@@ -196,10 +196,10 @@ $global:LASTEXITCODE = 0
 switch -Regex ($commandLine) {
     '^config --get https?\.proxy$' { $global:LASTEXITCODE = 1; break }
     '^status --porcelain --untracked-files=no$' { break }
-    '^remote get-url origin$' { "https://github.com/brummilab/freeMole.git"; break }
+    '^remote get-url origin$' { "https://github.com/brummilab/sweepr.git"; break }
     '^branch --show-current$' { "main"; break }
     '^rev-parse --short HEAD$' { "abc123"; break }
-    '^pull --ff-only --tags origin windows$' { Set-Content -LiteralPath ($env:MOLE_INSTALL_CAPTURE + '.git') -Value $commandLine; break }
+    '^pull --ff-only --tags origin windows$' { Set-Content -LiteralPath ($env:SWEEPR_INSTALL_CAPTURE + '.git') -Value $commandLine; break }
     default {
         Write-Error "Unexpected git command: $commandLine"
         $global:LASTEXITCODE = 1
@@ -208,10 +208,10 @@ switch -Regex ($commandLine) {
 '@ | Set-Content (Join-Path $fakeTools "git.ps1")
 
             $originalPath = $env:PATH
-            $originalCapture = $env:MOLE_INSTALL_CAPTURE
+            $originalCapture = $env:SWEEPR_INSTALL_CAPTURE
             try {
                 $env:PATH = "$fakeTools;$originalPath"
-                $env:MOLE_INSTALL_CAPTURE = $capturePath
+                $env:SWEEPR_INSTALL_CAPTURE = $capturePath
 
                 & $fixtureUpdater
 
@@ -221,7 +221,7 @@ switch -Regex ($commandLine) {
             }
             finally {
                 $env:PATH = $originalPath
-                $env:MOLE_INSTALL_CAPTURE = $originalCapture
+                $env:SWEEPR_INSTALL_CAPTURE = $originalCapture
             }
         }
 
@@ -239,14 +239,14 @@ switch -Regex ($commandLine) {
             New-Item -ItemType File -Path (Join-Path $fixtureBin "analyze.exe"), (Join-Path $fixtureBin "status.exe") -Force | Out-Null
 
             @'
-function Get-MoleVersionString {
+function Get-SweeprVersionString {
     param([string]$RootDir)
     return "1.30.0"
 }
 '@ | Set-Content (Join-Path $fixtureCore "version.ps1")
 
             @'
-function Get-MoleVersionFromScriptFile {
+function Get-SweeprVersionFromScriptFile {
     param([string]$WindowsDir)
     return "1.30.0"
 }
@@ -282,21 +282,21 @@ if (-not $?) { exit 1 }
                 Pop-Location
             }
 
-            (Join-Path $fixtureRoot "freemole.cmd") | Should -Exist
+            (Join-Path $fixtureRoot "sweepr.cmd") | Should -Exist
             $strayInstallDir | Should -Not -Exist
         }
 
         It "Should recover the legacy updater PATH intent without creating a shortcut" {
             $probe = Join-Path $TestDrive "legacy-argument-probe.ps1"
             @'
-. $env:MOLE_INSTALL_SCRIPT -ShowHelp 6>$null
+. $env:SWEEPR_INSTALL_SCRIPT -ShowHelp 6>$null
 
 $withoutPath = Resolve-InstallInvocation `
-    -SourceDir "C:\freeMole" `
+    -SourceDir "C:\Sweepr" `
     -RequestedInstallDir "-InstallDir" `
     -RequestedAddToPath
 $withPath = Resolve-InstallInvocation `
-    -SourceDir "C:\freeMole" `
+    -SourceDir "C:\Sweepr" `
     -RequestedInstallDir "-InstallDir" `
     -RequestedAddToPath `
     -RequestedCreateShortcut
@@ -310,18 +310,18 @@ $withPath = Resolve-InstallInvocation `
 } | ConvertTo-Json -Compress
 '@ | Set-Content $probe
 
-            $originalInstallScript = $env:MOLE_INSTALL_SCRIPT
+            $originalInstallScript = $env:SWEEPR_INSTALL_SCRIPT
             try {
-                $env:MOLE_INSTALL_SCRIPT = $script:InstallScript
+                $env:SWEEPR_INSTALL_SCRIPT = $script:InstallScript
                 $result = & powershell -NoProfile -ExecutionPolicy Bypass -File $probe | ConvertFrom-Json
             }
             finally {
-                $env:MOLE_INSTALL_SCRIPT = $originalInstallScript
+                $env:SWEEPR_INSTALL_SCRIPT = $originalInstallScript
             }
 
-            $result.WithoutPathInstallDir | Should -Be "C:\freeMole"
+            $result.WithoutPathInstallDir | Should -Be "C:\Sweepr"
             $result.WithoutPathAddToPath | Should -BeFalse
-            $result.WithPathInstallDir | Should -Be "C:\freeMole"
+            $result.WithPathInstallDir | Should -Be "C:\Sweepr"
             $result.WithPathAddToPath | Should -BeTrue
             $result.WithPathCreateShortcut | Should -BeFalse
         }
@@ -338,28 +338,28 @@ Describe "Remove Command" {
 
         It "Should mention uninstall behavior" {
             $result = & powershell -ExecutionPolicy Bypass -File "$script:BinDir\remove.ps1" -ShowHelp 2>&1
-            $result -join "`n" | Should -Match "Remove freeMole|PATH|config"
+            $result -join "`n" | Should -Match "Remove Sweepr|PATH|config"
         }
     }
 }
 
 Describe "Main Entry Point" {
-    Context "freemole.ps1" {
+    Context "sweepr.ps1" {
         BeforeAll {
-            $script:MolePath = Join-Path $script:WindowsDir "freemole.ps1"
+            $script:SweeprPath = Join-Path $script:WindowsDir "sweepr.ps1"
         }
         
         It "Should show help without error" {
-            $result = & powershell -ExecutionPolicy Bypass -File $script:MolePath -ShowHelp 2>&1
+            $result = & powershell -ExecutionPolicy Bypass -File $script:SweeprPath -ShowHelp 2>&1
             $result | Should -Not -BeNullOrEmpty
         }
         
         It "Should show version without error" {
-            $result = & powershell -ExecutionPolicy Bypass -File $script:MolePath -Version 2>&1
+            $result = & powershell -ExecutionPolicy Bypass -File $script:SweeprPath -Version 2>&1
             $result | Should -Not -BeNullOrEmpty
             $output = $result -join "`n"
             $output | Should -Not -Match $script:VisualDefaultsErrorPattern
-            $output | Should -Match "freeMole|v\d+\.\d+"
+            $output | Should -Match "Sweepr|v\d+\.\d+"
         }
 
         It "Renders the full menu before waiting for input" {
@@ -367,7 +367,7 @@ Describe "Main Entry Point" {
             # 5.1, whose unrelated persistence store can fail before menu output.
             $start = New-Object System.Diagnostics.ProcessStartInfo
             $start.FileName = 'powershell.exe'
-            $start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $script:MolePath + '"'
+            $start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $script:SweeprPath + '"'
             $start.UseShellExecute = $false
             $start.CreateNoWindow = $true
             $start.RedirectStandardOutput = $true
@@ -400,7 +400,7 @@ Describe "Main Entry Point" {
         }
 
         It "Should list available commands in help" {
-            $result = & powershell -ExecutionPolicy Bypass -File $script:MolePath -ShowHelp 2>&1
+            $result = & powershell -ExecutionPolicy Bypass -File $script:SweeprPath -ShowHelp 2>&1
             $helpText = $result -join "`n"
             $helpText | Should -Match "clean"
             $helpText | Should -Match "uninstall"
@@ -419,7 +419,7 @@ Describe "Installer Script" {
         It "Should read the version from VERSION" {
             $source = Get-Content $script:InstallScript -Raw
             $source | Should -Match "version\.ps1"
-            $source | Should -Match 'Get-MoleVersionString -RootDir \$script:SourceDir'
+            $source | Should -Match 'Get-SweeprVersionString -RootDir \$script:SourceDir'
         }
 
         It "Should reject protected root install and uninstall paths" {
@@ -454,8 +454,8 @@ Describe "Source Install Hygiene" {
     Context ".gitignore" {
         It "Should ignore generated launcher batch files" {
             $source = Get-Content (Join-Path $script:WindowsDir ".gitignore") -Raw
-            $source | Should -Match '(?m)^freemole\.cmd$'
-            $source | Should -Match '(?m)^fm\.cmd$'
+            $source | Should -Match '(?m)^sweepr\.cmd$'
+            $source | Should -Match '(?m)^sw\.cmd$'
         }
     }
 }

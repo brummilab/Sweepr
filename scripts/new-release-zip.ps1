@@ -1,4 +1,4 @@
-# freeMole Windows - writes a release zip whose entry names use forward slashes.
+# Sweepr Windows - writes a release zip whose entry names use forward slashes.
 #
 # Windows PowerShell's Compress-Archive and .NET Framework's
 # ZipFile.CreateFromDirectory store "bin\analyze.exe". The zip format expects

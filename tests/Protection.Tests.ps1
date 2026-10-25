@@ -1,4 +1,4 @@
-# freeMole Windows - protected path segments and user data clean must not touch
+# Sweepr Windows - protected path segments and user data clean must not touch
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -15,14 +15,14 @@ BeforeAll {
     . "$script:LibDir\clean\apps.ps1"
     . "$script:LibDir\clean\system.ps1"
 
-    $env:MOLE_DRY_RUN = "1"
+    $env:SWEEPR_DRY_RUN = "1"
     Set-DryRunMode -Enabled $true
 }
 
 AfterAll {
-    $env:MOLE_DRY_RUN = $null
+    $env:SWEEPR_DRY_RUN = $null
     Set-DryRunMode -Enabled $false
-    $script:MoleCleanPathGuard = $false
+    $script:SweeprCleanPathGuard = $false
 }
 
 Describe "Protected path segments" {
@@ -34,11 +34,11 @@ Describe "Protected path segments" {
     }
 
     AfterEach {
-        $script:MoleCleanPathGuard = $false
+        $script:SweeprCleanPathGuard = $false
     }
 
     It "Refuses Windows secret stores and the Start Menu for every command" {
-        $script:MoleCleanPathGuard = $false
+        $script:SweeprCleanPathGuard = $false
         $refused = @(
             "$script:Roaming\Microsoft\Credentials\ABCDEF"
             "$script:Local\Microsoft\Credentials"
@@ -55,7 +55,7 @@ Describe "Protected path segments" {
     }
 
     It "Refuses key, browser profile and transcript stores during clean" {
-        $script:MoleCleanPathGuard = $true
+        $script:SweeprCleanPathGuard = $true
         $refused = @(
             "$script:P\.ssh\id_ed25519"
             "$script:P\.SSH"
@@ -88,7 +88,7 @@ Describe "Protected path segments" {
     }
 
     It "Matches whole segments, not names that only start the same" {
-        $script:MoleCleanPathGuard = $true
+        $script:SweeprCleanPathGuard = $true
         $allowed = @(
             "$script:P\.awsome\cache\x"
             "$script:P\.sshd-cache\x"
@@ -106,14 +106,14 @@ Describe "Protected path segments" {
     }
 
     It "Leaves the clean-only segments to clean, so purge can remove node_modules\cookies" {
-        $script:MoleCleanPathGuard = $false
+        $script:SweeprCleanPathGuard = $false
         Test-SafePath -Path (Join-Path $TestDrive "project\node_modules\cookies\index.js") | Should -BeTrue
     }
 
-    It "Turns the clean-only guard on in fm clean" {
+    It "Turns the clean-only guard on in sw clean" {
         $source = Get-Content -Path (Join-Path $script:WindowsDir "bin\clean.ps1")
         $code = @($source | Where-Object { $_ -notmatch '^\s*#' })
-        @($code | Where-Object { $_ -match '^\s*\$script:MoleCleanPathGuard\s*=\s*\$true\s*$' }).Count | Should -Be 1
+        @($code | Where-Object { $_ -match '^\s*\$script:SweeprCleanPathGuard\s*=\s*\$true\s*$' }).Count | Should -Be 1
     }
 }
 
@@ -205,7 +205,7 @@ Describe "Clean leaves user data alone" {
         @{ personal = @{ path = $dropbox } } | ConvertTo-Json | Set-Content -Path "$env:LOCALAPPDATA\Dropbox\info.json"
 
         # The segment guard is off here, so these assertions are about the rows themselves.
-        $script:MoleCleanPathGuard = $false
+        $script:SweeprCleanPathGuard = $false
         $script:ExportListFile = Join-Path $root "clean-list.txt"
         Reset-CleanupStats
 

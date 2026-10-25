@@ -23,37 +23,37 @@ BeforeAll {
 }
 Describe 'Environment dry-run at command entrypoints' {
     BeforeEach {
-        $script:SavedDryRun=$env:MOLE_DRY_RUN
+        $script:SavedDryRun=$env:SWEEPR_DRY_RUN
         $DebugMode=$false; $ShowHelp=$false; $Whitelist=$false; $System=$false; $GameMedia=$false; $GpuShaders=$false
         $script:Icons=@{DryRun='preview'}
         Mock Clear-Host {}
     }
-    AfterEach { $env:MOLE_DRY_RUN=$script:SavedDryRun }
+    AfterEach { $env:SWEEPR_DRY_RUN=$script:SavedDryRun }
     It 'Keeps environment-only clean in preview mode' {
         Import-EntryMain clean
-        $DryRun=$false; $env:MOLE_DRY_RUN='1'
+        $DryRun=$false; $env:SWEEPR_DRY_RUN='1'
         Mock Start-Cleanup {}
         Main
         Should -Invoke Start-Cleanup -Times 1 -Exactly -ParameterFilter { $IsDryRun }
-        $env:MOLE_DRY_RUN | Should -Be '1'
+        $env:SWEEPR_DRY_RUN | Should -Be '1'
     }
     It 'Keeps explicit clean preview when the environment says zero' {
         Import-EntryMain clean
-        $DryRun=$true; $env:MOLE_DRY_RUN='0'
+        $DryRun=$true; $env:SWEEPR_DRY_RUN='0'
         Mock Start-Cleanup {}
         Main
         Should -Invoke Start-Cleanup -Times 1 -Exactly -ParameterFilter { $IsDryRun }
     }
     It 'Keeps ordinary clean outside preview' {
         Import-EntryMain clean
-        $DryRun=$false; $env:MOLE_DRY_RUN=$null
+        $DryRun=$false; $env:SWEEPR_DRY_RUN=$null
         Mock Start-Cleanup {}
         Main
         Should -Invoke Start-Cleanup -Times 1 -Exactly -ParameterFilter { -not $IsDryRun }
     }
     It 'Passes GPU shader caches through only when asked' {
         Import-EntryMain clean
-        $DryRun=$true; $env:MOLE_DRY_RUN=$null
+        $DryRun=$true; $env:SWEEPR_DRY_RUN=$null
         Mock Start-Cleanup {}
         Main
         Should -Invoke Start-Cleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGpuShaders }
@@ -63,7 +63,7 @@ Describe 'Environment dry-run at command entrypoints' {
     }
     It 'Keeps environment-only optimize in preview mode' {
         Import-EntryMain optimize
-        $DryRun=$false; $env:MOLE_DRY_RUN='1'
+        $DryRun=$false; $env:SWEEPR_DRY_RUN='1'
         Mock Optimize-DiskDrive { $script:ObservedDryRun=$script:DryRun }
         Main 6>$null
         $script:ObservedDryRun | Should -BeTrue
@@ -74,7 +74,7 @@ Describe 'GPU shader caches wait for --gpu-shaders' {
         $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'bin\clean.ps1'),[ref]$null,[ref]$null)
         $flow = $ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Start-Cleanup'},$true)
         Set-Item function:script:Invoke-CleanFlow ([scriptblock]::Create($flow.Body.Extent.Text.TrimStart('{').TrimEnd('}')))
-        foreach ($name in 'Get-WindowsVersion','Get-FreeSpace','Reset-CleanupStats','Set-DryRunMode','Invoke-UserCleanup','Clear-BrowserCaches','Clear-GPUShaderCaches','Clear-AppCaches','Invoke-DevToolsCleanup','Invoke-AppCleanup','Invoke-SystemCleanup','Get-CleanupStats','Show-CleanupSummary','Write-MoleError') {
+        foreach ($name in 'Get-WindowsVersion','Get-FreeSpace','Reset-CleanupStats','Set-DryRunMode','Invoke-UserCleanup','Clear-BrowserCaches','Clear-GPUShaderCaches','Clear-AppCaches','Invoke-DevToolsCleanup','Invoke-AppCleanup','Invoke-SystemCleanup','Get-CleanupStats','Show-CleanupSummary','Write-SweeprError') {
             Set-Item "function:script:$name" {}
         }
     }

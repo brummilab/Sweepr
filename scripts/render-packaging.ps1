@@ -1,4 +1,4 @@
-# freeMole Windows - renders the winget and Scoop manifests for one
+# Sweepr Windows - renders the winget and Scoop manifests for one
 # published release from the templates in packaging/.
 #
 #   .\scripts\render-packaging.ps1 -Version 1.31.0 -SumsFile release\SHA256SUMS.txt
@@ -31,7 +31,7 @@ if (-not $OutDir) {
     $OutDir = Join-Path $projectRoot "release\packaging"
 }
 
-$zipName = "freemole-$Version-x64.zip"
+$zipName = "sweepr-$Version-x64.zip"
 $zipHash = $null
 foreach ($line in (Get-Content -LiteralPath $SumsFile)) {
     $entry = $line.Trim([char]0xFEFF).Trim()
@@ -47,16 +47,16 @@ $tag = "V$Version-windows"
 $values = @{
     "VERSION"      = $Version
     "TAG"          = $tag
-    "ZIP_URL"      = "https://github.com/brummilab/freeMole/releases/download/$tag/$zipName"
+    "ZIP_URL"      = "https://github.com/brummilab/sweepr/releases/download/$tag/$zipName"
     "ZIP_SHA256"   = $zipHash
     "RELEASE_DATE" = $ReleaseDate
 }
 
 $templates = @(
-    @{ From = "winget\tw93.MoleCLI.yaml"; To = "winget\manifests\t\tw93\MoleCLI\$Version\tw93.MoleCLI.yaml" },
-    @{ From = "winget\tw93.MoleCLI.installer.yaml"; To = "winget\manifests\t\tw93\MoleCLI\$Version\tw93.MoleCLI.installer.yaml" },
-    @{ From = "winget\tw93.MoleCLI.locale.en-US.yaml"; To = "winget\manifests\t\tw93\MoleCLI\$Version\tw93.MoleCLI.locale.en-US.yaml" },
-    @{ From = "scoop\mole.json"; To = "scoop\mole.json" }
+    @{ From = "winget\brummilab.Sweepr.yaml"; To = "winget\manifests\b\brummilab\Sweepr\$Version\brummilab.Sweepr.yaml" },
+    @{ From = "winget\brummilab.Sweepr.installer.yaml"; To = "winget\manifests\b\brummilab\Sweepr\$Version\brummilab.Sweepr.installer.yaml" },
+    @{ From = "winget\brummilab.Sweepr.locale.en-US.yaml"; To = "winget\manifests\b\brummilab\Sweepr\$Version\brummilab.Sweepr.locale.en-US.yaml" },
+    @{ From = "scoop\sweepr.json"; To = "scoop\sweepr.json" }
 )
 
 $utf8 = New-Object System.Text.UTF8Encoding $false

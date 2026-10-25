@@ -144,8 +144,8 @@ Describe 'Tree walk snapshots' {
         $items = @(Get-TreeItemsNoFollow -Path $script:Root)
         $items.Count | Should -BeGreaterThan 5
         foreach ($item in $items) {
-            $fresh = Get-MolePathSnapshot -Path $item.FullName -AllowLeafLink
-            $bound = $item.MolePathSnapshot
+            $fresh = Get-SweeprPathSnapshot -Path $item.FullName -AllowLeafLink
+            $bound = $item.SweeprPathSnapshot
             $bound.Path | Should -Be $fresh.Path
             $bound.AllowLeafLink | Should -Be $fresh.AllowLeafLink
             @($bound.Entries.Keys | Sort-Object) | Should -Be @($fresh.Entries.Keys | Sort-Object) -Because $item.FullName
@@ -153,9 +153,9 @@ Describe 'Tree walk snapshots' {
         }
     }
     It 'Binds the root once and each child from its parent instead of reopening every ancestor' {
-        $script:RealSnapshot = ${function:Get-MolePathSnapshot}
+        $script:RealSnapshot = ${function:Get-SweeprPathSnapshot}
         $script:SnapshotCalls = 0
-        Mock Get-MolePathSnapshot {
+        Mock Get-SweeprPathSnapshot {
             $script:SnapshotCalls++
             & $script:RealSnapshot -Path $Path -AllowLeafLink:$AllowLeafLink
         }
@@ -172,11 +172,11 @@ Describe 'Tree walk snapshots' {
     It 'Fails the recheck when a directory is replaced after the walk' {
         $items = @(Get-TreeItemsNoFollow -Path $script:Root)
         $target = $items | Where-Object { $_.FullName -eq "$script:Root\a\b\c\deep.txt" }
-        Test-MolePathSnapshot $target.MolePathSnapshot | Should -BeTrue
+        Test-SweeprPathSnapshot $target.SweeprPathSnapshot | Should -BeTrue
         Rename-Item "$script:Root\a\b" 'b-old'
         New-Item -ItemType Directory -Path "$script:Root\a\b\c" -Force | Out-Null
         'x' | Set-Content "$script:Root\a\b\c\deep.txt"
-        Test-MolePathSnapshot $target.MolePathSnapshot | Should -BeFalse
+        Test-SweeprPathSnapshot $target.SweeprPathSnapshot | Should -BeFalse
     }
 }
 
@@ -352,8 +352,8 @@ Describe 'Owner cache cleanup whitelist' {
         function docker { }
         # Resolution is a read-only probe; the fallback lets the old implementation
         # run so each assertion observes its mutation instead of a missing command.
-        if (-not (Get-Command Get-MoleOwnerCachePath -ErrorAction SilentlyContinue)) {
-            function Get-MoleOwnerCachePath { param($Name,$Arguments) $null }
+        if (-not (Get-Command Get-SweeprOwnerCachePath -ErrorAction SilentlyContinue)) {
+            function Get-SweeprOwnerCachePath { param($Name,$Arguments) $null }
         }
     }
     BeforeEach {
@@ -375,8 +375,8 @@ Describe 'Owner cache cleanup whitelist' {
         $env:MISE_CACHE_DIR = $script:OwnerCache
         New-Item -ItemType Directory -Path (Join-Path $script:OwnerRoot 'pnpm\store') -Force | Out-Null
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value $script:OwnerCache
-        Mock Get-MoleOwnerCachePath { $script:OwnerCache }
-        Mock Invoke-MoleOwnerProcess { [pscustomobject]@{ Output = '' } }
+        Mock Get-SweeprOwnerCachePath { $script:OwnerCache }
+        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
         Mock npm { $global:LASTEXITCODE=0 }
         Mock pnpm { $global:LASTEXITCODE=0 }
         Mock pip { $global:LASTEXITCODE=0 }
@@ -396,37 +396,37 @@ Describe 'Owner cache cleanup whitelist' {
     }
     It 'Does not invoke npm or pnpm mutations for a whitelisted resolved root' {
         Clear-NpmCache
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
         Should -Invoke npm -Times 0 -ParameterFilter { $args -contains 'clean' }
         Should -Invoke pnpm -Times 0 -ParameterFilter { $args -contains 'prune' }
     }
     It 'Does not invoke pip purge for a whitelisted resolved root' {
         Clear-PythonCaches
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
         Should -Invoke pip -Times 0 -ParameterFilter { $args -contains 'purge' }
     }
     It 'Does not invoke go clean for a whitelisted resolved root' {
         Clear-GoCaches
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
         Should -Invoke go -Times 0 -ParameterFilter { $args -contains 'clean' }
     }
     It 'Does not invoke mise clear for a whitelisted resolved root' {
         Clear-MiseCache
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
         Should -Invoke mise -Times 0 -ParameterFilter { $args -contains 'clear' }
     }
     It 'Runs an owner for a known unprotected ordinary cache' {
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
-        Invoke-MoleOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-MoleOwnerProcess -Times 1 -ParameterFilter { $TimeoutSeconds -eq 120 }
+        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 1 -ParameterFilter { $TimeoutSeconds -eq 120 }
     }
     It 'Reads the whitelist once for the boundary recheck, not once per cache entry' {
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
         foreach ($i in 1..8) { Set-Content -LiteralPath (Join-Path $script:OwnerCache "entry$i.bin") -Value 'x' }
         $script:FixtureWhitelistState = Get-WhitelistState
         Mock Get-WhitelistState { $script:FixtureWhitelistState }
-        Invoke-MoleOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-MoleOwnerProcess -Times 1
+        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 1
         # The root check, the tree walk, the boundary recheck and the walk that
         # measures what the owner removed: one per pass, never one per entry.
         Should -Invoke Get-WhitelistState -Times 4 -Exactly
@@ -435,13 +435,13 @@ Describe 'Owner cache cleanup whitelist' {
         $child = Join-Path $script:OwnerCache 'keep.txt'
         Set-Content -LiteralPath $child -Value 'keep'
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value $child
-        Invoke-MoleOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
     }
     It 'Keeps a cache when its owner cannot resolve the root' {
-        Mock Get-MoleOwnerCachePath { $null }
+        Mock Get-SweeprOwnerCachePath { $null }
         Clear-NpmCache
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
     }
     It 'Preserves Gradle transaction locks' {
         $lock = Join-Path $env:USERPROFILE '.gradle\caches\build-cache-1\build-cache-1.lock'
@@ -453,7 +453,7 @@ Describe 'Owner cache cleanup whitelist' {
     It 'Keeps Docker builders whose mutation cannot be mapped to whitelist paths' {
         Clear-DockerCaches
         Should -Invoke docker -Times 0
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
     }
 }
 
@@ -465,12 +465,12 @@ Describe 'Bounded owner process execution' {
     }
     It 'Captures an actual read-only owner response with a spaced executable path' {
         Set-Content -LiteralPath $script:OwnerCommand -Encoding ASCII -Value @('@echo off', 'echo fixture-cache-root', 'exit /b 0')
-        $result = Invoke-MoleOwnerProcess -Name $script:OwnerCommand -Arguments @('query')
+        $result = Invoke-SweeprOwnerProcess -Name $script:OwnerCommand -Arguments @('query')
         $result.Output | Should -Be 'fixture-cache-root'
     }
     It 'Rejects an actual nonzero owner exit even when stdout looks like a path' {
         Set-Content -LiteralPath $script:OwnerCommand -Encoding ASCII -Value @('@echo off', 'echo C:\looks-like-a-cache', 'exit /b 9')
-        Invoke-MoleOwnerProcess -Name $script:OwnerCommand -Arguments @('query') | Should -BeNullOrEmpty
+        Invoke-SweeprOwnerProcess -Name $script:OwnerCommand -Arguments @('query') | Should -BeNullOrEmpty
     }
     It 'Bounds a slow owner and terminates its sleeping child' {
         $owner = Join-Path $script:ProcessFixture 'sleep.ps1'
@@ -484,7 +484,7 @@ Describe 'Bounded owner process execution' {
         $pidFile = Join-Path $script:ProcessFixture 'child.pid'
         $timer = [Diagnostics.Stopwatch]::StartNew()
         try {
-            Invoke-MoleOwnerProcess -Name $owner -Arguments @() -TimeoutSeconds 10 | Should -BeNullOrEmpty
+            Invoke-SweeprOwnerProcess -Name $owner -Arguments @() -TimeoutSeconds 10 | Should -BeNullOrEmpty
             $timer.Stop()
             $timer.Elapsed.TotalSeconds | Should -BeLessThan 20
             Test-Path -LiteralPath $pidFile | Should -BeTrue

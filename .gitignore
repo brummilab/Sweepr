@@ -1,4 +1,4 @@
-# freeMole (Windows) - .gitignore
+# Sweepr (Windows) - .gitignore
 
 # OS files
 .DS_Store
@@ -54,10 +54,10 @@ bin/*.exe
 cmd/analyze/*.exe
 cmd/status/*.exe
 release/
-freemole-windows.zip
-freemole-*-x64.zip
-freemole-*-x64.exe
-freemole-*-x64.msi
+sweepr-windows.zip
+sweepr-*-x64.zip
+sweepr-*-x64.exe
+sweepr-*-x64.msi
 SHA256SUMS.txt
 
 # Test artifacts
@@ -74,9 +74,8 @@ tests/*.log
 
 # Branch-specific local notes
 windows-readme-update.md
-mole_guidelines.md
 run_tests.ps1
 session.json
 journal/2026-03-11-safe-remove-design.md
-freemole.cmd
-fm.cmd
+sweepr.cmd
+sw.cmd

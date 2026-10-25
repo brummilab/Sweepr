@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// Byte formatting matches main's internal/units, which this branch does not
-// carry: binary (1024-based) units, the same convention Task Manager uses.
+// Byte formatting uses binary (1024-based) units, the same convention Task
+// Manager uses.
 
 // humanBytes formats with one decimal and a spaced unit label ("1.0 GB").
 // Values at exactly 1<<n stay in the smaller unit (1024 -> "1024 B").

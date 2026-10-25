@@ -12,13 +12,13 @@ const (
 	cacheDirTagSignature = "Signature: 8a477f597d28d172789f06886806bc55"
 )
 
-// isCleanableDir marks paths safe to delete manually (not handled by fm clean).
+// isCleanableDir marks paths safe to delete manually (not handled by sw clean).
 func isCleanableDir(path string) bool {
 	if path == "" {
 		return false
 	}
 
-	// Exclude paths fm clean already handles.
+	// Exclude paths sw clean already handles.
 	if isHandledByMoClean(path) {
 		return false
 	}
@@ -51,7 +51,7 @@ func hasValidCacheDirTag(path string) bool {
 	return string(buf) == cacheDirTagSignature
 }
 
-// isHandledByMoClean checks if a path is cleaned by fm clean.
+// isHandledByMoClean checks if a path is cleaned by sw clean.
 func isHandledByMoClean(path string) bool {
 	lower := strings.ToLower(path)
 	for _, fragment := range moCleanHandledPathFragments {

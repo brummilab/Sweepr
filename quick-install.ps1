@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
-# freeMole Quick Installer for Windows
-# One-liner install: iwr -useb https://raw.githubusercontent.com/brummilab/freeMole/main/quick-install.ps1 | iex
+# Sweepr Quick Installer for Windows
+# One-liner install: iwr -useb https://raw.githubusercontent.com/brummilab/sweepr/main/quick-install.ps1 | iex
 
 #Requires -Version 5.1
 
@@ -11,16 +11,15 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-# 1.30.0 installed into %LOCALAPPDATA%\freeMole, which is also the Mole for Windows
-# app's data folder. Keep updating such a source install in place; new
-# installs go to their own folder.
+# A source install found in %LOCALAPPDATA%\Sweepr keeps updating in place;
+# new installs go to their own folder.
 if (-not $InstallDir) {
-    $legacyDir = Join-Path $env:LOCALAPPDATA "freeMole"
-    if ((Test-Path (Join-Path $legacyDir ".git")) -and (Test-Path (Join-Path $legacyDir "freemole.ps1"))) {
+    $legacyDir = Join-Path $env:LOCALAPPDATA "Sweepr"
+    if ((Test-Path (Join-Path $legacyDir ".git")) -and (Test-Path (Join-Path $legacyDir "sweepr.ps1"))) {
         $InstallDir = $legacyDir
     }
     else {
-        $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\freemole-cli"
+        $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\sweepr-cli"
     }
 }
 
@@ -55,13 +54,13 @@ function Test-SourceInstall {
     return (Test-Path (Join-Path $Path ".git"))
 }
 
-$script:MoleGitProxyArguments = $null
+$script:SweeprGitProxyArguments = $null
 
 # Git ignores the Windows system proxy that PowerShell downloads use, so on a
 # machine that reaches GitHub only through that proxy, clone and pull fail
 # while every other download works. Pass the system proxy to git for this
 # run, unless the user already gave git a proxy of their own.
-function Get-MoleSystemProxy {
+function Get-SweeprSystemProxy {
     param([Uri]$Target)
 
     try {
@@ -77,14 +76,14 @@ function Get-MoleSystemProxy {
 }
 
 function Get-GitProxyArguments {
-    if ($null -ne $script:MoleGitProxyArguments) {
-        return $script:MoleGitProxyArguments
+    if ($null -ne $script:SweeprGitProxyArguments) {
+        return $script:SweeprGitProxyArguments
     }
-    $script:MoleGitProxyArguments = @()
+    $script:SweeprGitProxyArguments = @()
 
     foreach ($name in @("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY")) {
         if ([Environment]::GetEnvironmentVariable($name) -or [Environment]::GetEnvironmentVariable($name.ToLowerInvariant())) {
-            return $script:MoleGitProxyArguments
+            return $script:SweeprGitProxyArguments
         }
     }
     foreach ($key in @("http.proxy", "https.proxy")) {
@@ -95,15 +94,15 @@ function Get-GitProxyArguments {
             $configured = $null
         }
         if ($configured) {
-            return $script:MoleGitProxyArguments
+            return $script:SweeprGitProxyArguments
         }
     }
 
-    $proxy = Get-MoleSystemProxy -Target ([Uri]"https://github.com/")
+    $proxy = Get-SweeprSystemProxy -Target ([Uri]"https://github.com/")
     if ($proxy) {
-        $script:MoleGitProxyArguments = @("-c", "http.proxy=$proxy")
+        $script:SweeprGitProxyArguments = @("-c", "http.proxy=$proxy")
     }
-    return $script:MoleGitProxyArguments
+    return $script:SweeprGitProxyArguments
 }
 
 function Invoke-GitCommand {
@@ -160,8 +159,8 @@ function Get-PowerShellCommand {
 # Main installation
 try {
     Write-Host ""
-    Write-Host "  $($Colors.Cyan)freeMole Quick Installer$($Colors.NC)"
-    Write-Host "  $($Colors.Yellow)Installing freeMole from the main branch...$($Colors.NC)"
+    Write-Host "  $($Colors.Cyan)Sweepr Quick Installer$($Colors.NC)"
+    Write-Host "  $($Colors.Yellow)Installing Sweepr from the main branch...$($Colors.NC)"
     Write-Host ""
 
     # Check prerequisites
@@ -204,9 +203,9 @@ try {
         }
     }
     else {
-        Write-Step "Cloning freeMole source..."
+        Write-Step "Cloning Sweepr source..."
 
-        $cloneResult = Invoke-GitCommand -Arguments @("clone", "--quiet", "--single-branch", "--branch", "main", "https://github.com/brummilab/freeMole.git", $InstallDir)
+        $cloneResult = Invoke-GitCommand -Arguments @("clone", "--quiet", "--single-branch", "--branch", "main", "https://github.com/brummilab/sweepr.git", $InstallDir)
         if ($cloneResult.ExitCode -ne 0) {
             Write-ErrorMsg "Failed to clone source installer"
             if ($cloneResult.Text) {

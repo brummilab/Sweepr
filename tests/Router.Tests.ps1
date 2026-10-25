@@ -1,13 +1,13 @@
-# freeMole Windows - command router tests
-# freemole.ps1 turns --flags into parameters of bin\<command>.ps1. A flag the
+# Sweepr Windows - command router tests
+# sweepr.ps1 turns --flags into parameters of bin\<command>.ps1. A flag the
 # command does not declare must be refused, never passed on: a script without
-# [CmdletBinding()] ignores unknown parameters, and `fm remove --help` used to
-# uninstall freeMole.
+# [CmdletBinding()] ignores unknown parameters, and `sw remove --help` used to
+# uninstall Sweepr.
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir "freemole.ps1"), [ref]$null, [ref]$null)
-    foreach ($name in @("Resolve-CommandParameterName", "Invoke-MoleCommand")) {
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir "sweepr.ps1"), [ref]$null, [ref]$null)
+    foreach ($name in @("Resolve-CommandParameterName", "Invoke-SweeprCommand")) {
         $definition = $ast.Find({
                 param($node)
                 $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -15,15 +15,15 @@ BeforeAll {
         . ([scriptblock]::Create($definition.Extent.Text))
         Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
     }
-    function Write-MoleError { param($Message) }
-    function Get-MoleDebugHeader { param($CommandLine) "header: $CommandLine" }
-    function Start-MoleDebugSession { param($Header) $script:DebugSessionCalls += "start:$($Header -join '|')" }
-    function Complete-MoleDebugSession { $script:DebugSessionCalls += "complete" }
+    function Write-SweeprError { param($Message) }
+    function Get-SweeprDebugHeader { param($CommandLine) "header: $CommandLine" }
+    function Start-SweeprDebugSession { param($Header) $script:DebugSessionCalls += "start:$($Header -join '|')" }
+    function Complete-SweeprDebugSession { $script:DebugSessionCalls += "complete" }
 
-    $script:MOLE_BIN = Join-Path $TestDrive "bin"
-    New-Item -ItemType Directory -Path $script:MOLE_BIN -Force | Out-Null
+    $script:SWEEPR_BIN = Join-Path $TestDrive "bin"
+    New-Item -ItemType Directory -Path $script:SWEEPR_BIN -Force | Out-Null
     # Shaped like bin\remove.ps1 before it gained [CmdletBinding()].
-    Set-Content -Path (Join-Path $script:MOLE_BIN "fake.ps1") -Value @'
+    Set-Content -Path (Join-Path $script:SWEEPR_BIN "fake.ps1") -Value @'
 param(
     [Alias('h')]
     [switch]$ShowHelp,
@@ -36,9 +36,9 @@ if ($ShowHelp) { "HELP" } elseif ($DryRun) { "DRYRUN" } elseif ($DebugMode) { "D
 '@
 }
 
-Describe "freemole.ps1 command router" {
+Describe "sweepr.ps1 command router" {
     BeforeEach {
-        $script:MoleExitCode = 0
+        $script:SweeprExitCode = 0
         $script:DebugSessionCalls = @()
     }
 
@@ -48,31 +48,31 @@ Describe "freemole.ps1 command router" {
         @{ Flag = "--dry-run"; Expected = "DRYRUN" },
         @{ Flag = "--debug"; Expected = "DEBUG" }
     ) {
-        Invoke-MoleCommand -CommandName "fake" -Arguments @($Flag) | Should -Be $Expected
+        Invoke-SweeprCommand -CommandName "fake" -Arguments @($Flag) | Should -Be $Expected
     }
 
     It "Opens one debug session around a --debug command and closes it" {
-        Invoke-MoleCommand -CommandName "fake" -Arguments @("--debug") | Should -Be "DEBUG"
+        Invoke-SweeprCommand -CommandName "fake" -Arguments @("--debug") | Should -Be "DEBUG"
         $script:DebugSessionCalls | Should -Be @("start:header: fake --debug", "complete")
     }
 
     It "Leaves the debug session alone without --debug" {
-        Invoke-MoleCommand -CommandName "fake" -Arguments @("--dry-run") | Should -Be "DRYRUN"
-        Invoke-MoleCommand -CommandName "fake" -Arguments @() | Should -Be "ACTED"
+        Invoke-SweeprCommand -CommandName "fake" -Arguments @("--dry-run") | Should -Be "DRYRUN"
+        Invoke-SweeprCommand -CommandName "fake" -Arguments @() | Should -Be "ACTED"
         $script:DebugSessionCalls | Should -BeNullOrEmpty
     }
 
     It "Refuses an unknown option without running the command" {
-        $output = @(Invoke-MoleCommand -CommandName "fake" -Arguments @("--bogus"))
+        $output = @(Invoke-SweeprCommand -CommandName "fake" -Arguments @("--bogus"))
         $output | Should -Not -Contain "ACTED"
-        $script:MoleExitCode | Should -Be 2
+        $script:SweeprExitCode | Should -Be 2
     }
 
     It "Preserves a literal trailing apostrophe in positional and named paths" {
-        Set-Content -LiteralPath (Join-Path $script:MOLE_BIN "path.ps1") -Value 'param([string]$Path) $Path'
+        Set-Content -LiteralPath (Join-Path $script:SWEEPR_BIN "path.ps1") -Value 'param([string]$Path) $Path'
         $literal = "C:\fixture\reports'"
-        Invoke-MoleCommand -CommandName "path" -Arguments @($literal) | Should -BeExactly $literal
-        Invoke-MoleCommand -CommandName "path" -Arguments @("--path=$literal") | Should -BeExactly $literal
+        Invoke-SweeprCommand -CommandName "path" -Arguments @($literal) | Should -BeExactly $literal
+        Invoke-SweeprCommand -CommandName "path" -Arguments @("--path=$literal") | Should -BeExactly $literal
     }
 
     It "Gives a value flag the next word as <Case>" -ForEach @(
@@ -82,26 +82,26 @@ Describe "freemole.ps1 command router" {
         @{ Case = "switches alone"; Arguments = @("--watch", "--json"); Expected = "watch=True interval= json=True" }
     ) {
         # Shaped like bin\status.ps1: switches beside one [string] option.
-        Set-Content -LiteralPath (Join-Path $script:MOLE_BIN "watch.ps1") -Value @'
+        Set-Content -LiteralPath (Join-Path $script:SWEEPR_BIN "watch.ps1") -Value @'
 [CmdletBinding()]
 param([switch]$Json, [switch]$Watch, [string]$Interval)
 "watch=$Watch interval=$Interval json=$Json"
 '@
-        Invoke-MoleCommand -CommandName "watch" -Arguments $Arguments | Should -BeExactly $Expected
-        $script:MoleExitCode | Should -Be 0
+        Invoke-SweeprCommand -CommandName "watch" -Arguments $Arguments | Should -BeExactly $Expected
+        $script:SweeprExitCode | Should -Be 0
     }
 
     It "Refuses an unknown command with a failure exit code" {
-        Invoke-MoleCommand -CommandName "missing" -Arguments @()
-        $script:MoleExitCode | Should -Be 2
+        Invoke-SweeprCommand -CommandName "missing" -Arguments @()
+        $script:SweeprExitCode | Should -Be 2
     }
 
     It "Preserves native TUI exit codes and resets stale results for help" {
-        Set-Content -LiteralPath (Join-Path $script:MOLE_BIN "status.ps1") -Value 'param([switch]$ShowHelp) if ($ShowHelp) { return }; & $env:ComSpec /d /c exit 7; exit $LASTEXITCODE'
-        Invoke-MoleCommand -CommandName "status" -Arguments @()
-        $script:MoleExitCode | Should -Be 7
-        Invoke-MoleCommand -CommandName "status" -Arguments @("--help")
-        $script:MoleExitCode | Should -Be 0
+        Set-Content -LiteralPath (Join-Path $script:SWEEPR_BIN "status.ps1") -Value 'param([switch]$ShowHelp) if ($ShowHelp) { return }; & $env:ComSpec /d /c exit 7; exit $LASTEXITCODE'
+        Invoke-SweeprCommand -CommandName "status" -Arguments @()
+        $script:SweeprExitCode | Should -Be 7
+        Invoke-SweeprCommand -CommandName "status" -Arguments @("--help")
+        $script:SweeprExitCode | Should -Be 0
     }
 
     It "Maps <Flag> to <Expected> on the real <Name> command" -ForEach @(
@@ -120,32 +120,32 @@ param([switch]$Json, [switch]$Watch, [string]$Interval)
     }
 }
 
-Describe "fm --help and --version" {
+Describe "sw --help and --version" {
     BeforeAll {
-        $script:freeMole = Join-Path $script:WindowsDir "freemole.ps1"
+        $script:Sweepr = Join-Path $script:WindowsDir "sweepr.ps1"
     }
 
-    It "Shows the logo with the Windows website and the macOS command layout" {
-        $output = (& powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$($script:freeMole)' '--help'" 2>&1 | Out-String)
-        $output | Should -Match "https://mole\.fit/windows"
+    It "Shows the logo with the website and the command layout" {
+        $output = (& powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$($script:Sweepr)' '--help'" 2>&1 | Out-String)
+        $output | Should -Match "https://github\.com/brummilab/sweepr"
         $output | Should -Match "COMMANDS"
-        $output | Should -Match "fm uninstall --dry-run"
+        $output | Should -Match "sw uninstall --dry-run"
     }
 
     It "Returns failure for an unknown command from the installed File entrypoint" {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $script:freeMole not-a-command 2>&1 | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $script:Sweepr not-a-command 2>&1 | Out-Null
         $LASTEXITCODE | Should -Be 2
     }
 
     It "Reports the version, platform and install method" {
-        $output = (& powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$($script:freeMole)' '--version'" 2>&1 | Out-String)
-        $output | Should -Match "freeMole version \d+\.\d+\.\d+"
+        $output = (& powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$($script:Sweepr)' '--version'" 2>&1 | Out-String)
+        $output | Should -Match "Sweepr version \d+\.\d+\.\d+"
         $output | Should -Match "Architecture: "
         $output | Should -Match "Install: (Source|Portable|winget|Scoop)"
     }
 }
 
-Describe "fm remove" {
+Describe "sw remove" {
     BeforeAll {
         $script:Fake = Join-Path $TestDrive "fake-install"
         New-Item -ItemType Directory -Path (Join-Path $script:Fake "bin") -Force | Out-Null
@@ -161,8 +161,8 @@ Describe "fm remove" {
     }
 
     It "Sends a <Manager> install to its package manager instead of removing files" -ForEach @(
-        @{ Manager = "Scoop"; Dir = "scoop\apps\mole\1.36.0"; Expected = "scoop uninstall mole" },
-        @{ Manager = "winget"; Dir = "Microsoft\WinGet\Packages\tw93.MoleCLI_Microsoft.Winget.Source_8wekyb3d8bbwe"; Expected = "winget uninstall tw93.MoleCLI" }
+        @{ Manager = "Scoop"; Dir = "scoop\apps\sweepr\1.36.0"; Expected = "scoop uninstall sweepr" },
+        @{ Manager = "winget"; Dir = "Microsoft\WinGet\Packages\brummilab.Sweepr_Microsoft.Winget.Source_8wekyb3d8bbwe"; Expected = "winget uninstall brummilab.Sweepr" }
     ) {
         $managed = Join-Path $TestDrive $Dir
         New-Item -ItemType Directory -Path (Join-Path $managed "bin") -Force | Out-Null
@@ -182,11 +182,11 @@ Describe "fm remove" {
     }
 }
 
-Describe "fm --version install line" {
+Describe "sw --version install line" {
     BeforeAll {
         $windowsDir = Split-Path -Parent $PSScriptRoot
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $windowsDir "freemole.ps1"), [ref]$null, [ref]$null)
-        foreach ($name in @("Get-MoleSourceCommit", "Get-MoleInstallDescription", "Get-MoleInstallMethod")) {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $windowsDir "sweepr.ps1"), [ref]$null, [ref]$null)
+        foreach ($name in @("Get-SweeprSourceCommit", "Get-SweeprInstallDescription", "Get-SweeprInstallMethod")) {
             $definition = $ast.Find({
                     param($node)
                     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -204,26 +204,26 @@ Describe "fm --version install line" {
 
     It "Names the commit of a checked-out release tag" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value $script:Sha
-        Get-MoleInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
     }
 
     It "Follows a branch ref, loose or packed" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value "ref: refs/heads/windows"
         Set-Content -LiteralPath (Join-Path $script:Root ".git\packed-refs") -Value @("# pack-refs with: peeled", "$($script:Sha) refs/heads/windows")
-        Get-MoleInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
 
         Set-Content -LiteralPath (Join-Path $script:Root ".git\refs\heads\windows") -Value ("f" * 40)
-        Get-MoleInstallDescription -RootDir $script:Root | Should -BeExactly "Source (fffffff)"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (fffffff)"
     }
 
     It "Says Source without a commit when the metadata cannot be read" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value "ref: refs/heads/missing"
-        Get-MoleInstallDescription -RootDir $script:Root | Should -BeExactly "Source"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source"
     }
 
     It "Leaves a copy without Git metadata as Portable" {
         Remove-Item -LiteralPath (Join-Path $script:Root ".git") -Recurse -Force
-        Get-MoleInstallDescription -RootDir $script:Root | Should -BeExactly "Portable"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Portable"
     }
 }
 
@@ -232,31 +232,31 @@ Describe "Debug through installed launcher call shapes" {
         $profile = Join-Path $TestDrive ("debug-" + $_)
         New-Item -ItemType Directory -Path $profile -Force | Out-Null
         $savedProfile = $env:USERPROFILE
-        $savedDebug = $env:MOLE_DEBUG
-        $mole = Join-Path (Split-Path -Parent $PSScriptRoot) "freemole.ps1"
+        $savedDebug = $env:SWEEPR_DEBUG
+        $sweepr = Join-Path (Split-Path -Parent $PSScriptRoot) "sweepr.ps1"
         try {
             $env:USERPROFILE = $profile
-            $env:MOLE_DEBUG = $null
+            $env:SWEEPR_DEBUG = $null
             # Debug lines go to stderr when stdout is redirected, and Windows
             # PowerShell turns each into an error record that a Stop
             # preference would throw on; they are what this test reads.
             if ($_ -eq "File") {
-                $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mole clean --help --debug 2>&1 | Out-String }
+                $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $sweepr clean --help --debug 2>&1 | Out-String }
             }
             else {
-                $command = "& '" + $mole.Replace("'", "''") + "' 'clean' '--help' '--debug'; exit `$LASTEXITCODE"
+                $command = "& '" + $sweepr.Replace("'", "''") + "' 'clean' '--help' '--debug'; exit `$LASTEXITCODE"
                 $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | Out-String }
             }
             $LASTEXITCODE | Should -Be 0
             $output | Should -Match 'Debug logging enabled'
             $output | Should -Match 'Debug session log saved'
-            $log = Join-Path $profile ".config\freemole\mole_debug_session.log"
+            $log = Join-Path $profile ".config\sweepr\sweepr_debug_session.log"
             Test-Path -LiteralPath $log | Should -BeTrue
-            [System.IO.File]::ReadAllText($log) | Should -Match 'Command: fm clean .*--debug'
+            [System.IO.File]::ReadAllText($log) | Should -Match 'Command: sw clean .*--debug'
         }
         finally {
             $env:USERPROFILE = $savedProfile
-            $env:MOLE_DEBUG = $savedDebug
+            $env:SWEEPR_DEBUG = $savedDebug
         }
     }
 }
@@ -268,12 +268,12 @@ Describe "Analyze debug routing" {
         $previous = $env:USERPROFILE
         try {
             $env:USERPROFILE = $profile
-            $mole = Join-Path $script:WindowsDir 'freemole.ps1'
-            $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mole analyze --help --debug 2>&1 | Out-String }
+            $sweepr = Join-Path $script:WindowsDir 'sweepr.ps1'
+            $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $sweepr analyze --help --debug 2>&1 | Out-String }
             $LASTEXITCODE | Should -Be 0
             $output | Should -Match 'Interactive disk space analyzer'
-            $log = Join-Path $profile '.config\freemole\mole_debug_session.log'
-            [System.IO.File]::ReadAllText($log) | Should -Match 'Command: fm analyze .*--debug'
+            $log = Join-Path $profile '.config\sweepr\sweepr_debug_session.log'
+            [System.IO.File]::ReadAllText($log) | Should -Match 'Command: sw analyze .*--debug'
         }
         finally { $env:USERPROFILE = $previous }
     }
@@ -281,16 +281,16 @@ Describe "Analyze debug routing" {
 
 Describe "Machine-readable output through installed launcher call shapes" {
     BeforeAll {
-        function Invoke-MoleShape {
-            param([string]$Shape, [string]$freeMole, [string[]]$Arguments)
+        function Invoke-SweeprShape {
+            param([string]$Shape, [string]$Sweepr, [string[]]$Arguments)
             # Assigning native output captures stdout only, the redirected
             # stream an agent reads; stderr stays out of the JSON.
             if ($Shape -eq "File") {
-                $lines = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $freeMole @Arguments
+                $lines = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Sweepr @Arguments
             }
             else {
                 $quoted = @($Arguments | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join " "
-                $command = "& '" + $freeMole.Replace("'", "''") + "' $quoted; exit `$LASTEXITCODE"
+                $command = "& '" + $Sweepr.Replace("'", "''") + "' $quoted; exit `$LASTEXITCODE"
                 $lines = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command
             }
             [pscustomobject]@{ Text = (@($lines) -join "`n"); ExitCode = $LASTEXITCODE }
@@ -304,7 +304,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         @{ Shape = "Command"; Debug = $true; Label = " with --debug" }
     ) {
         $profile = Join-Path $TestDrive ("list-" + $Shape + $(if ($Debug) { "-debug" } else { "" }))
-        $cacheDir = Join-Path $profile ".cache\freemole"
+        $cacheDir = Join-Path $profile ".cache\sweepr"
         New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
         # A fresh cache stands in for the registry, so the child never scans this machine.
         $cache = @(
@@ -318,7 +318,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
             $arguments = @("uninstall", "--list")
             # Debug lines and the session notes go to stderr, not into the JSON.
             if ($Debug) { $arguments += "--debug" }
-            $result = Invoke-MoleShape -Shape $Shape -freeMole (Join-Path $script:WindowsDir "freemole.ps1") -Arguments $arguments
+            $result = Invoke-SweeprShape -Shape $Shape -Sweepr (Join-Path $script:WindowsDir "sweepr.ps1") -Arguments $arguments
         }
         finally { $env:USERPROFILE = $saved }
 
@@ -326,19 +326,19 @@ Describe "Machine-readable output through installed launcher call shapes" {
         $result.Text.TrimStart().StartsWith("[") | Should -BeTrue
         $result.Text.TrimEnd().EndsWith("]") | Should -BeTrue
         if ($Debug) {
-            [System.IO.File]::ReadAllText((Join-Path $profile ".config\freemole\mole_debug_session.log")) | Should -Match 'Loading from cache'
+            [System.IO.File]::ReadAllText((Join-Path $profile ".config\sweepr\sweepr_debug_session.log")) | Should -Match 'Loading from cache'
         }
         $parsed = ConvertFrom-Json -InputObject $result.Text
         @($parsed).Count | Should -Be 1
         @($parsed)[0].id | Should -BeExactly "registry:HKLM-test\cached"
         @($parsed)[0].size_bytes | Should -Be 1048576
-        Test-Path -LiteralPath (Join-Path $profile ".config\freemole\operations.log") | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $profile ".config\sweepr\operations.log") | Should -BeFalse
     }
 
     It "Passes --interval with its value to the status tool through <_>" -ForEach @("File", "Command") {
         $root = Join-Path $TestDrive ("status-" + $_)
         New-Item -ItemType Directory -Path (Join-Path $root "bin") -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "freemole.ps1") -Destination $root
+        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "sweepr.ps1") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "VERSION") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "lib") -Destination $root -Recurse
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\status.ps1") -Destination (Join-Path $root "bin")
@@ -346,7 +346,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*" -Encoding ASCII
         Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Ensure-TuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
 
-        $result = Invoke-MoleShape -Shape $_ -freeMole (Join-Path $root "freemole.ps1") -Arguments @("status", "--watch", "--interval", "1s")
+        $result = Invoke-SweeprShape -Shape $_ -Sweepr (Join-Path $root "sweepr.ps1") -Arguments @("status", "--watch", "--interval", "1s")
 
         $result.ExitCode | Should -Be 0
         $result.Text | Should -Match '(?m)^ARGS=--watch --interval=1s\s*$'
@@ -355,18 +355,18 @@ Describe "Machine-readable output through installed launcher call shapes" {
     It "Passes --json and the path to the analyzer through <_>" -ForEach @("File", "Command") {
         $root = Join-Path $TestDrive ("analyze-" + $_)
         New-Item -ItemType Directory -Path (Join-Path $root "bin") -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "freemole.ps1") -Destination $root
+        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "sweepr.ps1") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "VERSION") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "lib") -Destination $root -Recurse
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\analyze.ps1") -Destination (Join-Path $root "bin")
         # A stand-in analyzer that reports what it was given.
         $stub = Join-Path $root "bin\analyze-stub.cmd"
-        Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*`r`necho TARGET=%MO_ANALYZE_PATH%" -Encoding ASCII
+        Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*`r`necho TARGET=%SWEEPR_ANALYZE_PATH%" -Encoding ASCII
         Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Ensure-TuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
         $target = Join-Path $TestDrive "scan target"
         New-Item -ItemType Directory -Path $target -Force | Out-Null
 
-        $result = Invoke-MoleShape -Shape $_ -freeMole (Join-Path $root "freemole.ps1") -Arguments @("analyze", "--json", $target)
+        $result = Invoke-SweeprShape -Shape $_ -Sweepr (Join-Path $root "sweepr.ps1") -Arguments @("analyze", "--json", $target)
 
         $result.ExitCode | Should -Be 0
         $result.Text | Should -Match '(?m)^ARGS=--json\s*$'
@@ -376,7 +376,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
     It "Keeps analyze --json --debug stdout to the analyzer's output through <_>" -ForEach @("File", "Command") {
         $root = Join-Path $TestDrive ("analyze-debug-" + $_)
         New-Item -ItemType Directory -Path (Join-Path $root "bin") -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "freemole.ps1") -Destination $root
+        Copy-Item -LiteralPath (Join-Path $script:WindowsDir "sweepr.ps1") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "VERSION") -Destination $root
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "lib") -Destination $root -Recurse
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\analyze.ps1") -Destination (Join-Path $root "bin")
@@ -388,12 +388,12 @@ Describe "Machine-readable output through installed launcher call shapes" {
         $saved = $env:USERPROFILE
         try {
             $env:USERPROFILE = $profile
-            $result = Invoke-MoleShape -Shape $_ -freeMole (Join-Path $root "freemole.ps1") -Arguments @("analyze", "--json", "--debug")
+            $result = Invoke-SweeprShape -Shape $_ -Sweepr (Join-Path $root "sweepr.ps1") -Arguments @("analyze", "--json", "--debug")
         }
         finally { $env:USERPROFILE = $saved }
 
         $result.ExitCode | Should -Be 0
         $result.Text.Trim() | Should -BeExactly "{}"
-        Test-Path -LiteralPath (Join-Path $profile ".config\freemole\mole_debug_session.log") | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $profile ".config\sweepr\sweepr_debug_session.log") | Should -BeTrue
     }
 }

@@ -8,7 +8,7 @@ import (
 
 func TestCleanableHintRequiresCacheEvidence(t *testing.T) {
 	// Use relative paths so the host temporary directory does not trigger the
-	// separate mo-clean exclusion before the cache evidence is tested.
+	// separate sw-clean exclusion before the cache evidence is tested.
 	t.Chdir(t.TempDir())
 	for _, name := range []string{"build", "dist", "vendor", ".yarn", ".bundle", "node_modules"} {
 		dir := name

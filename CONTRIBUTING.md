@@ -1,12 +1,12 @@
-# Contributing to Mole CLI for Windows
+# Contributing to Sweepr
 
-Thanks for helping. This branch is the Windows CLI; the macOS CLI lives on `main` and has its own guide. Pull requests for Windows target the `windows` branch.
+Thanks for helping. Development happens on `main`.
 
 ## Setup
 
 - Windows 10 or 11 with the built-in Windows PowerShell 5.1
 - [Pester](https://pester.dev) 5 or newer: `Install-Module Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck`
-- Go, for the `analyze` and `status` TUIs and the `mo.exe` launcher; the version is pinned by `toolchain` in `go.mod`
+- Go, for the `analyze` and `status` TUIs and the `sw.exe` launcher; the version is pinned by `toolchain` in `go.mod`
 - Git
 
 ## Development
@@ -16,7 +16,7 @@ Thanks for helping. This branch is the Windows CLI; the macOS CLI lives on `main
 Invoke-Pester -Path .\tests        # PowerShell tests only
 go test ./cmd/...                  # Go tests only
 gofmt -l cmd                       # Must print nothing
-.\mole.ps1 clean --dry-run         # Try a change without deleting anything
+.\sweepr.ps1 clean --dry-run       # Try a change without deleting anything
 ```
 
 CI runs the Pester tests under both Windows PowerShell 5.1 and pwsh 7, so avoid syntax that only pwsh 7 understands, such as `??`, `?.`, the ternary operator, or `ForEach-Object -Parallel`. Keep scripts ASCII, or UTF-8 with a BOM.
@@ -30,7 +30,7 @@ CI runs the Pester tests under both Windows PowerShell 5.1 and pwsh 7, so avoid 
 
 ## Pull Requests
 
-1. Branch from `windows`.
+1. Branch from `main`.
 2. Add or update Pester tests for the behavior you change, and confirm a new test fails without your change.
 3. Run `.\scripts\test.ps1`.
 4. Describe what changed and how you verified it, including any `--dry-run` output.

@@ -1,4 +1,4 @@
-# freeMole - Optimize Command
+# Sweepr - Optimize Command
 # System optimization and health checks for Windows
 
 #Requires -Version 5.1
@@ -44,7 +44,7 @@ function Show-OptimizeHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm optimize$esc[0m - System optimization and maintenance"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm optimize [options]"
+    Write-Host "$esc[33mUsage:$esc[0m sw optimize [options]"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --dry-run    Preview changes without applying"
@@ -57,8 +57,8 @@ function Show-OptimizeHelp {
     Write-Host "  - Startup, disk health and Windows Update checks"
     Write-Host ""
     Write-Host "$esc[33mExamples:$esc[0m"
-    Write-Host "  fm optimize            # Run all optimizations"
-    Write-Host "  fm optimize --dry-run  # Preview what would happen"
+    Write-Host "  sw optimize            # Run all optimizations"
+    Write-Host "  sw optimize --dry-run  # Preview what would happen"
     Write-Host ""
 }
 
@@ -141,7 +141,7 @@ function Test-SystemDriveOptimizable {
     return ($null -ne $volume)
 }
 
-function Test-MoleDiskPowerReady {
+function Test-SweeprDiskPowerReady {
     # Use the same CIM provider already used for system health. A complete empty
     # Win32_Battery result identifies a desktop; unknown is never AC evidence.
     try {
@@ -174,7 +174,7 @@ function Optimize-DiskDrive {
         return
     }
 
-    if (-not (Test-MoleDiskPowerReady)) {
+    if (-not (Test-SweeprDiskPowerReady)) {
         Write-Host "  $esc[90mDisk optimization skipped: external power could not be confirmed$esc[0m"
         return
     }
@@ -200,7 +200,7 @@ function Optimize-DiskDrive {
         Write-Host "  Running Windows default optimization on drive ${systemDriveLetter}:..."
         Start-Spinner "Optimizing drive..."
         try { $null = Optimize-Volume -DriveLetter $systemDriveLetter -ErrorAction Stop } finally { Stop-Spinner }
-        Write-MoleOperation -Action "OPTIMIZED" -Path "${systemDriveLetter}:" -Detail "Optimize-Volume"
+        Write-SweeprOperation -Action "OPTIMIZED" -Path "${systemDriveLetter}:" -Detail "Optimize-Volume"
         Write-Host "  $esc[32m$($script:Icons.Success)$esc[0m Drive optimization completed"
         $script:OptimizationsApplied++
     }
@@ -213,7 +213,7 @@ function Optimize-DiskDrive {
 
         # $systemDriveLetter is unset when resolving it was what failed.
         $volumeLabel = if ($env:SystemDrive) { $env:SystemDrive } else { "system drive" }
-        Write-MoleOperation -Action "FAILED" -Path $volumeLabel -Detail "Optimize-Volume: $message"
+        Write-SweeprOperation -Action "FAILED" -Path $volumeLabel -Detail "Optimize-Volume: $message"
         Write-Host "  $esc[31m$($script:Icons.Error)$esc[0m Disk optimization failed: $message"
     }
 }
@@ -237,12 +237,12 @@ function Clear-DnsCache {
 
     try {
         Clear-DnsClientCache -ErrorAction Stop
-        Write-MoleOperation -Action "OPTIMIZED" -Path "DNS client cache" -Detail "Clear-DnsClientCache"
+        Write-SweeprOperation -Action "OPTIMIZED" -Path "DNS client cache" -Detail "Clear-DnsClientCache"
         Write-Host "  $esc[32m$($script:Icons.Success)$esc[0m DNS cache flushed"
         $script:OptimizationsApplied++
     }
     catch {
-        Write-MoleOperation -Action "FAILED" -Path "DNS client cache" -Detail "Clear-DnsClientCache: $($_.Exception.Message)"
+        Write-SweeprOperation -Action "FAILED" -Path "DNS client cache" -Detail "Clear-DnsClientCache: $($_.Exception.Message)"
         Write-Host "  $esc[31m$($script:Icons.Error)$esc[0m Could not flush DNS cache: $_"
     }
 }
@@ -273,12 +273,12 @@ function Optimize-Network {
         # Flush ARP cache
         $null = netsh interface ip delete arpcache 2>&1
         if ($LASTEXITCODE -ne 0) { throw "netsh exited with code $LASTEXITCODE" }
-        Write-MoleOperation -Action "OPTIMIZED" -Path "ARP cache" -Detail "netsh interface ip delete arpcache"
+        Write-SweeprOperation -Action "OPTIMIZED" -Path "ARP cache" -Detail "netsh interface ip delete arpcache"
         Write-Host "  $esc[32m$($script:Icons.Success)$esc[0m ARP cache cleared"
         $script:OptimizationsApplied++
     }
     catch {
-        Write-MoleOperation -Action "FAILED" -Path "ARP cache" -Detail "netsh interface ip delete arpcache: $($_.Exception.Message)"
+        Write-SweeprOperation -Action "FAILED" -Path "ARP cache" -Detail "netsh interface ip delete arpcache: $($_.Exception.Message)"
         Write-Host "  $esc[31m$($script:Icons.Error)$esc[0m ARP cache clear failed"
     }
 }
@@ -364,7 +364,7 @@ function Test-SystemFiles {
         else { "result not read, see CBS.log" }
         $completed = $sfcExit -eq 0 -and $verdict -in @("no integrity violations", "repaired corrupt files")
         $action = if ($completed) { "OPTIMIZED" } else { "FAILED" }
-        Write-MoleOperation -Action $action -Path "System files" -Detail "sfc /scannow exit code ${sfcExit}: $verdict"
+        Write-SweeprOperation -Action $action -Path "System files" -Detail "sfc /scannow exit code ${sfcExit}: $verdict"
         if ($sfcExit -ne 0) {
             Write-Host "  $esc[31m$($script:Icons.Error)$esc[0m System File Checker did not complete (exit code $sfcExit)"
             return
@@ -388,7 +388,7 @@ function Test-SystemFiles {
         }
     }
     catch {
-        Write-MoleOperation -Action "FAILED" -Path "System files" -Detail "sfc /scannow: $($_.Exception.Message)"
+        Write-SweeprOperation -Action "FAILED" -Path "System files" -Detail "sfc /scannow: $($_.Exception.Message)"
         Write-Host "  $esc[31m$($script:Icons.Error)$esc[0m System File Checker failed: $_"
     }
     finally {
@@ -619,7 +619,7 @@ function Main {
     }
 
     # Set dry-run mode
-    $script:DryRun = $DryRun -or ($env:MOLE_DRY_RUN -eq '1')
+    $script:DryRun = $DryRun -or ($env:SWEEPR_DRY_RUN -eq '1')
 
     # Clear screen
     Clear-Host

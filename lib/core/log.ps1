@@ -1,42 +1,42 @@
-# freeMole - Logging Module
+# Sweepr - Logging Module
 # Provides consistent logging functions with colors and icons
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_LOG_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_LOG_LOADED) { return }
-$script:MOLE_LOG_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_LOG_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_LOG_LOADED) { return }
+$script:SWEEPR_LOG_LOADED = $true
 
 # Import base module
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\base.ps1"
-Initialize-MoleVisualDefaults
+Initialize-SweeprVisualDefaults
 
 # ============================================================================
 # Log Configuration
 # ============================================================================
 
 # --debug keeps one session log a reporter can send. It sits with the CLI's
-# own config; %LOCALAPPDATA%\freeMole belongs to the Mole for Windows app.
-$script:MoleDebugLogFile = "$env:USERPROFILE\.config\freemole\mole_debug_session.log"
+# own config, not in %LOCALAPPDATA%\Sweepr, which is reserved for app data.
+$script:SweeprDebugLogFile = "$env:USERPROFILE\.config\sweepr\sweepr_debug_session.log"
 
 # Each command script loads this module afresh after the router has set
-# MOLE_DEBUG, so the switch has to be read here, at load time.
+# SWEEPR_DEBUG, so the switch has to be read here, at load time.
 $script:LogConfig = @{
-    DebugEnabled = $env:MOLE_DEBUG -eq "1"
-    LogFile      = $(if ($env:MOLE_DEBUG -eq "1") { $script:MoleDebugLogFile } else { $null })
+    DebugEnabled = $env:SWEEPR_DEBUG -eq "1"
+    LogFile      = $(if ($env:SWEEPR_DEBUG -eq "1") { $script:SweeprDebugLogFile } else { $null })
     Verbose      = $false
 }
 
 # What clean, purge, optimize and uninstall actually removed, one line per
-# item in the macOS CLI's operations.log format, so a report can carry it.
-# Dry runs write nothing; MO_NO_OPLOG=1 turns it off, as on macOS.
-$script:MoleOperationsLogFile = "$env:USERPROFILE\.config\freemole\operations.log"
-$script:MoleOperationsLogMaxBytes = 5MB
-$script:MoleOperationsLogStarted = $false
+# item in operations.log, so a report can carry it.
+# Dry runs write nothing; SWEEPR_NO_OPLOG=1 turns it off.
+$script:SweeprOperationsLogFile = "$env:USERPROFILE\.config\sweepr\operations.log"
+$script:SweeprOperationsLogMaxBytes = 5MB
+$script:SweeprOperationsLogStarted = $false
 
-function ConvertTo-MoleLogValue {
+function ConvertTo-SweeprLogValue {
     param([string]$Value)
 
     # Control characters become escapes so a file name cannot forge a record.
@@ -52,38 +52,38 @@ function ConvertTo-MoleLogValue {
         })
 }
 
-function Write-MoleOperation {
+function Write-SweeprOperation {
     param(
         [string]$Action,
         [string]$Path,
         [string]$Detail = ""
     )
 
-    if ($env:MO_NO_OPLOG -eq "1" -or [string]::IsNullOrEmpty($Path)) { return }
+    if ($env:SWEEPR_NO_OPLOG -eq "1" -or [string]::IsNullOrEmpty($Path)) { return }
 
     try {
-        $command = if ($env:_MOLE_OPLOG_RUN_COMMAND) { $env:_MOLE_OPLOG_RUN_COMMAND } else { "mole" }
-        $label = if ($env:_MOLE_OPLOG_RUN_ID) { "$command run=$($env:_MOLE_OPLOG_RUN_ID)" } else { $command }
+        $command = if ($env:_SWEEPR_OPLOG_RUN_COMMAND) { $env:_SWEEPR_OPLOG_RUN_COMMAND } else { "sweepr" }
+        $label = if ($env:_SWEEPR_OPLOG_RUN_ID) { "$command run=$($env:_SWEEPR_OPLOG_RUN_ID)" } else { $command }
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         # Every record ends in one parenthesis-free "(detail)", so a reader can split
         # it from a path that holds parentheses, such as "Program Files (x86)".
-        $safeDetail = if ($Detail) { (ConvertTo-MoleLogValue $Detail).Replace("(", "[").Replace(")", "]") } else { "-" }
-        $line = "[$timestamp] [$label] $Action $(ConvertTo-MoleLogValue $Path) ($safeDetail)"
-        $file = $script:MoleOperationsLogFile
+        $safeDetail = if ($Detail) { (ConvertTo-SweeprLogValue $Detail).Replace("(", "[").Replace(")", "]") } else { "-" }
+        $line = "[$timestamp] [$label] $Action $(ConvertTo-SweeprLogValue $Path) ($safeDetail)"
+        $file = $script:SweeprOperationsLogFile
         $text = "$line`r`n"
-        if (-not $script:MoleOperationsLogStarted) {
+        if (-not $script:SweeprOperationsLogStarted) {
             $dir = Split-Path -Parent $file
             if (-not [System.IO.Directory]::Exists($dir)) { [void][System.IO.Directory]::CreateDirectory($dir) }
             $info = New-Object System.IO.FileInfo $file
-            if ($info.Exists -and $info.Length -gt $script:MoleOperationsLogMaxBytes) {
+            if ($info.Exists -and $info.Length -gt $script:SweeprOperationsLogMaxBytes) {
                 Move-Item -LiteralPath $file -Destination "$file.old" -Force
             }
             # The marker is written with the first record, so a run that removes
             # nothing leaves the log untouched.
             $text = "`r`n# ========== $label session started at $timestamp ==========`r`n$text"
         }
-        Add-MoleOperationText -File $file -Text $text
-        $script:MoleOperationsLogStarted = $true
+        Add-SweeprOperationText -File $file -Text $text
+        $script:SweeprOperationsLogStarted = $true
     }
     catch {
         # The record must never fail the removal it describes, but --debug says it was lost.
@@ -91,9 +91,9 @@ function Write-MoleOperation {
     }
 }
 
-# Another freeMole run (or fm analyze) may hold the file for the moment it appends,
+# Another Sweepr run (or sw analyze) may hold the file for the moment it appends,
 # so a sharing violation is retried briefly instead of dropping the line.
-function Add-MoleOperationText {
+function Add-SweeprOperationText {
     param([string]$File, [string]$Text)
 
     $encoding = New-Object System.Text.UTF8Encoding $false
@@ -110,7 +110,7 @@ function Add-MoleOperationText {
     }
 }
 
-function Add-MoleLogLine {
+function Add-SweeprLogLine {
     param([string]$Line)
 
     $path = $script:LogConfig.LogFile
@@ -138,8 +138,8 @@ function Write-LogMessage {
     )
 
     $timestamp = Get-Date -Format "HH:mm:ss"
-    $colorCode = Get-MoleColor -Name $Color
-    $nc = Get-MoleColor -Name "NC"
+    $colorCode = Get-SweeprColor -Name $Color
+    $nc = Get-SweeprColor -Name "NC"
 
     $formattedIcon = if ($Icon) { "$Icon " } else { "" }
     $output = "  ${colorCode}${formattedIcon}${nc}${Message}"
@@ -148,7 +148,7 @@ function Write-LogMessage {
     Write-Host $output
     if ($script:CurrentSection.Active) { Start-Spinner }
 
-    Add-MoleLogLine "$timestamp [$Level] $Message"
+    Add-SweeprLogLine "$timestamp [$Level] $Message"
 }
 
 function Write-Info {
@@ -157,7 +157,7 @@ function Write-Info {
         Write an informational message
     #>
     param([string]$Message)
-    Write-LogMessage -Message $Message -Level "INFO" -Color "Cyan" -Icon (Get-MoleIcon -Name "List")
+    Write-LogMessage -Message $Message -Level "INFO" -Color "Cyan" -Icon (Get-SweeprIcon -Name "List")
 }
 
 function Write-Success {
@@ -166,35 +166,35 @@ function Write-Success {
         Write a success message
     #>
     param([string]$Message)
-    Write-LogMessage -Message $Message -Level "SUCCESS" -Color "Green" -Icon (Get-MoleIcon -Name "Success")
+    Write-LogMessage -Message $Message -Level "SUCCESS" -Color "Green" -Icon (Get-SweeprIcon -Name "Success")
 }
 
 
-function Write-MoleWarning {
+function Write-SweeprWarning {
     <#
     .SYNOPSIS
         Write a warning message
     #>
     param([string]$Message)
-    Write-LogMessage -Message $Message -Level "WARN" -Color "Yellow" -Icon (Get-MoleIcon -Name "Warning")
+    Write-LogMessage -Message $Message -Level "WARN" -Color "Yellow" -Icon (Get-SweeprIcon -Name "Warning")
 }
 
-function Write-MoleError {
+function Write-SweeprError {
     <#
     .SYNOPSIS
         Write an error message
     #>
     param([string]$Message)
-    Write-LogMessage -Message $Message -Level "ERROR" -Color "Red" -Icon (Get-MoleIcon -Name "Error")
+    Write-LogMessage -Message $Message -Level "ERROR" -Color "Red" -Icon (Get-SweeprIcon -Name "Error")
 }
 
 
 # A diagnostic line, not a result. Both launchers start a child PowerShell
 # whose host lines land in its stdout, so with stdout redirected
-# (`fm uninstall --list --debug | ConvertFrom-Json`, `$out = fm ...`) they
+# (`sw uninstall --list --debug | ConvertFrom-Json`, `$out = sw ...`) they
 # would corrupt the data a caller reads. Send them to stderr then; a console
 # keeps the usual host output.
-function Write-MoleDiagnosticLine {
+function Write-SweeprDiagnosticLine {
     param([string]$Message = "")
 
     $redirected = $false
@@ -211,12 +211,12 @@ function Write-Debug {
     param([string]$Message)
 
     if ($script:LogConfig.DebugEnabled) {
-        $gray = Get-MoleColor -Name "Gray"
-        $nc = Get-MoleColor -Name "NC"
+        $gray = Get-SweeprColor -Name "Gray"
+        $nc = Get-SweeprColor -Name "NC"
         Stop-Spinner
-        Write-MoleDiagnosticLine "  ${gray}[DEBUG] $Message${nc}"
+        Write-SweeprDiagnosticLine "  ${gray}[DEBUG] $Message${nc}"
         if ($script:CurrentSection.Active) { Start-Spinner }
-        Add-MoleLogLine "$(Get-Date -Format 'HH:mm:ss') [DEBUG] $Message"
+        Add-SweeprLogLine "$(Get-Date -Format 'HH:mm:ss') [DEBUG] $Message"
     }
 }
 
@@ -226,7 +226,7 @@ function Write-DryRun {
         Write a dry-run message (action that would be taken)
     #>
     param([string]$Message)
-    Write-LogMessage -Message $Message -Level "DRYRUN" -Color "Yellow" -Icon (Get-MoleIcon -Name "DryRun")
+    Write-LogMessage -Message $Message -Level "DRYRUN" -Color "Yellow" -Icon (Get-SweeprIcon -Name "DryRun")
 }
 
 # ============================================================================
@@ -251,9 +251,9 @@ function Start-Section {
     $script:CurrentSection.Activity = $false
     $script:CurrentSection.Name = $Title
 
-    $purple = Get-MoleColor -Name "PurpleBold"
-    $nc = Get-MoleColor -Name "NC"
-    $arrow = Get-MoleIcon -Name "Arrow"
+    $purple = Get-SweeprColor -Name "PurpleBold"
+    $nc = Get-SweeprColor -Name "NC"
+    $arrow = Get-SweeprIcon -Name "Arrow"
 
     Write-Host ""
     Write-Host "${purple}${arrow} ${Title}${nc}"
@@ -287,7 +287,7 @@ function Set-SectionActivity {
 # Progress Spinner
 # ============================================================================
 
-function Test-MoleInteractiveOutput {
+function Test-SweeprInteractiveOutput {
     try {
         return $Host.Name -eq 'ConsoleHost' -and -not [Console]::IsOutputRedirected -and
             -not [Console]::IsInputRedirected -and $env:TERM -ne 'dumb'
@@ -295,8 +295,8 @@ function Test-MoleInteractiveOutput {
     catch { return $false }
 }
 
-function Initialize-MoleSpinner {
-    if ('freeMole.TerminalSpinner' -as [type]) { return }
+function Initialize-SweeprSpinner {
+    if ('Sweepr.TerminalSpinner' -as [type]) { return }
     # A CLR timer continues while PowerShell waits on synchronous filesystem work.
     # It never calls PowerShell from a background thread. Stop drains its callback
     # before the foreground writes a row or returns control to the caller.
@@ -304,7 +304,7 @@ function Initialize-MoleSpinner {
 using System;
 using System.Threading;
 using System.Runtime.InteropServices;
-namespace freeMole {
+namespace Sweepr {
     public static class TerminalSpinner {
         static readonly object Gate = new object();
         static readonly System.IO.TextWriter OriginalOutput = Console.Out;
@@ -389,12 +389,12 @@ namespace freeMole {
 
 function Start-Spinner {
     param([string]$Message = "Scanning...")
-    if (-not (Test-MoleInteractiveOutput)) { return }
+    if (-not (Test-SweeprInteractiveOutput)) { return }
     try {
-        Initialize-MoleSpinner
+        Initialize-SweeprSpinner
         # Messages are terminal text, never control sequences supplied by paths.
         $safeMessage = $Message -replace '[\x00-\x1f\x7f]', ' '
-        [freeMole.TerminalSpinner]::Start($safeMessage)
+        [Sweepr.TerminalSpinner]::Start($safeMessage)
     }
     catch { } # A host without dynamic compilation keeps the normal static output.
 }
@@ -405,7 +405,7 @@ function Update-Spinner {
 }
 
 function Stop-Spinner {
-    if ('freeMole.TerminalSpinner' -as [type]) { [freeMole.TerminalSpinner]::Stop() }
+    if ('Sweepr.TerminalSpinner' -as [type]) { [Sweepr.TerminalSpinner]::Stop() }
 }
 
 function Write-Progress {
@@ -434,12 +434,12 @@ function Enable-DebugMode {
     .SYNOPSIS
         Enable debug logging
     #>
-    $env:MOLE_DEBUG = "1"
+    $env:SWEEPR_DEBUG = "1"
     $script:LogConfig.DebugEnabled = $true
-    if (-not $script:LogConfig.LogFile) { $script:LogConfig.LogFile = $script:MoleDebugLogFile }
+    if (-not $script:LogConfig.LogFile) { $script:LogConfig.LogFile = $script:SweeprDebugLogFile }
 }
 
-function Start-MoleDebugSession {
+function Start-SweeprDebugSession {
     <#
     .SYNOPSIS
         Start a fresh --debug session log with the given header lines
@@ -447,9 +447,9 @@ function Start-MoleDebugSession {
     param([string[]]$Header)
 
     Enable-DebugMode
-    $path = $script:MoleDebugLogFile
-    $gray = Get-MoleColor -Name "Gray"
-    $nc = Get-MoleColor -Name "NC"
+    $path = $script:SweeprDebugLogFile
+    $gray = Get-SweeprColor -Name "Gray"
+    $nc = Get-SweeprColor -Name "NC"
     try {
         $dir = Split-Path -Parent $path
         if (-not (Test-Path -LiteralPath $dir)) {
@@ -458,25 +458,25 @@ function Start-MoleDebugSession {
         $rule = "-" * 70
         $text = (@($rule) + @($Header) + @($rule)) -join "`r`n"
         [System.IO.File]::WriteAllText($path, "$text`r`n", (New-Object System.Text.UTF8Encoding $false))
-        Write-MoleDiagnosticLine "${gray}[DEBUG] Debug logging enabled. Session log: $path${nc}"
+        Write-SweeprDiagnosticLine "${gray}[DEBUG] Debug logging enabled. Session log: $path${nc}"
     }
     catch {
         $script:LogConfig.LogFile = $null
-        Write-MoleWarning "Debug log not writable: $path"
+        Write-SweeprWarning "Debug log not writable: $path"
     }
 }
 
-function Complete-MoleDebugSession {
+function Complete-SweeprDebugSession {
     <#
     .SYNOPSIS
         Tell the user where the --debug session log was saved
     #>
     if (-not $script:LogConfig.LogFile) { return }
-    $gray = Get-MoleColor -Name "Gray"
-    $nc = Get-MoleColor -Name "NC"
-    Write-MoleDiagnosticLine ""
-    Write-MoleDiagnosticLine "${gray}Debug session log saved to:${nc} $($script:LogConfig.LogFile)"
-    Write-MoleDiagnosticLine ""
+    $gray = Get-SweeprColor -Name "Gray"
+    $nc = Get-SweeprColor -Name "NC"
+    Write-SweeprDiagnosticLine ""
+    Write-SweeprDiagnosticLine "${gray}Debug session log saved to:${nc} $($script:LogConfig.LogFile)"
+    Write-SweeprDiagnosticLine ""
 }
 
 # ============================================================================

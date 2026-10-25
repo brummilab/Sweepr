@@ -16,7 +16,7 @@ const (
 	maxConcurrentOverview  = 8
 	batchUpdateSize        = 100
 
-	// Worker pool limits, the same budget the macOS analyzer uses: every
+	// Worker pool limits: every
 	// blocked directory read holds an OS thread.
 	minWorkers         = 2
 	maxWorkers         = 12
@@ -184,7 +184,7 @@ var skipExtensions = map[string]bool{
 	".hx":     true,
 }
 
-// Match the shell spinner's centered 2x2 shape used by the macOS analyzer.
+// Match the shell spinner's centered 2x2 shape.
 var spinnerFrames = []string{"⠖", "⠲", "⠴", "⠦"}
 
 const (

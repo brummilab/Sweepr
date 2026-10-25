@@ -1,4 +1,4 @@
-# freeMole Windows - Test Runner Script
+# Sweepr Windows - Test Runner Script
 # Runs all tests (Pester for PowerShell, go test for Go)
 
 #Requires -Version 5.1
@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 $script:ExitCode = 0
 # Test removals must not land in the developer's own operation log.
-$env:MO_NO_OPLOG = "1"
+$env:SWEEPR_NO_OPLOG = "1"
 
 # Get script directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -20,7 +20,7 @@ $windowsDir = Split-Path -Parent $scriptDir
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  freeMole Windows - Test Suite" -ForegroundColor Cyan
+Write-Host "  Sweepr Windows - Test Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

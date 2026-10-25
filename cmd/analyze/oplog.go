@@ -12,10 +12,10 @@ import (
 )
 
 // What analyze moved, one line per item in the operations.log that the
-// PowerShell commands write through Write-MoleOperation (lib/core/log.ps1), so
+// PowerShell commands write through Write-SweeprOperation (lib/core/log.ps1), so
 // support can answer which path went where, when and how from one file.
-// MO_NO_OPLOG=1 turns it off. The launcher passes the run in
-// _MOLE_OPLOG_RUN_COMMAND and _MOLE_OPLOG_RUN_ID.
+// SWEEPR_NO_OPLOG=1 turns it off. The launcher passes the run in
+// _SWEEPR_OPLOG_RUN_COMMAND and _SWEEPR_OPLOG_RUN_ID.
 var (
 	operationsLogPath             = defaultOperationsLogPath
 	operationsLogMaxBytes   int64 = 5 << 20
@@ -36,7 +36,7 @@ func defaultOperationsLogPath() string {
 	if home == "" {
 		return ""
 	}
-	return filepath.Join(home, ".config", "freemole", "operations.log")
+	return filepath.Join(home, ".config", "sweepr", "operations.log")
 }
 
 var logControlChars = regexp.MustCompile(`[\x00-\x1f\x7f]`)
@@ -69,20 +69,20 @@ func operationLine(now time.Time, label, action, path, detail string) string {
 }
 
 func operationsLogLabel() string {
-	command := os.Getenv("_MOLE_OPLOG_RUN_COMMAND")
+	command := os.Getenv("_SWEEPR_OPLOG_RUN_COMMAND")
 	if command == "" {
 		command = "analyze"
 	}
-	if id := os.Getenv("_MOLE_OPLOG_RUN_ID"); id != "" {
+	if id := os.Getenv("_SWEEPR_OPLOG_RUN_ID"); id != "" {
 		return command + " run=" + id
 	}
 	return command
 }
 
 // writeOperation appends one record. A failure never fails the deletion it
-// describes, and another freeMole run holding the file is retried briefly.
+// describes, and another Sweepr run holding the file is retried briefly.
 func writeOperation(action, path, detail string) {
-	if os.Getenv("MO_NO_OPLOG") == "1" || path == "" {
+	if os.Getenv("SWEEPR_NO_OPLOG") == "1" || path == "" {
 		return
 	}
 	file := operationsLogPath()
@@ -124,13 +124,13 @@ func writeOperation(action, path, detail string) {
 
 // Keep normal TUI output quiet; explicit debug mode shares the shell's session log.
 func debugOperationFailure(file string, err error) {
-	if os.Getenv("MOLE_DEBUG") != "1" {
+	if os.Getenv("SWEEPR_DEBUG") != "1" {
 		return
 	}
 	line := fmt.Sprintf("%s [DEBUG] operations.log not written: %s: %s\r\n", operationsLogNow().Format("15:04:05"), logValue(file), logValue(err.Error()))
 	logRoot := defaultOperationsLogPath()
 	if logRoot != "" {
-		debugFile := filepath.Join(filepath.Dir(logRoot), "mole_debug_session.log")
+		debugFile := filepath.Join(filepath.Dir(logRoot), "sweepr_debug_session.log")
 		if appendOperationText(debugFile, line) == nil {
 			return
 		}

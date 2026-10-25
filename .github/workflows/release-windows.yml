@@ -14,9 +14,7 @@ on:
 
 # The workflow only creates a draft. The maintainer signs the assets with the
 # code-signing certificate (scripts/sign-release.ps1), uploads them and
-# publishes the draft; see RELEASE.md. A Windows release must never become the
-# repository's "latest" release: the macOS installer and `fm update` resolve
-# stable versions through releases/latest, so make_latest stays false.
+# publishes the draft; see RELEASE.md.
 permissions:
   contents: write  # Required for creating releases
 
@@ -81,7 +79,7 @@ jobs:
           }
           $declared = (Get-Content VERSION -Raw).Trim()
           if ($declared -ne $env:TAG_VERSION) {
-              Write-Host "::error file=VERSION::Tag version $($env:TAG_VERSION) does not match VERSION '$declared'. The archive, its VERSION file and fm --version would report the wrong version."
+              Write-Host "::error file=VERSION::Tag version $($env:TAG_VERSION) does not match VERSION '$declared'. The archive, its VERSION file and sw --version would report the wrong version."
               Write-Host "Next action: bump VERSION and lib/core/version.ps1, commit, delete the pushed tag with 'git push origin :refs/tags/<tag>', then tag and push the new commit."
               exit 1
           }
@@ -169,8 +167,8 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: freemole-${{ steps.version.outputs.VERSION }}-x64-zip
-          path: release/freemole-${{ steps.version.outputs.VERSION }}-x64.zip
+          name: sweepr-${{ steps.version.outputs.VERSION }}-x64-zip
+          path: release/sweepr-${{ steps.version.outputs.VERSION }}-x64.zip
           if-no-files-found: error
           retention-days: 1
       
@@ -198,7 +196,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "release/freemole-${{ steps.version.outputs.VERSION }}-x64.zip",
+            "release/sweepr-${{ steps.version.outputs.VERSION }}-x64.zip",
             "release/analyze-windows-x64.exe",
             "release/status-windows-x64.exe",
             "release/SHA256SUMS.txt"
@@ -218,16 +216,16 @@ jobs:
           make_latest: false
           generate_release_notes: false
           body: |
-            ## freeMole CLI for Windows ${{ steps.version.outputs.VERSION }}
+            ## Sweepr CLI for Windows ${{ steps.version.outputs.VERSION }}
 
             Install from PowerShell:
 
             ```powershell
-            iwr -useb https://raw.githubusercontent.com/brummilab/freeMole/main/quick-install.ps1 | iex
+            iwr -useb https://raw.githubusercontent.com/brummilab/sweepr/main/quick-install.ps1 | iex
             ```
 
-            Already installed? Run `fm update`.
+            Already installed? Run `sw update`.
 
-            The files below are what package managers and `fm` download. Every script and executable is code-signed, and `SHA256SUMS.txt` lists their checksums.
+            The files below are what package managers and `sw` download. Every script and executable is code-signed, and `SHA256SUMS.txt` lists their checksums.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

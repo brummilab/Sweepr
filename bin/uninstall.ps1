@@ -1,4 +1,4 @@
-# freeMole - Uninstall Command
+# Sweepr - Uninstall Command
 # Interactive application uninstaller for Windows
 
 #Requires -Version 5.1
@@ -36,7 +36,7 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 # Configuration
 # ============================================================================
 
-$script:CacheDir = "$env:USERPROFILE\.cache\freemole"
+$script:CacheDir = "$env:USERPROFILE\.cache\sweepr"
 # v3: Store display sizing does not require deletion authority over ancestors.
 # v4: written as UTF-8. v3 used the ANSI code page, which turned non-ASCII
 # app names into question marks, so a v3 file is not read as UTF-8.
@@ -45,7 +45,7 @@ $script:CacheDir = "$env:USERPROFILE\.cache\freemole"
 $script:AppCacheFile = "$script:CacheDir\app_scan_cache_v6.json"
 $script:CacheTTLHours = 24
 
-# A vendor EstimatedSize above this is measured against the install folder (#1717).
+# A vendor EstimatedSize above this is measured against the install folder.
 $script:SizeOutlierKB = 10485760
 
 # ============================================================================
@@ -57,7 +57,7 @@ function Show-UninstallHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm uninstall$esc[0m - Interactive application uninstaller"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm uninstall [options]"
+    Write-Host "$esc[33mUsage:$esc[0m sw uninstall [options]"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --dry-run    Show what would be uninstalled, change nothing"
@@ -120,7 +120,7 @@ $script:ProtectedPackageNames = @(
 # ============================================================================
 
 # Reads a property that may be absent; strict mode throws on a missing one.
-function Get-MoleProperty {
+function Get-SweeprProperty {
     param($Object, [string]$Name)
 
     if ($null -eq $Object) { return $null }
@@ -143,7 +143,7 @@ function Get-NormalizedFolderPath {
     return $text
 }
 
-function Test-MoleInstallContentFree {
+function Test-SweeprInstallContentFree {
     param([string]$Path)
 
     # Registered install folders can also hold a portable emulator or game library.
@@ -155,7 +155,7 @@ function Test-MoleInstallContentFree {
     try {
         for ($index = 0; $index -lt $folders.Count; $index++) {
             $folder = $folders[$index]
-            $snapshot = Get-MolePathSnapshot -Path $folder
+            $snapshot = Get-SweeprPathSnapshot -Path $folder
             if ($null -eq $snapshot) { return $false }
             $enumerator = ([IO.DirectoryInfo]::new($folder)).EnumerateFileSystemInfos().GetEnumerator()
             try {
@@ -174,16 +174,16 @@ function Test-MoleInstallContentFree {
                         $entry.Name -in @('galaxy-2.0.db', 'libraryfolder.vdf')) { return $false }
                 }
             } finally { $enumerator.Dispose() }
-            if (-not (Test-MolePathSnapshot -Snapshot $snapshot)) { return $false }
+            if (-not (Test-SweeprPathSnapshot -Snapshot $snapshot)) { return $false }
         }
         return ($clock.ElapsedMilliseconds -le 2000)
     } catch { return $false }
 }
 
 # Static eligibility for display measurement and a possible install leftover.
-# This never authorizes deletion: Test-MoleLeftoverOwnership also checks content
+# This never authorizes deletion: Test-SweeprLeftoverOwnership also checks content
 # and current owners. Reject drive roots, profiles and shared/system containers.
-function Test-MoleInstallFolder {
+function Test-SweeprInstallFolder {
     param([string]$Path)
 
     # Folders that hold many apps or none, never one app's install folder.
@@ -262,7 +262,7 @@ function Test-MoleInstallFolder {
 
 # Read ownership separately from the display inventory: hidden components and
 # duplicate keys still own files, and an incomplete scan is never absence.
-function Get-MoleInstallOwners {
+function Get-SweeprInstallOwners {
     $owners = @()
     $roots = @(
         'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -276,7 +276,7 @@ function Get-MoleInstallOwners {
             catch [System.Management.Automation.ItemNotFoundException] { continue }
             foreach ($key in @(Get-ChildItem -LiteralPath $root -ErrorAction Stop)) {
                 $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
-                $raw = [string](Get-MoleProperty $entry 'InstallLocation')
+                $raw = [string](Get-SweeprProperty $entry 'InstallLocation')
                 if ([string]::IsNullOrWhiteSpace($raw)) { continue }
                 $path = Get-NormalizedFolderPath $raw
                 if (-not $path) { throw 'Unresolved install ownership path' }
@@ -284,7 +284,7 @@ function Get-MoleInstallOwners {
             }
         }
         foreach ($package in @(Get-AppxPackage -ErrorAction Stop)) {
-            $raw = [string](Get-MoleProperty $package 'InstallLocation')
+            $raw = [string](Get-SweeprProperty $package 'InstallLocation')
             if ([string]::IsNullOrWhiteSpace($raw)) { continue }
             $path = Get-NormalizedFolderPath $raw
             if (-not $path) { throw 'Unresolved package ownership path' }
@@ -298,17 +298,17 @@ function Get-MoleInstallOwners {
     }
 }
 
-function Test-MoleLeftoverOwnership {
+function Test-SweeprLeftoverOwnership {
     param([string]$Path, $App, [switch]$Preview)
 
-    if (-not (Test-MoleInstallFolder $Path)) { return $false }
+    if (-not (Test-SweeprInstallFolder $Path)) { return $false }
     # Content retention is removal authority, not registered identity or display size.
-    if (-not (Test-MoleInstallContentFree $Path)) { return $false }
+    if (-not (Test-SweeprInstallContentFree $Path)) { return $false }
     $folder = Get-NormalizedFolderPath $Path
-    $key = [string](Get-MoleProperty $App 'RegistryKey')
-    $mergedKeys = @(Get-MoleProperty $App 'MergedKeys')
+    $key = [string](Get-SweeprProperty $App 'RegistryKey')
+    $mergedKeys = @(Get-SweeprProperty $App 'MergedKeys')
     if (-not $Preview -and -not (Test-UninstallEntryGone $key)) { return $false }
-    $inventory = Get-MoleInstallOwners
+    $inventory = Get-SweeprInstallOwners
     if (-not $inventory.Complete) { return $false }
     foreach ($owner in $inventory.Owners) {
         if ($Preview -and $owner.Key -and ($owner.Key -eq $key -or $owner.Key -in $mergedKeys)) { continue }
@@ -324,7 +324,7 @@ function Test-MoleLeftoverOwnership {
 function Test-UninstallEntryFlag {
     param($Entry, [string]$Name)
 
-    $value = Get-MoleProperty $Entry $Name
+    $value = Get-SweeprProperty $Entry $Name
     if ($null -eq $value) { return $false }
     $number = 0L
     if ([long]::TryParse(([string]$value).Trim(), [ref]$number)) { return $number -ne 0 }
@@ -335,16 +335,16 @@ function Test-UninstallEntryFlag {
 function Test-UninstallEntryIsUpdate {
     param($Entry)
 
-    if (-not [string]::IsNullOrWhiteSpace([string](Get-MoleProperty $Entry 'ParentKeyName'))) { return $true }
-    if ([string](Get-MoleProperty $Entry 'ReleaseType') -match 'Update|Hotfix') { return $true }
-    return ([string](Get-MoleProperty $Entry '(default)') -match '^KB\d{6,}')
+    if (-not [string]::IsNullOrWhiteSpace([string](Get-SweeprProperty $Entry 'ParentKeyName'))) { return $true }
+    if ([string](Get-SweeprProperty $Entry 'ReleaseType') -match 'Update|Hotfix') { return $true }
+    return ([string](Get-SweeprProperty $Entry '(default)') -match '^KB\d{6,}')
 }
 
 # EstimatedSize is KB; a DWORD above 2 GB reads back negative, and some vendors write a string.
 function Get-EstimatedSizeKB {
     param($Entry)
 
-    $value = Get-MoleProperty $Entry 'EstimatedSize'
+    $value = Get-SweeprProperty $Entry 'EstimatedSize'
     if ($null -eq $value) { return 0L }
     $kb = 0L
     if ($value -is [int]) {
@@ -359,7 +359,7 @@ function Get-EstimatedSizeKB {
 }
 
 # The size to show and whether it was verified. A vendor value can be wrong by 1000x
-# (#1717: RustDesk wrote bytes into the KB field), so one above 10 GB is measured against
+# (RustDesk wrote bytes into the KB field), so one above 10 GB is measured against
 # the install folder and the measurement wins when it is at least 10x smaller.
 function Get-RegistryAppSize {
     param([long]$EstimatedKB, [string]$InstallFolder)
@@ -387,9 +387,9 @@ function Get-RegistryAppSize {
 function ConvertFrom-UninstallEntry {
     param($Entry)
 
-    $displayName = [string](Get-MoleProperty $Entry 'DisplayName')
-    $uninstallString = ([string](Get-MoleProperty $Entry 'UninstallString')).Trim()
-    $quietString = ([string](Get-MoleProperty $Entry 'QuietUninstallString')).Trim()
+    $displayName = [string](Get-SweeprProperty $Entry 'DisplayName')
+    $uninstallString = ([string](Get-SweeprProperty $Entry 'UninstallString')).Trim()
+    $quietString = ([string](Get-SweeprProperty $Entry 'QuietUninstallString')).Trim()
     if ([string]::IsNullOrWhiteSpace($displayName)) { return $null }
     if (-not $uninstallString -and -not $quietString) { return $null }
     if (Test-UninstallEntryFlag $Entry 'SystemComponent') { return $null }
@@ -399,22 +399,22 @@ function ConvertFrom-UninstallEntry {
 
     # A protected registered directory still distinguishes installations. Only
     # display measurement and leftover removal require their own eligibility.
-    $installFolder = Get-NormalizedFolderPath -Path ([string](Get-MoleProperty $Entry 'InstallLocation'))
+    $installFolder = Get-NormalizedFolderPath -Path ([string](Get-SweeprProperty $Entry 'InstallLocation'))
     $sizeFolder = $null
-    if (Test-MoleInstallFolder -Path $installFolder) { $sizeFolder = $installFolder }
+    if (Test-SweeprInstallFolder -Path $installFolder) { $sizeFolder = $installFolder }
     $size = Get-RegistryAppSize -EstimatedKB (Get-EstimatedSizeKB $Entry) -InstallFolder $sizeFolder
 
     $installDate = $null
     try {
-        $rawDate = [string](Get-MoleProperty $Entry 'InstallDate')
+        $rawDate = [string](Get-SweeprProperty $Entry 'InstallDate')
         if ($rawDate) {
             $installDate = [DateTime]::ParseExact($rawDate, "yyyyMMdd", $null)
         }
     }
     catch { }
 
-    $publisher = [string](Get-MoleProperty $Entry 'Publisher')
-    $version = [string](Get-MoleProperty $Entry 'DisplayVersion')
+    $publisher = [string](Get-SweeprProperty $Entry 'Publisher')
+    $version = [string](Get-SweeprProperty $Entry 'DisplayVersion')
 
     return [PSCustomObject]@{
         Name                 = $displayName
@@ -427,8 +427,8 @@ function ConvertFrom-UninstallEntry {
         UninstallString      = $(if ($uninstallString) { $uninstallString } else { $null })
         QuietUninstallString = $(if ($quietString) { $quietString } else { $null })
         WindowsInstaller     = (Test-UninstallEntryFlag $Entry 'WindowsInstaller')
-        RegistryKey          = [string](Get-MoleProperty $Entry 'PSPath')
-        KeyName              = [string](Get-MoleProperty $Entry 'PSChildName')
+        RegistryKey          = [string](Get-SweeprProperty $Entry 'PSPath')
+        KeyName              = [string](Get-SweeprProperty $Entry 'PSChildName')
         PackageFullName      = $null
         InstallDate          = $installDate
         Source               = "Registry"
@@ -448,21 +448,21 @@ function Merge-InstalledApps {
     $mergedKeys = New-Object System.Collections.ArrayList
     foreach ($app in $Apps) {
         if ($null -eq $app) { continue }
-        $appKey = [string](Get-MoleProperty $app 'RegistryKey')
-        $folder = [string](Get-MoleProperty $app 'InstallLocation')
-        $uninstall = [string](Get-MoleProperty $app 'UninstallString')
+        $appKey = [string](Get-SweeprProperty $app 'RegistryKey')
+        $folder = [string](Get-SweeprProperty $app 'InstallLocation')
+        $uninstall = [string](Get-SweeprProperty $app 'UninstallString')
         $score = 0
         if ($folder) { $score += 4 }
-        if ((Get-MoleProperty $app 'SizeChecked') -eq $true) { $score += 2 }
+        if ((Get-SweeprProperty $app 'SizeChecked') -eq $true) { $score += 2 }
 
         $match = -1
         for ($i = 0; $i -lt $kept.Count; $i++) {
             $other = $kept[$i]
-            $otherFolder = [string](Get-MoleProperty $other 'InstallLocation')
+            $otherFolder = [string](Get-SweeprProperty $other 'InstallLocation')
             if ($folder -and $otherFolder -and $folder -ne $otherFolder) { continue }
             $sameName = ($app.Name -eq $other.Name)
             if (($folder -and $sameName -and $folder -eq $otherFolder) -or
-                ($uninstall -and $uninstall -eq [string](Get-MoleProperty $other 'UninstallString')) -or
+                ($uninstall -and $uninstall -eq [string](Get-SweeprProperty $other 'UninstallString')) -or
                 ($sameName -and [string]$app.Version -eq [string]$other.Version -and
                     [string]$app.Publisher -eq [string]$other.Publisher)) {
                 $match = $i
@@ -496,17 +496,17 @@ function Merge-InstalledApps {
 function Test-ListableAppxPackage {
     param($Package)
 
-    $name = [string](Get-MoleProperty $Package 'Name')
+    $name = [string](Get-SweeprProperty $Package 'Name')
     if (-not $name) { return $false }
-    if ((Get-MoleProperty $Package 'IsFramework') -eq $true) { return $false }
-    if ((Get-MoleProperty $Package 'IsResourcePackage') -eq $true) { return $false }
-    if ((Get-MoleProperty $Package 'IsBundle') -eq $true) { return $false }
-    if ([string](Get-MoleProperty $Package 'SignatureKind') -eq 'System') { return $false }
+    if ((Get-SweeprProperty $Package 'IsFramework') -eq $true) { return $false }
+    if ((Get-SweeprProperty $Package 'IsResourcePackage') -eq $true) { return $false }
+    if ((Get-SweeprProperty $Package 'IsBundle') -eq $true) { return $false }
+    if ([string](Get-SweeprProperty $Package 'SignatureKind') -eq 'System') { return $false }
     if ($name.StartsWith('Microsoft.Windows.', [StringComparison]::OrdinalIgnoreCase)) { return $false }
     if ($script:ProtectedPackageNames -contains $name) { return $false }
     if (Test-ProtectedApp $name) { return $false }
 
-    $location = Get-NormalizedFolderPath -Path ([string](Get-MoleProperty $Package 'InstallLocation'))
+    $location = Get-NormalizedFolderPath -Path ([string](Get-SweeprProperty $Package 'InstallLocation'))
     $windows = Get-NormalizedFolderPath -Path $env:SystemRoot
     if ($location -and $windows -and ($location -eq $windows -or
             $location.StartsWith($windows + '\', [StringComparison]::OrdinalIgnoreCase))) {
@@ -517,14 +517,14 @@ function Test-ListableAppxPackage {
 
 # Cached display rows never authorize removal. Read the exact current package,
 # narrowing the provider query by its literal name, then require the full identity.
-function Test-MoleStoreRemovalAllowed {
+function Test-SweeprStoreRemovalAllowed {
     param([string]$PackageFullName)
 
     if ([string]::IsNullOrWhiteSpace($PackageFullName)) { return $false }
     $name = ($PackageFullName -split '_', 2)[0]
     try {
         $packages = @(Get-AppxPackage -Name ([WildcardPattern]::Escape($name)) -ErrorAction Stop |
-            Where-Object { [string](Get-MoleProperty $_ 'PackageFullName') -eq $PackageFullName })
+            Where-Object { [string](Get-SweeprProperty $_ 'PackageFullName') -eq $PackageFullName })
         if ($packages.Count -ne 1) { return $false }
         if (-not (Test-ListableAppxPackage -Package $packages[0])) { return $false }
         $manifest = $null
@@ -552,8 +552,8 @@ function Test-SparseAppxManifest {
 function Get-AppDisplaySize {
     param($App)
 
-    $size = [string](Get-MoleProperty $App 'SizeHuman')
-    if (-not $size -or ($size -eq '0B' -and -not (Get-MoleProperty $App 'SizeChecked'))) { return 'Unknown' }
+    $size = [string](Get-SweeprProperty $App 'SizeHuman')
+    if (-not $size -or ($size -eq '0B' -and -not (Get-SweeprProperty $App 'SizeChecked'))) { return 'Unknown' }
     return $size
 }
 
@@ -561,9 +561,9 @@ function Get-AppDisplaySize {
 function Get-AppSelectionKey {
     param($App)
 
-    $package = [string](Get-MoleProperty $App 'PackageFullName')
+    $package = [string](Get-SweeprProperty $App 'PackageFullName')
     if ($package) { return "package:$package" }
-    $key = [string](Get-MoleProperty $App 'RegistryKey')
+    $key = [string](Get-SweeprProperty $App 'RegistryKey')
     # The scan stores the provider-qualified PSPath; the key reads without the provider.
     if ($key) { return "registry:$($key -replace '^Microsoft\.PowerShell\.Core\\Registry::', '')" }
     return "name:$($App.Name)"
@@ -616,9 +616,9 @@ function Get-MsiProductCode {
     param($App)
 
     $guidPattern = '\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}'
-    $uninstall = [string](Get-MoleProperty $App 'UninstallString')
-    $keyName = [string](Get-MoleProperty $App 'KeyName')
-    $isMsi = ((Get-MoleProperty $App 'WindowsInstaller') -eq $true)
+    $uninstall = [string](Get-SweeprProperty $App 'UninstallString')
+    $keyName = [string](Get-SweeprProperty $App 'KeyName')
+    $isMsi = ((Get-SweeprProperty $App 'WindowsInstaller') -eq $true)
     $code = $null
     $match = [regex]::Match($keyName, $guidPattern)
     if ($match.Success) {
@@ -687,15 +687,15 @@ function Get-UninstallLaunch {
         }
     }
 
-    $quiet = Split-UninstallCommand -Command ([string](Get-MoleProperty $App 'QuietUninstallString'))
+    $quiet = Split-UninstallCommand -Command ([string](Get-SweeprProperty $App 'QuietUninstallString'))
     # Proton Pass 1.37.0 registers a broken Squirrel -s argument. Use only its
     # verified normal command, never a guessed switch or a second uninstall attempt.
     if ($quiet -and $App.Name -ceq 'Proton Pass' -and
-        (Get-MoleProperty $App 'Publisher') -ceq 'Proton AG' -and
-        (Get-MoleProperty $App 'Version') -ceq '1.37.0' -and
+        (Get-SweeprProperty $App 'Publisher') -ceq 'Proton AG' -and
+        (Get-SweeprProperty $App 'Version') -ceq '1.37.0' -and
         $quiet.Arguments -ceq '--uninstall -s' -and
         [IO.Path]::GetFileName($quiet.FilePath) -ieq 'Update.exe') {
-        $normal = Split-UninstallCommand -Command ([string](Get-MoleProperty $App 'UninstallString'))
+        $normal = Split-UninstallCommand -Command ([string](Get-SweeprProperty $App 'UninstallString'))
         if ($normal -and $normal.FilePath -ieq $quiet.FilePath -and $normal.Arguments -ceq '--uninstall') {
             return [PSCustomObject]@{ FilePath = $normal.FilePath; Arguments = $normal.Arguments; Kind = 'registered' }
         }
@@ -704,7 +704,7 @@ function Get-UninstallLaunch {
         return [PSCustomObject]@{ FilePath = $quiet.FilePath; Arguments = $quiet.Arguments; Kind = 'quiet' }
     }
 
-    $command = Split-UninstallCommand -Command ([string](Get-MoleProperty $App 'UninstallString'))
+    $command = Split-UninstallCommand -Command ([string](Get-SweeprProperty $App 'UninstallString'))
     if (-not $command) { return $null }
     $arguments = $command.Arguments
     $kind = 'registered'
@@ -725,13 +725,13 @@ function Get-UninstallLaunch {
 
 # An uninstall is done once its registry entry is gone or no longer names an app (a name
 # plus an uninstall command). A key that cannot be read counts as still installed.
-# Keep Start-Process's descendant wait, but bound freeMole's wait without killing the
+# Keep Start-Process's descendant wait, but bound Sweepr's wait without killing the
 # vendor. Stop cancels the cmdlet pipeline; it is not Stop-Process or taskkill.
 # A timeout is never success, even if registration vanished while work continues.
 # Thirty minutes is a conservative interactive-uninstall ceiling, not an idle
 # threshold. No existing CLI deadline covers vendor uninstallers. The shorter
 # injectable deadline is only for tests; callers use the fixed default.
-function Invoke-MoleUninstallProcess {
+function Invoke-SweeprUninstallProcess {
     param(
         [string]$FilePath,
         [string[]]$ArgumentList,
@@ -782,9 +782,9 @@ function Test-UninstallEntryGone {
     catch {
         return $false
     }
-    if ([string]::IsNullOrWhiteSpace([string](Get-MoleProperty $values 'DisplayName'))) { return $true }
-    return ([string]::IsNullOrWhiteSpace([string](Get-MoleProperty $values 'UninstallString')) -and
-        [string]::IsNullOrWhiteSpace([string](Get-MoleProperty $values 'QuietUninstallString')))
+    if ([string]::IsNullOrWhiteSpace([string](Get-SweeprProperty $values 'DisplayName'))) { return $true }
+    return ([string]::IsNullOrWhiteSpace([string](Get-SweeprProperty $values 'UninstallString')) -and
+        [string]::IsNullOrWhiteSpace([string](Get-SweeprProperty $values 'QuietUninstallString')))
 }
 
 # ============================================================================
@@ -974,7 +974,7 @@ function Show-AppSelectionMenu {
     param([array]$Apps)
 
     if ($Apps.Count -eq 0) {
-        Write-MoleWarning "No applications found to uninstall"
+        Write-SweeprWarning "No applications found to uninstall"
         return @()
     }
 
@@ -1149,21 +1149,21 @@ function Test-UninstallListAsJson {
     return [Console]::IsOutputRedirected
 }
 
-# The menu's inventory as records for scripts and agents, field for field with
-# the macOS CLI where Windows has the same fact. id is the menu's selection key.
+# The menu's inventory as records for scripts and agents. id is the menu's
+# selection key.
 function ConvertTo-UninstallListRecord {
     param($App)
 
     $display = Get-AppDisplaySize $App
     $sizeBytes = $null
-    if ($display -ne 'Unknown') { $sizeBytes = [long](Get-MoleProperty $App 'SizeKB') * 1024 }
-    $location = [string](Get-MoleProperty $App 'InstallLocation')
+    if ($display -ne 'Unknown') { $sizeBytes = [long](Get-SweeprProperty $App 'SizeKB') * 1024 }
+    $location = [string](Get-SweeprProperty $App 'InstallLocation')
     return [ordered]@{
         name       = [string]$App.Name
         id         = Get-AppSelectionKey $App
-        source     = [string](Get-MoleProperty $App 'Source')
-        version    = $(if (Get-MoleProperty $App 'Version') { [string](Get-MoleProperty $App 'Version') } else { $null })
-        publisher  = $(if (Get-MoleProperty $App 'Publisher') { [string](Get-MoleProperty $App 'Publisher') } else { $null })
+        source     = [string](Get-SweeprProperty $App 'Source')
+        version    = $(if (Get-SweeprProperty $App 'Version') { [string](Get-SweeprProperty $App 'Version') } else { $null })
+        publisher  = $(if (Get-SweeprProperty $App 'Publisher') { [string](Get-SweeprProperty $App 'Publisher') } else { $null })
         path       = $location
         size       = $display
         size_bytes = $sizeBytes
@@ -1181,7 +1181,7 @@ function ConvertTo-UninstallListJson {
     return [regex]::Replace($json, '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
 }
 
-# fm uninstall --list: print the inventory and return. It runs no uninstaller,
+# sw uninstall --list: print the inventory and return. It runs no uninstaller,
 # asks for no elevation and writes no operations.log line; like the menu it
 # reuses the 24-hour app cache unless --rescan is given.
 function Show-UninstallList {
@@ -1224,7 +1224,7 @@ function Get-UninstallMethodDescription {
     if ($launch) {
         return "its uninstaller: $(("$($launch.FilePath) $($launch.Arguments)").Trim())"
     }
-    $uninstallString = [string](Get-MoleProperty $App 'UninstallString')
+    $uninstallString = [string](Get-SweeprProperty $App 'UninstallString')
     if ($uninstallString) {
         return "no runnable uninstaller, registered: $uninstallString"
     }
@@ -1237,18 +1237,18 @@ function Get-UninstallOperationDetail {
     param($App, [string]$Outcome, $Launch)
 
     $parts = @($Outcome)
-    $folder = [string](Get-MoleProperty $App 'InstallLocation')
+    $folder = [string](Get-SweeprProperty $App 'InstallLocation')
     if ($folder) { $parts += "location $folder" }
-    $key = [string](Get-MoleProperty $App 'RegistryKey')
+    $key = [string](Get-SweeprProperty $App 'RegistryKey')
     if ($key) { $parts += "key $($key -replace '^Microsoft\.PowerShell\.Core\\Registry::', '')" }
-    $package = [string](Get-MoleProperty $App 'PackageFullName')
+    $package = [string](Get-SweeprProperty $App 'PackageFullName')
     if ($package) { $parts += "package $package" }
     if ($Launch) {
         $command = @(@($Launch.FilePath) + @($Launch.Arguments) | Where-Object { $_ }) -join ' '
         $parts += "command $command"
     }
     else {
-        $registered = [string](Get-MoleProperty $App 'UninstallString')
+        $registered = [string](Get-SweeprProperty $App 'UninstallString')
         if ($registered) { $parts += "registered $registered" }
     }
     return $parts -join '; '
@@ -1266,19 +1266,19 @@ function Uninstall-SelectedApps {
     # A dry run runs no uninstaller and removes nothing. It names the install folder
     # only when that folder could be removed after a real uninstall; Remove-SafeItem
     # only reports it in dry-run mode.
-    if ($script:MoleDryRunMode) {
+    if ($script:SweeprDryRunMode) {
         Write-Host ""
         Write-Host "$esc[1;35mUninstall preview$esc[0m - no changes made"
         Write-Host ""
         $previewCount = 0
         foreach ($app in $Apps) {
-            if ($app.Source -eq "WindowsStore" -and -not (Test-MoleStoreRemovalAllowed -PackageFullName ([string](Get-MoleProperty $app 'PackageFullName')))) { continue }
+            if ($app.Source -eq "WindowsStore" -and -not (Test-SweeprStoreRemovalAllowed -PackageFullName ([string](Get-SweeprProperty $app 'PackageFullName')))) { continue }
             $previewCount++
             Write-Host "$esc[34m$($script:Icons.Arrow)$esc[0m $($app.Name)"
             Write-Host "  $esc[90mWould uninstall with $(Get-UninstallMethodDescription -App $app)$esc[0m"
-            $folder = [string](Get-MoleProperty $app 'InstallLocation')
-            if ($app.Source -ne "WindowsStore" -and (Test-MoleLeftoverOwnership -Path $folder -App $app -Preview)) {
-                $guard = { param($candidate) Test-MoleLeftoverOwnership -Path $candidate -App $app -Preview }
+            $folder = [string](Get-SweeprProperty $app 'InstallLocation')
+            if ($app.Source -ne "WindowsStore" -and (Test-SweeprLeftoverOwnership -Path $folder -App $app -Preview)) {
+                $guard = { param($candidate) Test-SweeprLeftoverOwnership -Path $candidate -App $app -Preview }
                 $null = Remove-SafeItem -Path $folder -Description "Leftover files to Recycle Bin" -Recurse -Recycle -Guard $guard
             }
         }
@@ -1295,8 +1295,8 @@ function Uninstall-SelectedApps {
     $remainingCount = 0
 
     foreach ($app in $Apps) {
-        if ($app.Source -eq "WindowsStore" -and -not (Test-MoleStoreRemovalAllowed -PackageFullName ([string](Get-MoleProperty $app 'PackageFullName')))) {
-            Write-MoleOperation -Action "SKIPPED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "current Store package not eligible")
+        if ($app.Source -eq "WindowsStore" -and -not (Test-SweeprStoreRemovalAllowed -PackageFullName ([string](Get-SweeprProperty $app 'PackageFullName')))) {
+            Write-SweeprOperation -Action "SKIPPED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "current Store package not eligible")
             continue
         }
         Write-Host "$esc[34m$($script:Icons.Arrow)$esc[0m Uninstalling: $($app.Name)" -NoNewline
@@ -1307,7 +1307,7 @@ function Uninstall-SelectedApps {
                 # UWP app
                 if ($app.PackageFullName) {
                     Remove-AppxPackage -Package $app.PackageFullName -ErrorAction Stop
-                    Write-MoleOperation -Action "UNINSTALLED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "Store package removed")
+                    Write-SweeprOperation -Action "UNINSTALLED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "Store package removed")
                     Write-Host " $esc[32m$($script:Icons.Success)$esc[0m"
                     $successCount++
                 }
@@ -1317,7 +1317,7 @@ function Uninstall-SelectedApps {
             # Registry app: run its uninstaller once, then trust only the registry.
             $launch = Get-UninstallLaunch -App $app
             if (-not $launch) {
-                Write-MoleOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "no runnable uninstaller")
+                Write-SweeprOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "no runnable uninstaller")
                 Write-Host " $esc[31m(no runnable uninstaller found)$esc[0m"
                 $failCount++
                 continue
@@ -1327,33 +1327,33 @@ function Uninstall-SelectedApps {
             if ($launch.Arguments) {
                 $startArgs.ArgumentList = $launch.Arguments
             }
-            $process = Invoke-MoleUninstallProcess @startArgs
-            $exitCode = Get-MoleProperty $process 'ExitCode'
+            $process = Invoke-SweeprUninstallProcess @startArgs
+            $exitCode = Get-SweeprProperty $process 'ExitCode'
 
             # A cancelled, failed or still-running uninstall leaves its entry behind, and
             # then the install folder is still the app's: nothing is removed.
-            if (-not (Test-UninstallEntryGone -KeyPath ([string](Get-MoleProperty $app 'RegistryKey')))) {
-                Write-MoleOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "still installed, exit code $exitCode" -Launch $launch)
+            if (-not (Test-UninstallEntryGone -KeyPath ([string](Get-SweeprProperty $app 'RegistryKey')))) {
+                Write-SweeprOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "still installed, exit code $exitCode" -Launch $launch)
                 Write-Host " $esc[33m(still installed, exit code $exitCode)$esc[0m"
                 $remainingCount++
                 continue
             }
 
-            Write-MoleOperation -Action "UNINSTALLED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "exit code $exitCode" -Launch $launch)
+            Write-SweeprOperation -Action "UNINSTALLED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome "exit code $exitCode" -Launch $launch)
             Write-Host " $esc[32m$($script:Icons.Success)$esc[0m"
             $successCount++
 
             # Clean leftover files
-            $folder = [string](Get-MoleProperty $app 'InstallLocation')
-            if (Test-MoleLeftoverOwnership -Path $folder -App $app) {
+            $folder = [string](Get-SweeprProperty $app 'InstallLocation')
+            if (Test-SweeprLeftoverOwnership -Path $folder -App $app) {
                 Write-Host "  $esc[90mMoving leftover files to Recycle Bin...$esc[0m"
-                $guard = { param($candidate) Test-MoleLeftoverOwnership -Path $candidate -App $app }
+                $guard = { param($candidate) Test-SweeprLeftoverOwnership -Path $candidate -App $app }
                 $null = Remove-SafeItem -Path $folder -Description "Leftover files to Recycle Bin" -Recurse -Recycle -Guard $guard
             }
         }
         catch [TimeoutException] {
             Write-Host " $esc[31m$($_.Exception.Message)$esc[0m"
-            Write-MoleOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome $_.Exception.Message -Launch $launch)
+            Write-SweeprOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome $_.Exception.Message -Launch $launch)
             $failCount++
             # Do not overlap the next uninstaller with the still-running vendor.
             break
@@ -1361,7 +1361,7 @@ function Uninstall-SelectedApps {
         catch {
             Write-Host " $esc[31m$($script:Icons.Error)$esc[0m"
             Write-Debug "Uninstall failed: $_"
-            Write-MoleOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome $_.Exception.Message -Launch $launch)
+            Write-SweeprOperation -Action "FAILED" -Path $app.Name -Detail (Get-UninstallOperationDetail -App $app -Outcome $_.Exception.Message -Launch $launch)
             $failCount++
         }
     }
@@ -1402,7 +1402,7 @@ function Main {
     }
 
     if ($DryRun) {
-        $env:MOLE_DRY_RUN = "1"
+        $env:SWEEPR_DRY_RUN = "1"
         Set-DryRunMode -Enabled $true
     }
 
@@ -1413,7 +1413,7 @@ function Main {
     $apps = @(Get-InstalledApplications -ForceRescan:$Rescan)
 
     if ($apps.Count -eq 0) {
-        Write-MoleWarning "No applications found"
+        Write-SweeprWarning "No applications found"
         return
     }
 
@@ -1431,7 +1431,7 @@ function Main {
     $esc = [char]27
     Clear-Host
     Write-Host ""
-    if ($script:MoleDryRunMode) {
+    if ($script:SweeprDryRunMode) {
         Write-Host "$esc[33mDry run: the following applications would be uninstalled:$esc[0m"
     }
     else {

@@ -1,28 +1,28 @@
-# freeMole - TUI binary helper
+# Sweepr - TUI binary helper
 # Resolves, downloads, or builds analyze/status executables on Windows.
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
-if ((Get-Variable -Name 'MOLE_TUI_BINARIES_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_TUI_BINARIES_LOADED) {
+if ((Get-Variable -Name 'SWEEPR_TUI_BINARIES_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_TUI_BINARIES_LOADED) {
     return
 }
-$script:MOLE_TUI_BINARIES_LOADED = $true
+$script:SWEEPR_TUI_BINARIES_LOADED = $true
 
-$script:MOLE_TUI_CORE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$script:MOLE_TUI_CORE_DIR\version.ps1"
+$script:SWEEPR_TUI_CORE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+. "$script:SWEEPR_TUI_CORE_DIR\version.ps1"
 
-$script:MoleGitHubRepo = "brummilab/freeMole"
+$script:SweeprGitHubRepo = "brummilab/sweepr"
 # Release assets are fetched from their fixed download URLs, never through the
 # GitHub API: anonymous API calls are limited to 60 an hour per IP, and a shared
 # office or proxy address runs out, leaving status and analyze with no binary.
-$script:MoleReleaseDownloadRoot = "https://github.com/$($script:MoleGitHubRepo)/releases/download"
-$script:MoleGitHubHeaders = @{
-    "User-Agent" = "freeMole-Windows"
+$script:SweeprReleaseDownloadRoot = "https://github.com/$($script:SweeprGitHubRepo)/releases/download"
+$script:SweeprGitHubHeaders = @{
+    "User-Agent" = "Sweepr-Windows"
 }
 
 # Progress and failure lines while preparing a tool. With stdout redirected
-# (`$out = fm analyze --json`) the launcher's child PowerShell would put host
+# (`$out = sw analyze --json`) the launcher's child PowerShell would put host
 # lines ahead of the JSON, so they go to stderr then.
 function Write-TuiBinaryStatus {
     param([string]$Message, [string]$Color = "Gray")
@@ -33,10 +33,10 @@ function Write-TuiBinaryStatus {
     else { Write-Host $Message -ForegroundColor $Color }
 }
 
-function Get-MoleVersionFromScriptFile {
+function Get-SweeprVersionFromScriptFile {
     param([string]$WindowsDir)
 
-    return Get-MoleVersionString -RootDir $WindowsDir
+    return Get-SweeprVersionString -RootDir $WindowsDir
 }
 
 function Get-TuiBinaryAssetName {
@@ -84,8 +84,8 @@ function Get-ChecksumFromSums {
 }
 
 # SHA-256 through .NET, so verification never depends on module autoloading
-# (Get-FileHash is a script function in Windows PowerShell 5.1, #1744).
-function Get-MoleFileSha256 {
+# (Get-FileHash is a script function in Windows PowerShell 5.1).
+function Get-SweeprFileSha256 {
     param([string]$Path)
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -119,9 +119,9 @@ function Restore-PrebuiltTuiBinary {
     $releaseRoot = $null
     $sumsText = $null
     foreach ($tag in @("V$Version-windows", "v$Version-windows")) {
-        $candidate = "$($script:MoleReleaseDownloadRoot)/$tag"
+        $candidate = "$($script:SweeprReleaseDownloadRoot)/$tag"
         try {
-            $content = (Invoke-WebRequest -Uri "$candidate/SHA256SUMS.txt" -Headers $script:MoleGitHubHeaders -UseBasicParsing).Content
+            $content = (Invoke-WebRequest -Uri "$candidate/SHA256SUMS.txt" -Headers $script:SweeprGitHubHeaders -UseBasicParsing).Content
         }
         catch {
             continue
@@ -151,8 +151,8 @@ function Restore-PrebuiltTuiBinary {
 
     $downloadPath = "$DestinationPath.download"
     try {
-        Invoke-WebRequest -Uri "$releaseRoot/$assetName" -Headers $script:MoleGitHubHeaders -OutFile $downloadPath -UseBasicParsing
-        $actualHash = Get-MoleFileSha256 -Path $downloadPath
+        Invoke-WebRequest -Uri "$releaseRoot/$assetName" -Headers $script:SweeprGitHubHeaders -OutFile $downloadPath -UseBasicParsing
+        $actualHash = Get-SweeprFileSha256 -Path $downloadPath
         if ($actualHash -ne $expectedHash) {
             Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
             return "mismatch"
@@ -162,7 +162,7 @@ function Restore-PrebuiltTuiBinary {
     }
     catch {
         # The release and its checksum answered, so this is a real failure;
-        # say what it was instead of only suggesting Go (#1744).
+        # say what it was instead of only suggesting Go.
         Write-TuiBinaryStatus "  Could not fetch the prebuilt $Name tool: $($_.Exception.Message)" -Color Yellow
         if (Test-Path $downloadPath) {
             Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
@@ -189,7 +189,7 @@ function Build-TuiBinary {
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
     # Build beside the destination so a failed build never replaces its old copy.
-    $buildPath = Join-Path $binDir (".freemole-$Name-" + [guid]::NewGuid().ToString("N") + ".exe")
+    $buildPath = Join-Path $binDir (".sweepr-$Name-" + [guid]::NewGuid().ToString("N") + ".exe")
     try {
         Push-Location $WindowsDir
         try {
@@ -269,7 +269,7 @@ function Ensure-TuiBinary {
     }
 
     if (-not $Version) {
-        $Version = Get-MoleVersionFromScriptFile -WindowsDir $WindowsDir
+        $Version = Get-SweeprVersionFromScriptFile -WindowsDir $WindowsDir
     }
 
     $restoreResult = "unavailable"
@@ -288,7 +288,7 @@ function Ensure-TuiBinary {
     # A checksum mismatch means the published file is not the one released;
     # stop here instead of quietly building something else.
     if ($restoreResult -eq "mismatch") {
-        Write-TuiBinaryStatus "The downloaded $Name tool did not match its published checksum and was deleted. Run 'fm update' and try again, or report it at https://github.com/brummilab/freeMole/issues." -Color Red
+        Write-TuiBinaryStatus "The downloaded $Name tool did not match its published checksum and was deleted. Run 'sw update' and try again, or report it at https://github.com/brummilab/sweepr/issues." -Color Red
         return $null
     }
 

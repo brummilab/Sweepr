@@ -1,4 +1,4 @@
-# freeMole - Common Functions Library
+# Sweepr - Common Functions Library
 # Main entry point that loads all core modules
 
 #Requires -Version 5.1
@@ -6,48 +6,48 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_COMMON_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_COMMON_LOADED) {
+if ((Get-Variable -Name 'SWEEPR_COMMON_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_COMMON_LOADED) {
     return
 }
-$script:MOLE_COMMON_LOADED = $true
+$script:SWEEPR_COMMON_LOADED = $true
 
 # Get the directory containing this script
-$script:MOLE_CORE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:MOLE_LIB_DIR = Split-Path -Parent $script:MOLE_CORE_DIR
-$script:MOLE_ROOT_DIR = Split-Path -Parent $script:MOLE_LIB_DIR
+$script:SWEEPR_CORE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$script:SWEEPR_LIB_DIR = Split-Path -Parent $script:SWEEPR_CORE_DIR
+$script:SWEEPR_ROOT_DIR = Split-Path -Parent $script:SWEEPR_LIB_DIR
 
 # Version helpers are standalone and safe to load before the other core modules.
-. "$script:MOLE_CORE_DIR\version.ps1"
+. "$script:SWEEPR_CORE_DIR\version.ps1"
 
 # ============================================================================
 # Load Core Modules
 # ============================================================================
 
 # Base definitions (colors, icons, constants)
-. "$script:MOLE_CORE_DIR\base.ps1"
+. "$script:SWEEPR_CORE_DIR\base.ps1"
 
 # Logging functions
-. "$script:MOLE_CORE_DIR\log.ps1"
+. "$script:SWEEPR_CORE_DIR\log.ps1"
 
 # Safe file operations
-. "$script:MOLE_CORE_DIR\file_ops.ps1"
+. "$script:SWEEPR_CORE_DIR\file_ops.ps1"
 
 # UI components
-. "$script:MOLE_CORE_DIR\ui.ps1"
+. "$script:SWEEPR_CORE_DIR\ui.ps1"
 
 # ============================================================================
 # Version Information
 # ============================================================================
 
-$script:MOLE_VERSION = Get-MoleVersionString -RootDir $script:MOLE_ROOT_DIR
+$script:SWEEPR_VERSION = Get-SweeprVersionString -RootDir $script:SWEEPR_ROOT_DIR
 
-function Get-MoleVersion {
+function Get-SweeprVersion {
     <#
     .SYNOPSIS
-        Get freeMole version information
+        Get Sweepr version information
     #>
     return @{
-        Version   = $script:MOLE_VERSION
+        Version   = $script:SWEEPR_VERSION
         PowerShell = $PSVersionTable.PSVersion.ToString()
         Windows    = (Get-WindowsVersion).Version
     }
@@ -57,10 +57,10 @@ function Get-MoleVersion {
 # Initialization
 # ============================================================================
 
-function Initialize-Mole {
+function Initialize-Sweepr {
     <#
     .SYNOPSIS
-        Initialize freeMole environment
+        Initialize Sweepr environment
     #>
 
     # Ensure config directory exists
@@ -69,7 +69,7 @@ function Initialize-Mole {
     # Ensure cache directory exists
     $cachePath = Get-CachePath
 
-    Write-Debug "freeMole initialized"
+    Write-Debug "Sweepr initialized"
     Write-Debug "Config: $configPath"
     Write-Debug "Cache: $cachePath"
 }

@@ -1,4 +1,4 @@
-# freeMole Windows - dry-run and accounting tests for uninstall and purge
+# Sweepr Windows - dry-run and accounting tests for uninstall and purge
 # The functions are lifted out of the command scripts so no menu or prompt runs.
 
 BeforeAll {
@@ -24,8 +24,8 @@ BeforeAll {
     }
 
     Import-ScriptFunction -Script (Join-Path $script:WindowsDir "bin\uninstall.ps1") -Names @(
-        "Get-UninstallMethodDescription", "Uninstall-SelectedApps", "Test-MoleStoreRemovalAllowed", "Invoke-MoleUninstallProcess", "Get-MoleProperty", "Get-NormalizedFolderPath",
-        "Test-MoleInstallContentFree", "Test-MoleInstallFolder", "Get-MoleInstallOwners", "Test-MoleLeftoverOwnership", "Test-UninstallEntryGone", "Get-MsiProductCode", "Split-UninstallCommand", "Test-InnoUninstaller",
+        "Get-UninstallMethodDescription", "Uninstall-SelectedApps", "Test-SweeprStoreRemovalAllowed", "Invoke-SweeprUninstallProcess", "Get-SweeprProperty", "Get-NormalizedFolderPath",
+        "Test-SweeprInstallContentFree", "Test-SweeprInstallFolder", "Get-SweeprInstallOwners", "Test-SweeprLeftoverOwnership", "Test-UninstallEntryGone", "Get-MsiProductCode", "Split-UninstallCommand", "Test-InnoUninstaller",
         "Test-NsisUninstaller", "Test-SteamClientUninstaller", "Get-UninstallLaunch"
     )
     Import-ScriptFunction -Script (Join-Path $script:WindowsDir "bin\purge.ps1") -Names @(
@@ -38,14 +38,14 @@ AfterAll {
     Set-DryRunMode -Enabled $false
 }
 
-Describe "fm uninstall --dry-run" {
+Describe "sw uninstall --dry-run" {
     BeforeEach {
         Set-DryRunMode -Enabled $true
         Reset-CleanupStats
-        Mock Get-MoleInstallOwners { @{ Complete = $true; Owners = @() } }
-        Mock Invoke-MoleUninstallProcess { throw "Uninstaller must not run in a dry run" }
+        Mock Get-SweeprInstallOwners { @{ Complete = $true; Owners = @() } }
+        Mock Invoke-SweeprUninstallProcess { throw "Uninstaller must not run in a dry run" }
         Mock Remove-AppxPackage { throw "Remove-AppxPackage must not run in a dry run" }
-        Mock Test-MoleStoreRemovalAllowed { $true }
+        Mock Test-SweeprStoreRemovalAllowed { $true }
     }
 
     It "Runs no uninstaller for MSI, EXE or Store apps" {
@@ -60,7 +60,7 @@ Describe "fm uninstall --dry-run" {
 
         { Uninstall-SelectedApps -Apps $apps 6>$null } | Should -Not -Throw
 
-        Should -Invoke Invoke-MoleUninstallProcess -Times 0
+        Should -Invoke Invoke-SweeprUninstallProcess -Times 0
         Should -Invoke Remove-AppxPackage -Times 0
         Test-Path (Join-Path $leftover "app.dll") | Should -BeTrue
     }
@@ -71,7 +71,7 @@ Describe "fm uninstall --dry-run" {
     }
 }
 
-Describe "fm purge accounting" {
+Describe "sw purge accounting" {
     It "Counts each removed artifact's size once" {
         Set-DryRunMode -Enabled $false
         Reset-CleanupStats
@@ -83,7 +83,7 @@ Describe "fm purge accounting" {
         $project = [pscustomobject]@{
             Name      = "project"
             Path      = Split-Path -Parent $artifact
-            Artifacts = @([pscustomobject]@{ Snapshot = (Get-MolePathSnapshot $artifact); Path = $artifact; Name = "node_modules"; SizeKB = $sizeKB; SizeHuman = "8KB" })
+            Artifacts = @([pscustomobject]@{ Snapshot = (Get-SweeprPathSnapshot $artifact); Path = $artifact; Name = "node_modules"; SizeKB = $sizeKB; SizeHuman = "8KB" })
         }
 
         Remove-ProjectArtifacts -Projects @($project) 6>$null

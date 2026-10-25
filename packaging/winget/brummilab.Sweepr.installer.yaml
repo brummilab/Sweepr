@@ -1,15 +1,15 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 
-PackageIdentifier: tw93.MoleCLI
+PackageIdentifier: brummilab.Sweepr
 PackageVersion: {{VERSION}}
 MinimumOSVersion: 10.0.0.0
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
-  - RelativeFilePath: fm.exe
-    PortableCommandAlias: fm
+  - RelativeFilePath: sw.exe
+    PortableCommandAlias: sw
 Commands:
-  - fm
+  - sw
 ReleaseDate: {{RELEASE_DATE}}
 Installers:
   - Architecture: x64

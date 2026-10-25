@@ -62,7 +62,7 @@ func formatNumber(n int64) string {
 }
 
 // humanizeBytes uses binary (1024-based) units labeled KB/MB/GB, the
-// convention Windows Explorer uses, the way the macOS analyzer follows Finder.
+// convention Windows Explorer uses.
 func humanizeBytes(size int64) string {
 	if size < 0 {
 		return "0 B"

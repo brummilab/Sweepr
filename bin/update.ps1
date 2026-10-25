@@ -1,4 +1,4 @@
-# freeMole - Update Command
+# Sweepr - Update Command
 # Updates a source-channel installation from the main branch.
 
 #Requires -Version 5.1
@@ -22,7 +22,7 @@ function Show-UpdateHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm update$esc[0m - Update the Windows source channel"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm update"
+    Write-Host "$esc[33mUsage:$esc[0m sw update"
     Write-Host ""
     Write-Host "$esc[33mBehavior:$esc[0m"
     Write-Host "  - Pulls the latest commit from origin/main"
@@ -36,13 +36,13 @@ function Show-UpdateHelp {
     Write-Host ""
 }
 
-$script:MoleGitProxyArguments = $null
+$script:SweeprGitProxyArguments = $null
 
 # Git ignores the Windows system proxy that PowerShell downloads use, so on a
 # machine that reaches GitHub only through that proxy, clone and pull fail
 # while every other download works. Pass the system proxy to git for this
 # run, unless the user already gave git a proxy of their own.
-function Get-MoleSystemProxy {
+function Get-SweeprSystemProxy {
     param([Uri]$Target)
 
     try {
@@ -58,14 +58,14 @@ function Get-MoleSystemProxy {
 }
 
 function Get-GitProxyArguments {
-    if ($null -ne $script:MoleGitProxyArguments) {
-        return $script:MoleGitProxyArguments
+    if ($null -ne $script:SweeprGitProxyArguments) {
+        return $script:SweeprGitProxyArguments
     }
-    $script:MoleGitProxyArguments = @()
+    $script:SweeprGitProxyArguments = @()
 
     foreach ($name in @("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY")) {
         if ([Environment]::GetEnvironmentVariable($name) -or [Environment]::GetEnvironmentVariable($name.ToLowerInvariant())) {
-            return $script:MoleGitProxyArguments
+            return $script:SweeprGitProxyArguments
         }
     }
     foreach ($key in @("http.proxy", "https.proxy")) {
@@ -76,15 +76,15 @@ function Get-GitProxyArguments {
             $configured = $null
         }
         if ($configured) {
-            return $script:MoleGitProxyArguments
+            return $script:SweeprGitProxyArguments
         }
     }
 
-    $proxy = Get-MoleSystemProxy -Target ([Uri]"https://github.com/")
+    $proxy = Get-SweeprSystemProxy -Target ([Uri]"https://github.com/")
     if ($proxy) {
-        $script:MoleGitProxyArguments = @("-c", "http.proxy=$proxy")
+        $script:SweeprGitProxyArguments = @("-c", "http.proxy=$proxy")
     }
-    return $script:MoleGitProxyArguments
+    return $script:SweeprGitProxyArguments
 }
 
 function Invoke-GitCommand {
@@ -171,7 +171,7 @@ function Write-GitFailure {
     else {
         $firstLine = ($text -split "`r?`n" | Select-Object -First 1)
         Write-Host "    $firstLine"
-        Write-Host "    Re-run with 'fm update --debug' for full git output." -ForegroundColor Yellow
+        Write-Host "    Re-run with 'sw update --debug' for full git output." -ForegroundColor Yellow
     }
 }
 
@@ -197,17 +197,17 @@ function Get-PackageManagerUpgradeCommand {
     param([string]$InstallDir)
 
     $path = $InstallDir.TrimEnd('\') + '\'
-    if ($path -like "*\Microsoft\WinGet\Packages\tw93.MoleCLI_*") {
-        return "winget upgrade tw93.MoleCLI"
+    if ($path -like "*\Microsoft\WinGet\Packages\brummilab.Sweepr_*") {
+        return "winget upgrade brummilab.Sweepr"
     }
-    if ($path -like "*\scoop\apps\mole\*") {
-        return "scoop update mole"
+    if ($path -like "*\scoop\apps\sweepr\*") {
+        return "scoop update sweepr"
     }
     return $null
 }
 
 if ($DebugMode) {
-    $env:MOLE_DEBUG = "1"
+    $env:SWEEPR_DEBUG = "1"
 }
 
 if (-not (Test-Path $installScript)) {
@@ -219,19 +219,19 @@ if (-not (Test-Path $gitDir)) {
     # Package-manager installs update through that manager, never through git.
     $upgradeCommand = Get-PackageManagerUpgradeCommand -InstallDir $windowsDir
     if ($upgradeCommand) {
-        Write-Host "This copy of freeMole is managed by a package manager." -ForegroundColor Yellow
+        Write-Host "This copy of Sweepr is managed by a package manager." -ForegroundColor Yellow
         Write-Host "Update it with: $upgradeCommand" -ForegroundColor Yellow
         exit 1
     }
-    Write-Host "This copy is not a git-based source install, so 'fm update' cannot update it in place." -ForegroundColor Red
+    Write-Host "This copy is not a git-based source install, so 'sw update' cannot update it in place." -ForegroundColor Red
     Write-Host "To replace it, remove or rename $windowsDir, then run:" -ForegroundColor Yellow
-    Write-Host "  irm https://raw.githubusercontent.com/brummilab/freeMole/main/quick-install.ps1 | iex" -ForegroundColor Yellow
+    Write-Host "  irm https://raw.githubusercontent.com/brummilab/sweepr/main/quick-install.ps1 | iex" -ForegroundColor Yellow
     Write-Host "A release ZIP also works: run its install.ps1 with a new -InstallDir and -AddToPath." -ForegroundColor Yellow
     exit 1
 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Git is not installed. Install Git to use 'fm update'." -ForegroundColor Red
+    Write-Host "Git is not installed. Install Git to use 'sw update'." -ForegroundColor Red
     exit 1
 }
 
@@ -243,7 +243,7 @@ if ($dirtyStatus.ExitCode -ne 0) {
 
 if ($dirtyStatus.Text) {
     Write-Host "Local tracked changes detected in the installation directory." -ForegroundColor Red
-    Write-Host "Commit or discard them before running 'fm update'." -ForegroundColor Yellow
+    Write-Host "Commit or discard them before running 'sw update'." -ForegroundColor Yellow
     exit 1
 }
 

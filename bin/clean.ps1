@@ -1,4 +1,4 @@
-# freeMole - Clean Command
+# Sweepr - Clean Command
 # Deep cleanup for Windows with dry-run support and whitelist
 
 #Requires -Version 5.1
@@ -47,13 +47,13 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 . "$libDir\clean\system.ps1"
 
 # Clean refuses key, browser profile and transcript stores (lib/core/base.ps1).
-$script:MoleCleanPathGuard = $true
+$script:SweeprCleanPathGuard = $true
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-$script:ExportListFile = "$env:USERPROFILE\.config\freemole\clean-list.txt"
+$script:ExportListFile = "$env:USERPROFILE\.config\sweepr\clean-list.txt"
 
 # ============================================================================
 # Help
@@ -64,7 +64,7 @@ function Show-CleanHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm clean$esc[0m - Deep cleanup for Windows"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm clean [options]"
+    Write-Host "$esc[33mUsage:$esc[0m sw clean [options]"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --dry-run      Preview changes without deleting (recommended first run)"
@@ -76,10 +76,10 @@ function Show-CleanHelp {
     Write-Host "  --help         Show this help message"
     Write-Host ""
     Write-Host "$esc[33mExamples:$esc[0m"
-    Write-Host "  fm clean --dry-run     # Preview what would be cleaned"
-    Write-Host "  fm clean               # Run standard cleanup"
-    Write-Host "  fm clean --game-media  # Include old game media cleanup"
-    Write-Host "  fm clean --system      # Include system cleanup (as admin)"
+    Write-Host "  sw clean --dry-run     # Preview what would be cleaned"
+    Write-Host "  sw clean               # Run standard cleanup"
+    Write-Host "  sw clean --game-media  # Include old game media cleanup"
+    Write-Host "  sw clean --system      # Include system cleanup (as admin)"
     Write-Host ""
 }
 
@@ -99,7 +99,7 @@ function Edit-Whitelist {
     # Create default whitelist if doesn't exist
     if (-not (Test-Path $whitelistPath)) {
         $defaultContent = @"
-# freeMole Whitelist - Paths listed here will never be cleaned
+# Sweepr Whitelist - Paths listed here will never be cleaned
 # Use full paths or patterns with wildcards (*)
 #
 # Examples:
@@ -130,8 +130,8 @@ function Show-CleanupSummary {
         [bool]$IsDryRun
     )
 
-    $green = Get-MoleColor -Name Green
-    $nc = Get-MoleColor -Name NC
+    $green = Get-SweeprColor -Name Green
+    $nc = Get-SweeprColor -Name NC
     $heading = if ($IsDryRun) { 'Dry run complete - no changes made' } else { 'Cleanup complete' }
     $details = @()
     if ($Stats.TotalSizeKB -gt 0) {
@@ -188,11 +188,11 @@ function Start-Cleanup {
         }
 
         $header = @"
-# freeMole Cleanup Preview - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+# Sweepr Cleanup Preview - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 #
 # How to protect files:
 # 1. Copy any path below to $($script:Config.WhitelistFile)
-# 2. Run: fm clean --whitelist
+# 2. Run: sw clean --whitelist
 #
 
 "@
@@ -206,7 +206,7 @@ function Start-Cleanup {
     # System cleanup confirmation
     if ($IncludeSystem -and -not $IsDryRun) {
         if (-not (Test-IsAdmin)) {
-            Write-MoleWarning "System cleanup requires administrator privileges"
+            Write-SweeprWarning "System cleanup requires administrator privileges"
             Write-Host "  Run PowerShell as Administrator for full cleanup"
             Write-Host ""
             $IncludeSystem = $false
@@ -259,7 +259,7 @@ function Start-Cleanup {
         }
     }
     catch {
-        Write-MoleError "Cleanup error: $_"
+        Write-SweeprError "Cleanup error: $_"
     }
     finally {
         $script:CurrentSection.Active = $false
@@ -297,12 +297,12 @@ function Main {
     }
 
     # Set dry-run mode
-    $effectiveDryRun = $DryRun -or ($env:MOLE_DRY_RUN -eq '1')
+    $effectiveDryRun = $DryRun -or ($env:SWEEPR_DRY_RUN -eq '1')
     if ($effectiveDryRun) {
-        $env:MOLE_DRY_RUN = "1"
+        $env:SWEEPR_DRY_RUN = "1"
     }
     else {
-        $env:MOLE_DRY_RUN = "0"
+        $env:SWEEPR_DRY_RUN = "0"
     }
 
     # Run cleanup

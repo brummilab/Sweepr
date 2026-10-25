@@ -43,8 +43,8 @@ const (
 	placeholderValue = "--"
 )
 
-// freeMole body frames (facing right).
-var moleBody = [][]string{
+// Mascot body frames (facing right).
+var mascotBody = [][]string{
 	{
 		`     /\_/\`,
 		` ___/ o o \`,
@@ -71,8 +71,8 @@ var moleBody = [][]string{
 	},
 }
 
-// Mirror mole body frames (facing left).
-var moleBodyMirror = [][]string{
+// Mirror mascot body frames (facing left).
+var mascotBodyMirror = [][]string{
 	{
 		`    /\_/\`,
 		`   / o o \___`,
@@ -99,10 +99,10 @@ var moleBodyMirror = [][]string{
 	},
 }
 
-// getMoleFrame renders the animated mole.
-func getMoleFrame(animFrame int, termWidth int) string {
-	moleWidth := 15
-	maxPos := max(termWidth-moleWidth, 0)
+// getMascotFrame renders the animated mascot.
+func getMascotFrame(animFrame int, termWidth int) string {
+	mascotWidth := 15
+	maxPos := max(termWidth-mascotWidth, 0)
 
 	cycleLength := maxPos * 2
 	if cycleLength == 0 {
@@ -117,9 +117,9 @@ func getMoleFrame(animFrame int, termWidth int) string {
 	// Use mirror frames when moving left
 	var frames [][]string
 	if movingLeft {
-		frames = moleBodyMirror
+		frames = mascotBodyMirror
 	} else {
-		frames = moleBody
+		frames = mascotBody
 	}
 
 	bodyIdx := animFrame % len(frames)
@@ -249,22 +249,22 @@ func renderHeader(m MetricsSnapshot, errMsg string, animFrame int, termWidth int
 		}
 	}
 
-	// Show cat unless hidden - render mole centered below header
-	var mole string
+	// Show cat unless hidden - render the mascot centered below header
+	var mascot string
 	if !catHidden {
-		mole = getMoleFrame(animFrame, termWidth)
+		mascot = getMascotFrame(animFrame, termWidth)
 	}
 
 	if errMsg != "" {
-		if mole == "" {
+		if mascot == "" {
 			return lipgloss.JoinVertical(lipgloss.Left, headerLine, "", dangerStyle.Render("ERROR: "+errMsg)), ""
 		}
-		return lipgloss.JoinVertical(lipgloss.Left, headerLine, "", mole, dangerStyle.Render("ERROR: "+errMsg)), ""
+		return lipgloss.JoinVertical(lipgloss.Left, headerLine, "", mascot, dangerStyle.Render("ERROR: "+errMsg)), ""
 	}
-	if mole == "" {
+	if mascot == "" {
 		return headerLine, ""
 	}
-	return headerLine, mole
+	return headerLine, mascot
 }
 
 func getScoreStyle(score int) lipgloss.Style {
@@ -392,8 +392,8 @@ func renderCPUCard(cpu CPUStatus, cpuCores int) cardData {
 		}
 	}
 
-	// Windows keeps no load average, so main's "Load 1.2 / 0.9 / 0.8, 8 cores"
-	// line keeps only the part Windows can measure.
+	// Windows keeps no load average, so the CPU line shows only the part
+	// Windows can measure.
 	if line := formatCPUCoresLine(cpu); line != "" {
 		lines = append(lines, line)
 	}
@@ -554,7 +554,7 @@ func formatDiskMetaLine(d DiskStatus) string {
 // formatDiskSMARTLine returns "" unless a disk is actually failing.
 //
 // SMART has one actionable state. "Verified" asks nothing of the user, and
-// external enclosures usually do not pass SMART through at all, so a Mac with
+// external enclosures usually do not pass SMART through at all, so a machine with
 // two USB disks rendered "SMART  INTR OK · EXTR1 N/A · EXTR2 N/A": a row whose
 // length grew with disk count, carrying no information, and the only row in the
 // card wide enough to break the alignment of the ones above it. A failing disk
@@ -656,7 +656,7 @@ func processMemoryText(p ProcessInfo) string {
 
 // buildCards renders every card. batteryProbed says whether a full collection
 // has completed at least once; until it has, an empty battery list means "not
-// measured yet", not "this Mac has no battery".
+// measured yet", not "this machine has no battery".
 func buildCards(m MetricsSnapshot, width int, cpuCores int, batteryProbed bool) []cardData {
 	processCard := renderProcessCard(m.TopProcesses, width)
 	hasRenderedProcessData := len(m.TopProcesses) > 0

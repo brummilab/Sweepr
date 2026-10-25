@@ -79,47 +79,47 @@ Describe 'Generated cmd launchers' {
         Mock Test-ProtectedInstallRoot { $false }
         @'
 [Environment]::GetCommandLineArgs() | Out-Null
-[System.IO.File]::WriteAllText($env:MOLE_TEST_CAPTURE, (ConvertTo-Json -InputObject @($args) -Compress))
+[System.IO.File]::WriteAllText($env:SWEEPR_TEST_CAPTURE, (ConvertTo-Json -InputObject @($args) -Compress))
 exit 7
-'@ | Set-Content -LiteralPath (Join-Path $script:SourceDir 'freemole.ps1')
-        Install-Mole 6>$null | Should -BeTrue
+'@ | Set-Content -LiteralPath (Join-Path $script:SourceDir 'sweepr.ps1')
+        Install-Sweepr 6>$null | Should -BeTrue
     }
-    It 'Keeps a launcher symbolic-link target unchanged' -ForEach @('fm.cmd', 'freemole.cmd') {
+    It 'Keeps a launcher symbolic-link target unchanged' -ForEach @('sw.cmd', 'sweepr.cmd') {
         $launcher = Join-Path $script:SourceDir $_
         $target = Join-Path $TestDrive ('outside-' + [guid]::NewGuid().ToString('N') + '.cmd')
         Set-Content -LiteralPath $target -Value 'external launcher'
         Remove-Item -LiteralPath $launcher -Force
         $null = New-Item -ItemType SymbolicLink -Path $launcher -Target $target -ErrorAction Stop
         try {
-            { Install-Mole 6>$null } | Should -Throw '*linked install path*'
+            { Install-Sweepr 6>$null } | Should -Throw '*linked install path*'
             Get-Content -LiteralPath $target | Should -Be 'external launcher'
         }
         finally { [System.IO.File]::Delete($launcher) }
     }
     It 'Returns the script exit code when removal deletes its running batch file' {
         @'
-Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'fm.cmd') -Force
+Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'sw.cmd') -Force
 exit 7
-'@ | Set-Content -LiteralPath (Join-Path $script:SourceDir 'freemole.ps1')
+'@ | Set-Content -LiteralPath (Join-Path $script:SourceDir 'sweepr.ps1')
         $start = New-Object System.Diagnostics.ProcessStartInfo
         $start.FileName = $env:ComSpec
         $start.UseShellExecute = $false
-        $start.Arguments = '/d /s /c ""' + (Join-Path $script:SourceDir 'fm.cmd') + '" remove"'
+        $start.Arguments = '/d /s /c ""' + (Join-Path $script:SourceDir 'sw.cmd') + '" remove"'
         $process = [System.Diagnostics.Process]::Start($start)
         $process.WaitForExit()
         $process.ExitCode | Should -Be 7
         $process.Dispose()
-        (Join-Path $script:SourceDir 'fm.cmd') | Should -Not -Exist
+        (Join-Path $script:SourceDir 'sw.cmd') | Should -Not -Exist
     }
     It 'Preserves apostrophes, exclamation marks, spaces, metacharacters and long flags' {
         $capture = Join-Path $TestDrive 'literal-args.json'
-        $saved = $env:MOLE_TEST_CAPTURE
-        $env:MOLE_TEST_CAPTURE = $capture
+        $saved = $env:SWEEPR_TEST_CAPTURE
+        $env:SWEEPR_TEST_CAPTURE = $capture
         try {
             $start = New-Object System.Diagnostics.ProcessStartInfo
             $start.FileName = $env:ComSpec
             $start.UseShellExecute = $false
-            $start.Arguments = '/d /s /c ""' + (Join-Path $script:SourceDir 'fm.cmd') + '" analyze "D:\Bob''s files! & notes" --dry-run "percent%value""'
+            $start.Arguments = '/d /s /c ""' + (Join-Path $script:SourceDir 'sw.cmd') + '" analyze "D:\Bob''s files! & notes" --dry-run "percent%value""'
             $process = [System.Diagnostics.Process]::Start($start)
             $process.WaitForExit()
             $process.ExitCode | Should -Be 7
@@ -131,7 +131,7 @@ exit 7
             $actual[2] | Should -Be '--dry-run'
             $actual[3] | Should -Be 'percent%value'
         }
-        finally { $env:MOLE_TEST_CAPTURE = $saved }
+        finally { $env:SWEEPR_TEST_CAPTURE = $saved }
     }
 }
 
@@ -141,7 +141,7 @@ Describe 'Copied installation ownership' {
         $script:InstallDir = Join-Path $TestDrive ('copy-destination-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path (Join-Path $script:SourceDir 'lib\core'), (Join-Path $script:SourceDir 'bin') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:SourceDir 'install.ps1') -Value '# installer'
-        Set-Content -LiteralPath (Join-Path $script:SourceDir 'freemole.ps1') -Value '# entry'
+        Set-Content -LiteralPath (Join-Path $script:SourceDir 'sweepr.ps1') -Value '# entry'
         Set-Content -LiteralPath (Join-Path $script:SourceDir 'lib\core\base.ps1') -Value '# core'
         $script:VERSION = 'test'
         $script:Force = $true
@@ -151,20 +151,20 @@ Describe 'Copied installation ownership' {
         Mock Test-ProtectedInstallRoot { $false }
     }
     It 'Copies its installer so the installed remove command can run' {
-        Install-Mole 6>$null | Should -BeTrue
+        Install-Sweepr 6>$null | Should -BeTrue
         Get-Content -LiteralPath (Join-Path $script:InstallDir 'install.ps1') | Should -Be '# installer'
     }
     It 'Installs into a pre-created empty destination' {
         New-Item -ItemType Directory -Path $script:InstallDir -Force | Out-Null
-        Install-Mole 6>$null | Should -BeTrue
+        Install-Sweepr 6>$null | Should -BeTrue
         Get-Content -LiteralPath (Join-Path $script:InstallDir 'install.ps1') | Should -Be '# installer'
     }
     It 'Preserves unrelated files when force updating a shared install' {
         New-Item -ItemType Directory -Path (Join-Path $script:InstallDir 'bin'), (Join-Path $script:InstallDir 'lib\core') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $script:InstallDir 'freemole.ps1') -Value '# old'
+        Set-Content -LiteralPath (Join-Path $script:InstallDir 'sweepr.ps1') -Value '# old'
         Set-Content -LiteralPath (Join-Path $script:InstallDir 'lib\core\base.ps1') -Value '# old'
         Set-Content -LiteralPath (Join-Path $script:InstallDir 'bin\user-tool.exe') -Value 'mine'
-        Install-Mole 6>$null | Should -BeTrue
+        Install-Sweepr 6>$null | Should -BeTrue
         Get-Content -LiteralPath (Join-Path $script:InstallDir 'bin\user-tool.exe') | Should -Be 'mine'
     }
     It 'Refuses a linked destination ancestor without modifying its target' {
@@ -173,8 +173,8 @@ Describe 'Copied installation ownership' {
         $link = Join-Path $TestDrive ('copy-link-' + [guid]::NewGuid().ToString('N'))
         $null = New-Item -ItemType Junction -Path $link -Target $outside
         try {
-            $script:InstallDir = Join-Path $link 'freemole'
-            { Install-Mole 6>$null } | Should -Throw '*linked install path*'
+            $script:InstallDir = Join-Path $link 'sweepr'
+            { Install-Sweepr 6>$null } | Should -Throw '*linked install path*'
             @(Get-ChildItem -LiteralPath $outside -Force).Count | Should -Be 0
         }
         finally { [System.IO.Directory]::Delete($link) }
@@ -182,15 +182,15 @@ Describe 'Copied installation ownership' {
     It 'Refuses force merging into an unrelated directory' {
         New-Item -ItemType Directory -Path $script:InstallDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:InstallDir 'notes.txt') -Value 'mine'
-        Install-Mole 6>$null | Should -BeFalse
+        Install-Sweepr 6>$null | Should -BeFalse
         Get-Content -LiteralPath (Join-Path $script:InstallDir 'notes.txt') | Should -Be 'mine'
-        Test-Path -LiteralPath (Join-Path $script:InstallDir 'freemole.ps1') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:InstallDir 'sweepr.ps1') | Should -BeFalse
     }
 }
 
 Describe 'Package manager update without Git' {
     It 'Prints the winget command before requiring Git' {
-        $root = Join-Path $TestDrive 'Microsoft\WinGet\Packages\tw93.MoleCLI_fixture'
+        $root = Join-Path $TestDrive 'Microsoft\WinGet\Packages\brummilab.Sweepr_fixture'
         New-Item -ItemType Directory -Path (Join-Path $root 'bin') -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'bin\update.ps1') -Destination (Join-Path $root 'bin\update.ps1')
         Set-Content -LiteralPath (Join-Path $root 'install.ps1') -Value '# fixture'
@@ -198,7 +198,7 @@ Describe 'Package manager update without Git' {
         try {
             $env:PATH = ''
             $output = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'bin\update.ps1') 2>&1
-            ($output -join "`n") | Should -Match 'winget upgrade tw93\.MoleCLI'
+            ($output -join "`n") | Should -Match 'winget upgrade brummilab\.Sweepr'
             ($output -join "`n") | Should -Not -Match 'Git is not installed'
         }
         finally { $env:PATH = $saved }
@@ -287,28 +287,28 @@ Describe 'Native build replacement' {
 Describe 'Native File launcher routing' {
     BeforeAll {
         . (Join-Path $script:RepoRoot 'lib\core\update_check.ps1')
-        function Test-MoleInteractiveOutput { $false }
-        $entryAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'freemole.ps1'), [ref]$null, [ref]$null)
+        function Test-SweeprInteractiveOutput { $false }
+        $entryAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'sweepr.ps1'), [ref]$null, [ref]$null)
         $main = $entryAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Main' }, $true)
         . ([scriptblock]::Create(($main.Extent.Text -replace '^function Main', 'function Invoke-RootRouting')))
-        function Initialize-Mole {}
+        function Initialize-Sweepr {}
         function Show-Version {}
         function Show-MainHelp {}
         function Show-MainMenu { return $null }
-        function Invoke-MoleCommand { param($CommandName, $Arguments) }
+        function Invoke-SweeprCommand { param($CommandName, $Arguments) }
     }
     BeforeEach {
         $script:Command = ''
         $script:CommandArgs = $null
-        $script:MoleExitCode = 0
+        $script:SweeprExitCode = 0
         $script:ShowHelp = $false
         $script:Version = $false
-        Mock Initialize-Mole {}
+        Mock Initialize-Sweepr {}
         Mock Show-Version {}
         Mock Show-MainHelp {}
         Mock Show-MainMenu { return $null }
         Mock Clear-Host {}
-        Mock Invoke-MoleCommand {}
+        Mock Invoke-SweeprCommand {}
     }
     It 'Handles root long help passed through remaining arguments' {
         $script:CommandArgs = @('--help')
@@ -320,14 +320,14 @@ Describe 'Native File launcher routing' {
         $script:Command = 'analyze'
         $script:ShowHelp = $true
         Invoke-RootRouting
-        Should -Invoke Invoke-MoleCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'analyze' -and $Arguments -contains '--help' }
+        Should -Invoke Invoke-SweeprCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'analyze' -and $Arguments -contains '--help' }
         Should -Invoke Show-MainHelp -Times 0
     }
     It 'Keeps a command-local version flag in the child arguments' {
         $script:Command = 'status'
         $script:Version = $true
         Invoke-RootRouting
-        Should -Invoke Invoke-MoleCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'status' -and $Arguments -contains '--version' }
+        Should -Invoke Invoke-SweeprCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'status' -and $Arguments -contains '--version' }
         Should -Invoke Show-Version -Times 0
     }
     It 'Keeps root short help and version working' {
@@ -343,7 +343,7 @@ Describe 'Native File launcher routing' {
         $script:Command = 'clean'
         $script:CommandArgs = @('--dry-run')
         Invoke-RootRouting
-        Should -Invoke Invoke-MoleCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'clean' -and $Arguments -contains '--dry-run' }
+        Should -Invoke Invoke-SweeprCommand -Times 1 -Exactly -ParameterFilter { $CommandName -eq 'clean' -and $Arguments -contains '--dry-run' }
     }
 }
 

@@ -76,7 +76,7 @@ func TestWindowsBatteryStatusMatchesPmsetWords(t *testing.T) {
 			t.Errorf("windowsBatteryStatus(%d, %d, %d) = %q, want %q", tt.ac, tt.flag, tt.percent, got, tt.want)
 		}
 	}
-	// The words must keep main's AC detection working.
+	// The words must keep the AC detection working.
 	for _, status := range []string{"charging", "charged", "AC"} {
 		if !isPoweredByAC(strings.ToLower(status)) {
 			t.Errorf("isPoweredByAC(%q) = false, want true", status)
@@ -116,7 +116,7 @@ func TestBatteryHealthPercent(t *testing.T) {
 func TestRenderBatteryCardWithoutBatteryAfterProbe(t *testing.T) {
 	card := renderBatteryCard(nil, true)
 	if got := stripANSI(strings.Join(card.lines, "\n")); got != "No battery" {
-		t.Fatalf("desktop Power card = %q, want main's No battery line", got)
+		t.Fatalf("desktop Power card = %q, want the No battery line", got)
 	}
 }
 

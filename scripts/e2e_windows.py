@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Release end-to-end run of freeMole CLI (Windows) on a real PC, driven from a Mac.
+"""Release end-to-end run of Sweepr CLI (Windows) on a real PC, driven from a Mac.
 
 Over SSH with a real terminal (ssh -tt, ConPTY on the PC), it installs a
 throwaway app (WinMerge's per-user setup, verified against its GitHub digest
-and Authenticode signature), launches it, uninstalls it through `fm uninstall`
+and Authenticode signature), launches it, uninstalls it through `sw uninstall`
 by searching and selecting it like a user, deletes its setup file from
-`fm analyze`, then runs every other command read-only.
+`sw analyze`, then runs every other command read-only.
 
 The candidate is this checkout's HEAD plus Go tools cross-built for the PC,
-unpacked into a temporary folder; the PC's own freeMole install is not touched.
+unpacked into a temporary folder; the PC's own Sweepr install is not touched.
 Only the fixture app and its setup file are changed, clean, optimize and
 purge run as dry runs, and the run refuses a PC that already has WinMerge.
 
 The PC needs the OpenSSH server with this Mac's key; see "Windows e2e" in
 CONTRIBUTING.md. Usage:
   scripts/e2e_windows.py --host user@address [--identity KEY] [--keep-going]
-Report: ~/Library/Logs/freemole-e2e/windows-<run>/report.json plus transcripts.
+Report: ~/Library/Logs/sweepr-e2e/windows-<run>/report.json plus transcripts.
 """
 
 import argparse
@@ -41,11 +41,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_REPO = "WinMerge/winmerge"
 FIXTURE_APP = "WinMerge"
 FIXTURE_ASSET = re.compile(r"-x64-PerUser-Setup\.exe$")
-DEFAULT_KEY = Path.home() / ".config/freemole-e2e/id_ed25519"
+DEFAULT_KEY = Path.home() / ".config/sweepr-e2e/id_ed25519"
 ANSI = re.compile(rb"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Z0-9]|\x1b[=>]")
 # Written before the fixture setup runs, so --cleanup can tell an app this run
 # installed from one the user installed.
-MARKER = r"(Join-Path $env:LOCALAPPDATA 'freemole-e2e\fixture.json')"
+MARKER = r"(Join-Path $env:LOCALAPPDATA 'sweepr-e2e\fixture.json')"
 UNINSTALL_KEYS = r"""
 $roots = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
          'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -115,7 +115,7 @@ class Terminal:
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         self.buf = b""
         self.log_path = log_path
-        self.exit_marker = f"MOLE_EXIT={exit_token}:"
+        self.exit_marker = f"SWEEPR_EXIT={exit_token}:"
 
         def own_terminal():
             os.setsid()
@@ -169,7 +169,7 @@ class Terminal:
             raise StepFailed("terminal ended without this run's command status; inspect its transcript")
         code = int(codes[-1])
         if code:
-            raise StepFailed(f"remote freeMole command exited {code}")
+            raise StepFailed(f"remote Sweepr command exited {code}")
         if self.proc.returncode:
             raise StepFailed(f"ssh exited {self.proc.returncode} after the command status")
         return 0
@@ -189,11 +189,11 @@ class Terminal:
 class Run:
     def __init__(self, args):
         self.id = time.strftime("%Y%m%d-%H%M%S")
-        self.dir = Path.home() / "Library/Logs/freemole-e2e" / f"windows-{self.id}"
+        self.dir = Path.home() / "Library/Logs/sweepr-e2e" / f"windows-{self.id}"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.remote = Remote(args.host, Path(args.identity).expanduser(), self.dir)
         self.keep_going = args.keep_going
-        self.token = f"freemole-e2e-{self.id}"
+        self.token = f"sweepr-e2e-{self.id}"
         self.steps = []
         self.failed = False
         self.info = {}
@@ -224,8 +224,8 @@ class Run:
     def log(self, name):
         return self.dir / f"{len(self.steps) + 1:02d}-{name}.log"
 
-    def mole(self, *args, terminal=False):
-        quoted = " ".join("'" + value.replace("'", "''") + "'" for value in (self.info["mole"], *args))
+    def sweepr(self, *args, terminal=False):
+        quoted = " ".join("'" + value.replace("'", "''") + "'" for value in (self.info["sweepr"], *args))
         # Only ASCII command syntax crosses the SSH shell. The inner process
         # retains -File parameter binding and its native exit status.
         script = ("$ErrorActionPreference = 'Stop'\n"
@@ -233,10 +233,10 @@ class Run:
         if terminal:
             # Windows OpenSSH can return zero for every ConPTY command. Keep
             # the actual -File exit code in this run's transcript instead.
-            script += ("$moleExit = $LASTEXITCODE\n"
+            script += ("$sweeprExit = $LASTEXITCODE\n"
                        "[Console]::Out.WriteLine('')\n"
-                       f"[Console]::Out.WriteLine('MOLE_EXIT={self.token}:' + $moleExit)\n"
-                       "exit $moleExit")
+                       f"[Console]::Out.WriteLine('SWEEPR_EXIT={self.token}:' + $sweeprExit)\n"
+                       "exit $sweeprExit")
         else:
             script += "exit $LASTEXITCODE"
         encoded = base64.b64encode(script.encode("utf-16-le")).decode()
@@ -244,12 +244,12 @@ class Run:
 
     def oplog_offset(self):
         return self.remote.ps_json(r"""
-$log = Join-Path $env:USERPROFILE '.config\freemole\operations.log'
+$log = Join-Path $env:USERPROFILE '.config\sweepr\operations.log'
 if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }""")
 
     def oplog_since(self, offset):
         result = self.remote.ps(rf"""
-$log = Join-Path $env:USERPROFILE '.config\freemole\operations.log'
+$log = Join-Path $env:USERPROFILE '.config\sweepr\operations.log'
 if (Test-Path -LiteralPath $log) {{
     $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')
     try {{ $null = $stream.Seek({offset}, 'Begin'); (New-Object IO.StreamReader($stream)).ReadToEnd() }} finally {{ $stream.Dispose() }}
@@ -278,8 +278,8 @@ def preflight(run):
     run.info["goarch"] = {"AMD64": "amd64", "ARM64": "arm64"}.get(info["arch"])
     if not run.info["goarch"]:
         raise Refused(f"unsupported architecture {info['arch']}")
-    run.info["work"] = f"{info['temp']}\\freemole-e2e-{run.id}"
-    run.info["mole"] = f"{run.info['work']}\\mole\\freemole.ps1"
+    run.info["work"] = f"{info['temp']}\\sweepr-e2e-{run.id}"
+    run.info["sweepr"] = f"{run.info['work']}\\sweepr\\sweepr.ps1"
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     run.info["commit"] = sha
@@ -288,14 +288,14 @@ def preflight(run):
 
 
 def deploy(run):
-    with tempfile.TemporaryDirectory(prefix="freemole-e2e-") as tmp:
-        bundle = Path(tmp) / "mole.zip"
-        subprocess.run(["git", "archive", "--format=zip", "--prefix=mole/", "-o", str(bundle), run.info["commit"]], cwd=ROOT, check=True)
+    with tempfile.TemporaryDirectory(prefix="sweepr-e2e-") as tmp:
+        bundle = Path(tmp) / "sweepr.zip"
+        subprocess.run(["git", "archive", "--format=zip", "--prefix=sweepr/", "-o", str(bundle), run.info["commit"]], cwd=ROOT, check=True)
         # Build the source being deployed, not uncommitted Go files in ROOT.
         # The pinned archive also survives HEAD changing after preflight.
         with zipfile.ZipFile(bundle) as archive:
             archive.extractall(tmp)
-        source = Path(tmp) / "mole"
+        source = Path(tmp) / "sweepr"
         env = dict(os.environ, GOOS="windows", GOARCH=run.info["goarch"], CGO_ENABLED="0", GOWORK="off")
         with zipfile.ZipFile(bundle, "a") as archive:
             for tool in ("analyze", "status"):
@@ -303,18 +303,18 @@ def deploy(run):
                 build = subprocess.run(["go", "build", "-o", str(exe), f"./cmd/{tool}/"], cwd=source, env=env, capture_output=True, text=True)
                 if build.returncode:
                     raise StepFailed(f"go build {tool} failed: {build.stderr.strip()[-300:]}")
-                archive.write(exe, f"mole/bin/{tool}.exe")
+                archive.write(exe, f"sweepr/bin/{tool}.exe")
         prepared = run.remote.ps(f"$ErrorActionPreference = 'Stop'; New-Item -ItemType Directory -Force -Path '{run.info['work']}' | Out-Null")
         if prepared.returncode:
             raise StepFailed(f"could not prepare candidate folder: {prepared.stderr.strip()[-300:]}")
-        run.remote.put(bundle, f"{run.info['work']}\\mole.zip")
+        run.remote.put(bundle, f"{run.info['work']}\\sweepr.zip")
     unpacked = run.remote.ps_json(rf"""
 $ErrorActionPreference = 'Stop'
-Expand-Archive -LiteralPath '{run.info['work']}\mole.zip' -DestinationPath '{run.info['work']}' -Force
-Test-Path -LiteralPath '{run.info['freemole']}'""")
+Expand-Archive -LiteralPath '{run.info['work']}\sweepr.zip' -DestinationPath '{run.info['work']}' -Force
+Test-Path -LiteralPath '{run.info['sweepr']}'""")
     if unpacked is not True:
         raise StepFailed("candidate entrypoint is missing after extraction")
-    result = run.remote.ps(f"& {run.mole('--version')}")
+    result = run.remote.ps(f"& {run.sweepr('--version')}")
     version = result.stdout.strip().splitlines()
     if result.returncode or not version:
         detail = (result.stderr or result.stdout).strip()[-400:]
@@ -375,7 +375,7 @@ Start-Sleep -Seconds 1
 
 def uninstall(run):
     offset = run.oplog_offset()
-    term = Terminal(run.remote.ssh(tty=True) + [run.mole("uninstall", terminal=True)], run.log("uninstall"), run.token)
+    term = Terminal(run.remote.ssh(tty=True) + [run.sweepr("uninstall", terminal=True)], run.log("uninstall"), run.token)
     try:
         term.expect(r"Select Applications to Uninstall", 300)
         term.send(b"/")
@@ -400,7 +400,7 @@ def uninstall(run):
     finally:
         term.close()
     if outcome != "complete":
-        raise StepFailed("fm uninstall reported an incomplete uninstall")
+        raise StepFailed("sw uninstall reported an incomplete uninstall")
     state = run.remote.ps_json(UNINSTALL_KEYS + rf"""
 [pscustomobject]@{{ entries = @($entries).Count; folder = Test-Path -LiteralPath '{run.install_location}'; settings = Test-Path 'HKCU:\Software\Thingamahoochie\WinMerge' }}""")
     if state["entries"]:
@@ -416,15 +416,15 @@ def uninstall(run):
 
 
 def history(run):
-    result = run.remote.ps(f"& {run.mole('history')}")
+    result = run.remote.ps(f"& {run.sweepr('history')}")
     if result.returncode or FIXTURE_APP not in plain(result.stdout.encode()):
-        raise StepFailed("fm history does not show the uninstall")
+        raise StepFailed("sw history does not show the uninstall")
 
 
 def analyze(run):
     offset = run.oplog_offset()
     name = run.setup.rsplit("\\", 1)[1]
-    term = Terminal(run.remote.ssh(tty=True) + [run.mole("analyze", f"{run.info['profile']}\\Downloads", terminal=True)], run.log("analyze"), run.token)
+    term = Terminal(run.remote.ssh(tty=True) + [run.sweepr("analyze", f"{run.info['profile']}\\Downloads", terminal=True)], run.log("analyze"), run.token)
     try:
         term.expect(re.escape(name[:40]), 300)
         quiet_since = time.monotonic()
@@ -465,7 +465,7 @@ def analyze(run):
 
 SMOKE = [
     (["--version"], r"\d+\.\d+"),
-    (["--help"], r"fm clean"),
+    (["--help"], r"sw clean"),
     *[([cmd, "--help"], r"\S") for cmd in (
         "clean", "uninstall", "analyze", "status", "optimize", "purge", "history", "update", "remove")],
     (["history"], r"\S"),
@@ -478,15 +478,15 @@ SMOKE = [
 def smoke(run):
     failures, log = [], []
     for args, pattern in SMOKE:
-        result = run.remote.ps(f"& {run.mole(*args)} 2>&1 | Out-String -Width 200; 'MOLE_EXIT=' + $LASTEXITCODE")
+        result = run.remote.ps(f"& {run.sweepr(*args)} 2>&1 | Out-String -Width 200; 'SWEEPR_EXIT=' + $LASTEXITCODE")
         out = plain(result.stdout.encode())
-        code = re.search(r"MOLE_EXIT=(-?\d*)", out)
+        code = re.search(r"SWEEPR_EXIT=(-?\d*)", out)
         code = int(code.group(1)) if code and code.group(1) else -999
-        log.append(f"$ fm {' '.join(args)}  (exit {code})\n{out}\n")
+        log.append(f"$ sw {' '.join(args)}  (exit {code})\n{out}\n")
         if code != 0:
-            failures.append(f"fm {' '.join(args)} exited {code}")
-        elif not re.search(pattern, out.split("MOLE_EXIT=")[0]):
-            failures.append(f"fm {' '.join(args)} printed no {pattern!r}")
+            failures.append(f"sw {' '.join(args)} exited {code}")
+        elif not re.search(pattern, out.split("SWEEPR_EXIT=")[0]):
+            failures.append(f"sw {' '.join(args)} printed no {pattern!r}")
     run.log("smoke").write_text("\n".join(log))
     if failures:
         raise StepFailed("; ".join(failures))
@@ -555,7 +555,7 @@ def main():
             sys.exit(0)
         print(f"Cleaned the fixture from run {result['run']}" + (f"; still left: {', '.join(result['left'])}" if result["left"] else ""))
         sys.exit(1 if result["left"] else 0)
-    print(f"freeMole Windows e2e {run.id} on {run.remote.target}, report in {run.dir}")
+    print(f"Sweepr Windows e2e {run.id} on {run.remote.target}, report in {run.dir}")
     try:
         run.step("preflight", lambda: preflight(run))
     except Refused as exc:
@@ -569,9 +569,9 @@ def main():
     downloaded = run.step("download fixture", lambda: download(run), ready=deployed)
     installed = run.step("install fixture", lambda: install(run), ready=downloaded)
     launched = run.step("launch fixture", lambda: launch(run), ready=installed)
-    removed = run.step("fm uninstall", lambda: uninstall(run), ready=launched)
-    run.step("fm history", lambda: history(run), ready=removed)
-    run.step("fm analyze delete", lambda: analyze(run), ready=removed)
+    removed = run.step("sw uninstall", lambda: uninstall(run), ready=launched)
+    run.step("sw history", lambda: history(run), ready=removed)
+    run.step("sw analyze delete", lambda: analyze(run), ready=removed)
     run.step("smoke commands", lambda: smoke(run), ready=deployed)
     left = cleanup(run) if run.info.get("work") else []
     report = {"run": run.id, "host": run.remote.target, "info": run.info, "steps": run.steps, "not_cleaned_up": left}

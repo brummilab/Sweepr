@@ -1,4 +1,4 @@
-# freeMole Windows - Cleanup Module Tests
+# Sweepr Windows - Cleanup Module Tests
 # Pester tests for lib/clean functionality
 
 BeforeAll {
@@ -20,12 +20,12 @@ BeforeAll {
     . "$script:LibDir\clean\system.ps1"
     
     # Enable dry-run mode for all tests
-    $env:MOLE_DRY_RUN = "1"
+    $env:SWEEPR_DRY_RUN = "1"
     Set-DryRunMode -Enabled $true
 }
 
 AfterAll {
-    $env:MOLE_DRY_RUN = $null
+    $env:SWEEPR_DRY_RUN = $null
     Set-DryRunMode -Enabled $false
 }
 
@@ -414,8 +414,8 @@ Describe "Owner cache accounting" {
         Reset-CleanupStats
         Set-DryRunMode -Enabled $false
         $script:ExportListFile = Join-Path $TestDrive 'owner-preview.txt'
-        Mock Get-MoleOwnerCachePath { $script:Root }
-        Mock Invoke-MoleOwnerProcess { [pscustomobject]@{ Output = '' } }
+        Mock Get-SweeprOwnerCachePath { $script:Root }
+        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
     }
     AfterEach {
         Set-DryRunMode -Enabled $true
@@ -423,19 +423,19 @@ Describe "Owner cache accounting" {
     }
     It "Exports the owner root without claiming the whole store will be pruned" {
         Set-DryRunMode -Enabled $true
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         Get-Content $script:ExportListFile | Should -Contain $script:Root
         $stats = Get-CleanupStats
         $stats.OwnerCleanups | Should -Be 1
         $stats.TotalSizeKB | Should -Be 0
-        Should -Invoke Invoke-MoleOwnerProcess -Times 0 -Exactly
+        Should -Invoke Invoke-SweeprOwnerProcess -Times 0 -Exactly
     }
     It "Measures only the space removed by a successful partial prune" {
-        Mock Invoke-MoleOwnerProcess {
+        Mock Invoke-SweeprOwnerProcess {
             Remove-Item -LiteralPath (Join-Path $script:Root 'gone.bin')
             [pscustomobject]@{ Output = '' }
         }
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         $stats = Get-CleanupStats
         $stats.OwnerCleanups | Should -Be 1
         $stats.TotalSizeKB | Should -Be 4
@@ -443,13 +443,13 @@ Describe "Owner cache accounting" {
         Test-Path (Join-Path $script:Root 'kept.bin') | Should -BeTrue
     }
     It "Does not report bytes for an unchanged cache" {
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
         (Get-CleanupStats).OwnerCleanups | Should -Be 1
     }
     It "Handles an empty owner cache without a missing Sum property" {
         Remove-Item -LiteralPath (Join-Path $script:Root 'gone.bin'), (Join-Path $script:Root 'kept.bin')
-        { Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache' } | Should -Not -Throw
+        { Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache' } | Should -Not -Throw
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
     }
     It "Does not assume an unmeasurable post-cleanup tree is empty" {
@@ -458,18 +458,18 @@ Describe "Owner cache accounting" {
             $script:WalkCount++
             if ($script:WalkCount -eq 1) {
                 return @{ Success = $true; Items = @(Get-ChildItem -LiteralPath $script:Root | ForEach-Object {
-                    $_ | Add-Member -NotePropertyName MolePathSnapshot -NotePropertyValue (Get-MolePathSnapshot $_.FullName) -PassThru
+                    $_ | Add-Member -NotePropertyName SweeprPathSnapshot -NotePropertyValue (Get-SweeprPathSnapshot $_.FullName) -PassThru
                 }) }
             }
             return @{ Success = $false; Items = @() }
         }
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
         (Get-CleanupStats).OwnerCleanups | Should -Be 1
     }
     It "Does not count a failed owner command" {
-        Mock Invoke-MoleOwnerProcess { $null }
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Mock Invoke-SweeprOwnerProcess { $null }
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         (Get-CleanupStats).OwnerCleanups | Should -Be 0
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
     }
@@ -478,7 +478,7 @@ Describe "Owner cache accounting" {
         $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Show-CleanupSummary' }, $true)
         . ([scriptblock]::Create($definition.Extent.Text))
         Mock Get-FreeSpace { '10 GB' }
-        Invoke-MoleOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
         $output = Show-CleanupSummary -Stats (Get-CleanupStats) -IsDryRun $false 6>&1 | Out-String
         $output | Should -Not -Match 'already clean'
         $output | Should -Match 'Tool cache cleanup completed'
@@ -489,40 +489,40 @@ Describe 'Review regressions: owner log and summary' {
     BeforeEach {
         Reset-CleanupStats
         Set-DryRunMode -Enabled $false
-        Mock Get-MoleOwnerCachePath { 'C:\cache' }
+        Mock Get-SweeprOwnerCachePath { 'C:\cache' }
         Mock Test-SafePath { $true }
-        Mock Get-MolePathSnapshot { @{ Path = 'C:\cache' } }
-        Mock Test-MolePathSnapshot { $true }
+        Mock Get-SweeprPathSnapshot { @{ Path = 'C:\cache' } }
+        Mock Test-SweeprPathSnapshot { $true }
         Mock Get-SafeDirectoryTreeItems { @{ Success = $true; Items = @() } }
-        Mock Invoke-MoleOwnerProcess { [pscustomobject]@{ Output = '' } }
-        Mock Write-MoleOperation { }
+        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
+        Mock Write-SweeprOperation { }
         Mock Write-Success { }
         Mock Set-SectionActivity { }
     }
     It 'Records a successful owner command without claiming a file removal' {
-        Invoke-MoleOwnerCacheCleanup -Name npm -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'OWNER' -and $Path -eq 'C:\cache' -and $Detail -eq 'npm cache clean --force' }
+        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'OWNER' -and $Path -eq 'C:\cache' -and $Detail -eq 'npm cache clean --force' }
     }
     It 'Records a failed owner command as incomplete' {
-        Mock Invoke-MoleOwnerProcess { $null }
-        Invoke-MoleOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete' }
+        Mock Invoke-SweeprOwnerProcess { $null }
+        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete' }
     }
     It 'Records that a timed-out owner command was killed' {
-        Mock Invoke-MoleOwnerProcess {
+        Mock Invoke-SweeprOwnerProcess {
             if ($null -ne $Outcome) { $Outcome.Reason = 'timed out after 120s; process tree 42 stopped with taskkill /T /F' }
             $null
         }
-        Invoke-MoleOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter {
+        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter {
             $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete; timed out after 120s; process tree 42 stopped with taskkill /T /F'
         }
     }
     It 'Does not record an owner preview' {
         Set-DryRunMode -Enabled $true
         Mock Add-DryRunListEntries { }
-        Invoke-MoleOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly
+        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
     }
     It 'Uses one item count and no protection tutorial in a dry-run summary' {
         $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir 'bin\clean.ps1'), [ref]$null, [ref]$null)
@@ -540,7 +540,7 @@ Describe 'Review regressions: owner log and summary' {
 Describe 'Owner process timeout' {
     It 'Says when it stops an owner process tree that ran past its timeout' {
         $outcome = @{}
-        $result = Invoke-MoleOwnerProcess -Name 'powershell' -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30') -TimeoutSeconds 1 -Outcome $outcome
+        $result = Invoke-SweeprOwnerProcess -Name 'powershell' -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30') -TimeoutSeconds 1 -Outcome $outcome
         $result | Should -BeNullOrEmpty
         $outcome.Reason | Should -Match '^timed out after 1s; process tree \d+ stopped with taskkill /T /F$'
     }
@@ -576,7 +576,7 @@ Describe 'Owner cancellation evidence' {
         } -ParameterFilter { $TypeName -eq 'Diagnostics.Process' }
         Mock New-Object { [Diagnostics.ProcessStartInfo]::new() } -ParameterFilter { $TypeName -eq 'Diagnostics.ProcessStartInfo' }
         $outcome = @{}
-        Invoke-MoleOwnerProcess -Name 'fixture-owner' -Arguments @() -TimeoutSeconds 1 -Outcome $outcome | Should -BeNullOrEmpty
+        Invoke-SweeprOwnerProcess -Name 'fixture-owner' -Arguments @() -TimeoutSeconds 1 -Outcome $outcome | Should -BeNullOrEmpty
         $outcome.Reason | Should -Be "timed out after 1s; $Expected"
         $outcome.Reason | Should -Not -Match 'stopped with taskkill'
         $script:FakeOwner.Killed | Should -BeTrue

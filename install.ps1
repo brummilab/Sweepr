@@ -1,12 +1,12 @@
 #!/usr/bin/env pwsh
-# freeMole Windows Installer
-# Installs freeMole Windows support to the system and adds to PATH
+# Sweepr Windows Installer
+# Installs Sweepr Windows support to the system and adds to PATH
 
 #Requires -Version 5.1
 param(
-    # %LOCALAPPDATA%\freeMole is the Mole for Windows app's data folder, so new
-    # installs never go there; see Uninstall-Mole for installs that already did.
-    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\freemole-cli",
+    # %LOCALAPPDATA%\Sweepr is reserved for app data, so new installs never go
+    # there; see Uninstall-Sweepr for installs that already did.
+    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\sweepr-cli",
     [switch]$AddToPath,
     [switch]$CreateShortcut,
     [switch]$Uninstall,
@@ -64,11 +64,11 @@ $InstallDir = $resolvedInvocation.InstallDir
 $AddToPath = [switch]$resolvedInvocation.AddToPath
 $CreateShortcut = [switch]$resolvedInvocation.CreateShortcut
 $script:CoreDir = Join-Path $script:SourceDir "lib\core"
-# "freeMole" is the Mole for Windows app's Start menu entry; the CLI uses its own name.
-$script:ShortcutName = "freeMole CLI"
+# The Start menu entry names the CLI explicitly; a plain "Sweepr" may belong to another app.
+$script:ShortcutName = "Sweepr CLI"
 
 . (Join-Path $script:CoreDir "version.ps1")
-$script:VERSION = Get-MoleVersionString -RootDir $script:SourceDir
+$script:VERSION = Get-SweeprVersionString -RootDir $script:SourceDir
 
 # Colors (using [char]27 for PowerShell 5.1 compatibility)
 $script:ESC = [char]27
@@ -100,13 +100,13 @@ function Write-Success {
     Write-Host "  $($c.Green)OK$($c.NC)    $Message"
 }
 
-function Write-MoleWarning {
+function Write-SweeprWarning {
     param([string]$Message)
     $c = $script:Colors
     Write-Host "  $($c.Yellow)WARN$($c.NC)  $Message"
 }
 
-function Write-MoleError {
+function Write-SweeprError {
     param([string]$Message)
     $c = $script:Colors
     Write-Host "  $($c.Red)ERROR$($c.NC) $Message"
@@ -196,7 +196,7 @@ function Assert-InstallPhysicalPath {
     }
 }
 
-function Copy-MoleInstallEntry {
+function Copy-SweeprInstallEntry {
     param([string]$Source, [string]$Destination)
 
     Assert-InstallPhysicalPath -Path $Source
@@ -207,7 +207,7 @@ function Copy-MoleInstallEntry {
             New-Item -ItemType Directory -Path $Destination -Force | Out-Null
         }
         foreach ($child in @(Get-ChildItem -LiteralPath $Source -Force -ErrorAction Stop)) {
-            Copy-MoleInstallEntry -Source $child.FullName -Destination (Join-Path $Destination $child.Name)
+            Copy-SweeprInstallEntry -Source $child.FullName -Destination (Join-Path $Destination $child.Name)
         }
     }
     else {
@@ -218,8 +218,8 @@ function Copy-MoleInstallEntry {
 function Show-Banner {
     $c = $script:Colors
     Write-Host ""
-    Write-Host "  $($c.Cyan)freeMole CLI for Windows$($c.NC)"
-    Write-Host "  $($c.Gray)Deep clean and optimize your PC. https://github.com/brummilab/freeMole$($c.NC)"
+    Write-Host "  $($c.Cyan)Sweepr CLI for Windows$($c.NC)"
+    Write-Host "  $($c.Gray)Deep clean and optimize your PC. https://github.com/brummilab/sweepr$($c.NC)"
     Write-Host ""
 }
 
@@ -234,13 +234,13 @@ function Show-InstallerHelp {
     Write-Host "  $($c.Green)OPTIONS:$($c.NC)"
     Write-Host ""
     Write-Host "    $($c.Cyan)-InstallDir <path>$($c.NC)   Installation directory"
-    Write-Host "                         Default: $env:LOCALAPPDATA\Programs\freemole-cli"
+    Write-Host "                         Default: $env:LOCALAPPDATA\Programs\sweepr-cli"
     Write-Host ""
-    Write-Host "    $($c.Cyan)-AddToPath$($c.NC)           Add freeMole to user PATH"
+    Write-Host "    $($c.Cyan)-AddToPath$($c.NC)           Add Sweepr to user PATH"
     Write-Host ""
     Write-Host "    $($c.Cyan)-CreateShortcut$($c.NC)      Create Start Menu shortcut"
     Write-Host ""
-    Write-Host "    $($c.Cyan)-Uninstall$($c.NC)           Remove freeMole from system"
+    Write-Host "    $($c.Cyan)-Uninstall$($c.NC)           Remove Sweepr from system"
     Write-Host ""
     Write-Host "    $($c.Cyan)-Force$($c.NC)               Overwrite existing installation"
     Write-Host ""
@@ -255,7 +255,7 @@ function Show-InstallerHelp {
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath"
     Write-Host ""
     Write-Host "    $($c.Gray)# Custom install location$($c.NC)"
-    Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -InstallDir C:\Tools\freeMole -AddToPath"
+    Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -InstallDir C:\Tools\Sweepr -AddToPath"
     Write-Host ""
     Write-Host "    $($c.Gray)# Full installation$($c.NC)"
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath -CreateShortcut"
@@ -292,7 +292,7 @@ function Add-ToUserPath {
         return $true
     }
     catch {
-        Write-MoleError "Failed to update PATH: $_"
+        Write-SweeprError "Failed to update PATH: $_"
         return $false
     }
 }
@@ -315,7 +315,7 @@ function Remove-FromUserPath {
         return $true
     }
     catch {
-        Write-MoleError "Failed to update PATH: $_"
+        Write-SweeprError "Failed to update PATH: $_"
         return $false
     }
 }
@@ -344,29 +344,29 @@ function New-StartMenuShortcut {
         return $true
     }
     catch {
-        Write-MoleError "Failed to create shortcut: $_"
+        Write-SweeprError "Failed to create shortcut: $_"
         return $false
     }
 }
 
-# Removes the Start menu shortcut this install created: "freeMole CLI.lnk", or
-# "freeMole.lnk" from 1.30.0, and only when it starts this install's freemole.ps1.
-# A "freeMole.lnk" that points anywhere else belongs to the Mole for Windows app.
+# Removes the Start menu shortcut this install created: "Sweepr CLI.lnk", or
+# "Sweepr.lnk" from 1.30.0, and only when it starts this install's sweepr.ps1.
+# A "Sweepr.lnk" that points anywhere else belongs to another app.
 function Remove-StartMenuShortcut {
     param(
         [string]$InstallDir,
         [string]$ProgramsPath = (Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs")
     )
 
-    $moleScript = Join-Path $InstallDir "freemole.ps1"
+    $sweeprScript = Join-Path $InstallDir "sweepr.ps1"
     $shell = New-Object -ComObject WScript.Shell
-    foreach ($name in @("freeMole CLI", "freeMole")) {
+    foreach ($name in @("Sweepr CLI", "Sweepr")) {
         $shortcutPath = Join-Path $ProgramsPath "$name.lnk"
         if (-not (Test-Path -LiteralPath $shortcutPath)) {
             continue
         }
         $arguments = $shell.CreateShortcut($shortcutPath).Arguments
-        if (-not $arguments -or $arguments.IndexOf($moleScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        if (-not $arguments -or $arguments.IndexOf($sweeprScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
             continue
         }
         try {
@@ -374,7 +374,7 @@ function Remove-StartMenuShortcut {
             Write-Success "Removed shortcut: $shortcutPath"
         }
         catch {
-            Write-MoleError "Failed to remove shortcut: $_"
+            Write-SweeprError "Failed to remove shortcut: $_"
             return $false
         }
     }
@@ -395,7 +395,7 @@ function Ensure-OptionalTuiTools {
         @{ Name = "status"; Output = "bin\status.exe"; Source = "./cmd/status/" }
     )
 
-    $version = Get-MoleVersionFromScriptFile -WindowsDir $RootDir
+    $version = Get-SweeprVersionFromScriptFile -WindowsDir $RootDir
     $refreshSourceTools = Test-Path -LiteralPath (Join-Path $RootDir ".git")
     $failedTools = @()
 
@@ -406,14 +406,14 @@ function Ensure-OptionalTuiTools {
             $binPath = Ensure-TuiBinary -Name $tool.Name -WindowsDir $RootDir -DestinationPath $destination -SourcePath $tool.Source -Version $version -Refresh:$refreshSourceTools
         }
         catch {
-            Write-MoleWarning "Skipping $($tool.Name).exe after a non-fatal setup error: $_"
+            Write-SweeprWarning "Skipping $($tool.Name).exe after a non-fatal setup error: $_"
             $binPath = $null
         }
         if ($binPath) {
             Write-Success "Ready: $($tool.Name).exe"
         }
         else {
-            Write-MoleWarning "Could not prepare $($tool.Name).exe. Install Go, or run fm update later to fetch the release build."
+            Write-SweeprWarning "Could not prepare $($tool.Name).exe. Install Go, or run sw update later to fetch the release build."
             # Only a tool that stays at an older build is a failed refresh; with
             # nothing installed yet, the command fetches the release on first use.
             if ($hadExisting) { $failedTools += $tool.Name }
@@ -424,12 +424,12 @@ function Ensure-OptionalTuiTools {
     }
 }
 
-function Install-Mole {
-    Write-Info "Installing freeMole v$script:VERSION..."
+function Install-Sweepr {
+    Write-Info "Installing Sweepr v$script:VERSION..."
     Write-Host ""
 
     if (Test-ProtectedInstallRoot -Path $InstallDir) {
-        Write-MoleError "Refusing to use protected install directory: $InstallDir"
+        Write-SweeprError "Refusing to use protected install directory: $InstallDir"
         return $false
     }
 
@@ -437,14 +437,14 @@ function Install-Mole {
     $inPlaceInstall = Test-SamePath -PathA $script:SourceDir -PathB $InstallDir
     if (-not $inPlaceInstall -and (Test-Path -LiteralPath $InstallDir) -and
         @(Get-ChildItem -LiteralPath $InstallDir -Force -ErrorAction Stop).Count -gt 0 -and
-        -not (Test-MoleInstallDir -Path $InstallDir)) {
-        Write-MoleError "Refusing to merge into a directory not owned by this install: $InstallDir"
+        -not (Test-SweeprInstallDir -Path $InstallDir)) {
+        Write-SweeprError "Refusing to merge into a directory not owned by this install: $InstallDir"
         return $false
     }
 
     # Check if already installed
     if ((Test-Path $InstallDir) -and -not $Force -and -not $inPlaceInstall) {
-        Write-MoleError "freeMole is already installed at: $InstallDir"
+        Write-SweeprError "Sweepr is already installed at: $InstallDir"
         Write-Host ""
         Write-Host "  Use -Force to overwrite or -Uninstall to remove first"
         Write-Host ""
@@ -458,7 +458,7 @@ function Install-Mole {
             Write-Success "Created directory: $InstallDir"
         }
         catch {
-            Write-MoleError "Failed to create directory: $_"
+            Write-SweeprError "Failed to create directory: $_"
             return $false
         }
     }
@@ -474,7 +474,7 @@ function Install-Mole {
             # VERSION travels with the install: without it every command falls
             # back to the compiled-in default and reports a stale version.
             "VERSION"
-            "freemole.ps1"
+            "sweepr.ps1"
             "install.ps1"
             "go.mod"
             "go.sum"
@@ -489,11 +489,11 @@ function Install-Mole {
 
             if (Test-Path $src) {
                 try {
-                    Copy-MoleInstallEntry -Source $src -Destination $dst
+                    Copy-SweeprInstallEntry -Source $src -Destination $dst
                     Write-Success "Copied: $item"
                 }
                 catch {
-                    Write-MoleError "Failed to copy $item`: $_"
+                    Write-SweeprError "Failed to copy $item`: $_"
                     return $false
                 }
             }
@@ -517,18 +517,18 @@ function Install-Mole {
     $batchContent = @'
 @echo off
 setlocal DisableDelayedExpansion
-(goto) 2>nul & "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoLogo -NoProfile -File "%~dp0mole.ps1" %*
+(goto) 2>nul & "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoLogo -NoProfile -File "%~dp0sweepr.ps1" %*
 '@
-    $batchPath = Join-Path $InstallDir "freemole.cmd"
+    $batchPath = Join-Path $InstallDir "sweepr.cmd"
     Assert-InstallPhysicalPath -Path $batchPath
     Set-Content -LiteralPath $batchPath -Value $batchContent -Encoding ASCII
-    Write-Success "Created launcher: freemole.cmd"
+    Write-Success "Created launcher: sweepr.cmd"
     
-    # Also create 'fm' alias
-    $moPath = Join-Path $InstallDir "fm.cmd"
+    # Also create 'sw' alias
+    $moPath = Join-Path $InstallDir "sw.cmd"
     Assert-InstallPhysicalPath -Path $moPath
     Set-Content -LiteralPath $moPath -Value $batchContent -Encoding ASCII
-    Write-Success "Created launcher: fm.cmd (short alias)"
+    Write-Success "Created launcher: sw.cmd (short alias)"
 
     # Add to PATH if requested
     if ($AddToPath) {
@@ -541,31 +541,31 @@ setlocal DisableDelayedExpansion
     # Create shortcut if requested
     if ($CreateShortcut) {
         Write-Host ""
-        $targetPath = Join-Path $InstallDir "freemole.ps1"
+        $targetPath = Join-Path $InstallDir "sweepr.ps1"
         if (-not (New-StartMenuShortcut -TargetPath $targetPath -ShortcutName $script:ShortcutName -Description "Windows System Maintenance Toolkit")) {
             return $false
         }
     }
 
     Write-Host ""
-    Write-Success "freeMole installed successfully!"
+    Write-Success "Sweepr installed successfully!"
     Write-Host ""
     Write-Host "  Location: $InstallDir"
     Write-Host ""
 
     if ($AddToPath) {
-        Write-Host "  Run 'fm' or 'freemole' from any terminal to start"
+        Write-Host "  Run 'sw' or 'sweepr' from any terminal to start"
     }
     else {
         Write-Host "  Run the following to start:"
-        Write-Host "    & `"$InstallDir\freemole.ps1`""
+        Write-Host "    & `"$InstallDir\sweepr.ps1`""
         Write-Host ""
         Write-Host "  Or add to PATH with:"
         Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath"
     }
 
     Write-Host ""
-    Write-Host "  Run 'fm update' to pull the latest source from the main branch"
+    Write-Host "  Run 'sw update' to pull the latest source from the main branch"
     Write-Host ""
     return $true
 }
@@ -574,25 +574,23 @@ setlocal DisableDelayedExpansion
 # Uninstall
 # ============================================================================
 
-# Top-level entries a freeMole CLI install can hold: the repository tree, files
+# Top-level entries a Sweepr CLI install can hold: the repository tree, files
 # older releases shipped, git metadata and the launchers this script writes.
 # Anything else in the folder belongs to someone else and is kept.
-function Get-MoleInstallEntries {
+function Get-SweeprInstallEntries {
     return @(
         ".editorconfig", ".git", ".gitattributes", ".github", ".gitignore", ".golangci.yml", ".shellcheckrc",
-        "CONTRIBUTING.md", "CONTRIBUTORS.svg", "ISSUE-343-SUMMARY.md", "LICENSE", "Makefile", "NOTICE.md", "Projektinhalt.md",
-        "README.md", "README_CN.md", "README_DE.md", "README_FR.md", "README_JA.md", "README_KR.md", "README_RU.md", "README_TW.md",
-        "README_UA.md", "RELEASE.md", "SECURITY.md", "SECURITY_AUDIT.md", "SYNC.md", "TRADEMARK.md", "VERSION",
-        "bin", "cmd", "go.mod", "go.sum", "install.ps1", "lib", "fm.cmd", "fm.exe", "freemole.cmd", "freemole.ps1",
+        "CONTRIBUTING.md", "LICENSE", "Makefile", "NOTICE.md", "Projektinhalt.md",
+        "README.md", "RELEASE.md", "SECURITY.md", "VERSION",
+        "bin", "cmd", "go.mod", "go.sum", "install.ps1", "lib", "sw.cmd", "sw.exe", "sweepr.cmd", "sweepr.ps1",
         "packaging", "quick-install.ps1", "scripts", "tests"
     )
 }
 
 # Exact shipped files, not directory names, establish removal scope. Keep
 # unknown files in shared folders and Git metadata; prune only empty folders.
-function Get-MoleInstallNestedFiles {
+function Get-SweeprInstallNestedFiles {
     return @(
-        ".github\FUNDING.yml"
         ".github\ISSUE_TEMPLATE\bug_report.md"
         ".github\ISSUE_TEMPLATE\config.yml"
         ".github\ISSUE_TEMPLATE\feature_request.md"
@@ -600,7 +598,6 @@ function Get-MoleInstallNestedFiles {
         ".github\workflows\check.yml"
         ".github\workflows\release-windows.yml"
         ".github\workflows\test.yml"
-        ".github\workflows\update-contributors.yml"
         "bin\analyze.exe"
         "bin\analyze.ps1"
         "bin\clean.ps1"
@@ -643,8 +640,8 @@ function Get-MoleInstallNestedFiles {
         "cmd\analyze\view.go"
         "cmd\analyze\view_test.go"
         "cmd\analyze\windows_test.go"
-        "cmd\fm\main.go"
-        "cmd\fm\main_test.go"
+        "cmd\sw\main.go"
+        "cmd\sw\main_test.go"
         "cmd\status\battery_windows_test.go"
         "cmd\status\collection.go"
         "cmd\status\diagnosis.go"
@@ -673,13 +670,6 @@ function Get-MoleInstallNestedFiles {
         "cmd\status\watch_test.go"
         "cmd\status\windows_logic_test.go"
         "docs\development-pitfalls.md"
-        "docs\development-record.md"
-        "docs\img\analyze-windows.png"
-        "docs\img\clean-windows.png"
-        "docs\img\mole-windows.png"
-        "docs\img\optimize-windows.png"
-        "docs\img\status-windows.png"
-        "docs\img\uninstall-windows.png"
         "lib\clean\apps.ps1"
         "lib\clean\caches.ps1"
         "lib\clean\cache_guard.ps1"
@@ -697,15 +687,15 @@ function Get-MoleInstallNestedFiles {
         "lib\core\update_check.ps1"
         "lib\core\version.ps1"
         "packaging\README.md"
-        "packaging\scoop\mole.json"
-        "packaging\winget\tw93.MoleCLI.installer.yaml"
-        "packaging\winget\tw93.MoleCLI.locale.en-US.yaml"
-        "packaging\winget\tw93.MoleCLI.yaml"
+        "packaging\scoop\sweepr.json"
+        "packaging\winget\brummilab.Sweepr.installer.yaml"
+        "packaging\winget\brummilab.Sweepr.locale.en-US.yaml"
+        "packaging\winget\brummilab.Sweepr.yaml"
         "scripts\build-msi.ps1"
         "scripts\build-release.ps1"
         "scripts\build.ps1"
         "scripts\e2e_windows.py"
-        "scripts\freemole-installer.wxs"
+        "scripts\sweepr-installer.wxs"
         "scripts\new-release-zip.ps1"
         "scripts\render-packaging.ps1"
         "scripts\sign-release.ps1"
@@ -739,10 +729,10 @@ function Get-MoleInstallNestedFiles {
     )
 }
 
-function Remove-MoleNestedFiles {
+function Remove-SweeprNestedFiles {
     param([string]$InstallPath, [string]$Root)
 
-    $files = @(Get-MoleInstallNestedFiles | Where-Object { $_.StartsWith("$Root\", [StringComparison]::OrdinalIgnoreCase) })
+    $files = @(Get-SweeprInstallNestedFiles | Where-Object { $_.StartsWith("$Root\", [StringComparison]::OrdinalIgnoreCase) })
     $folders = @($Root)
     Assert-InstallPhysicalPath -Path (Join-Path $InstallPath $Root)
     foreach ($file in $files) {
@@ -767,10 +757,10 @@ function Remove-MoleNestedFiles {
     }
 }
 
-function Test-MoleInstallDir {
+function Test-SweeprInstallDir {
     param([string]$Path)
 
-    return (Test-Path -LiteralPath (Join-Path $Path "freemole.ps1")) -and
+    return (Test-Path -LiteralPath (Join-Path $Path "sweepr.ps1")) -and
         (Test-Path -LiteralPath (Join-Path $Path "lib\core\base.ps1"))
 }
 
@@ -778,7 +768,7 @@ function Test-MoleInstallDir {
 # symbolic link is unlinked itself, never recursed into, so its target survives.
 # Windows PowerShell 5.1's Remove-Item -Recurse deletes a linked directory's
 # target contents.
-function Remove-MoleConfigEntry {
+function Remove-SweeprConfigEntry {
     param([System.IO.FileSystemInfo]$Item)
 
     if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
@@ -792,7 +782,7 @@ function Remove-MoleConfigEntry {
     }
     if ($Item.Attributes -band [System.IO.FileAttributes]::Directory) {
         foreach ($child in @(Get-ChildItem -LiteralPath $Item.FullName -Force -ErrorAction Stop)) {
-            Remove-MoleConfigEntry -Item $child
+            Remove-SweeprConfigEntry -Item $child
         }
         # Never recursive: an entry added since the listing fails the removal
         # instead of Remove-Item offering to delete it.
@@ -805,27 +795,27 @@ function Remove-MoleConfigEntry {
     Remove-Item -LiteralPath $Item.FullName -Force -ErrorAction Stop
 }
 
-function Uninstall-Mole {
-    Write-Info "Uninstalling freeMole..."
+function Uninstall-Sweepr {
+    Write-Info "Uninstalling Sweepr..."
     Write-Host ""
 
     # Without -InstallDir, remove the install this script belongs to. There is
-    # no fallback to %LOCALAPPDATA%\freeMole: that is the Mole for Windows app's
-    # data folder, and 1.30.0 removed it whole.
+    # no fallback to %LOCALAPPDATA%\Sweepr: that folder is reserved for app
+    # data and must never be removed whole.
     $installPath = if ($script:InstallDirGiven) { $InstallDir } else { $script:SourceDir }
 
     if (-not (Test-Path -LiteralPath $installPath)) {
-        Write-MoleWarning "freeMole is not installed at $installPath"
+        Write-SweeprWarning "Sweepr is not installed at $installPath"
         return $true
     }
 
     if (Test-ProtectedInstallRoot -Path $installPath) {
-        Write-MoleError "Refusing to remove protected install directory: $installPath"
+        Write-SweeprError "Refusing to remove protected install directory: $installPath"
         return $false
     }
 
-    if (-not (Test-MoleInstallDir -Path $installPath)) {
-        Write-MoleError "$installPath is not a freeMole install (no freemole.ps1); nothing was removed"
+    if (-not (Test-SweeprInstallDir -Path $installPath)) {
+        Write-SweeprError "$installPath is not a Sweepr install (no sweepr.ps1); nothing was removed"
         return $false
     }
 
@@ -833,7 +823,7 @@ function Uninstall-Mole {
 
     # A running native launcher cannot be deleted on Windows. Check before
     # changing PATH, shortcuts or any files, rather than leaving half an install.
-    $nativeLauncher = Join-Path $installPath 'fm.exe'
+    $nativeLauncher = Join-Path $installPath 'sw.exe'
     if (Test-Path -LiteralPath $nativeLauncher) {
         try {
             Assert-InstallPhysicalPath -Path $nativeLauncher
@@ -841,9 +831,9 @@ function Uninstall-Mole {
             $handle.Dispose()
         }
         catch {
-            Write-MoleError "Cannot remove fm.exe while it is inaccessible or a freeMole command runs through it, this one included: $nativeLauncher"
-            $removeScript = (Join-Path $installPath 'freemole.ps1').Replace("'", "''")
-            Write-Info "Close other freeMole sessions, then run in PowerShell: & '$removeScript' remove"
+            Write-SweeprError "Cannot remove sw.exe while it is inaccessible or a Sweepr command runs through it, this one included: $nativeLauncher"
+            $removeScript = (Join-Path $installPath 'sweepr.ps1').Replace("'", "''")
+            Write-Info "Close other Sweepr sessions, then run in PowerShell: & '$removeScript' remove"
             return $false
         }
     }
@@ -854,10 +844,10 @@ function Uninstall-Mole {
     # Remove shortcut
     $null = Remove-StartMenuShortcut -InstallDir $installPath
 
-    # Remove only what freeMole installed; another app may share the folder
-    # (Mole for Windows keeps its license and settings in %LOCALAPPDATA%\freeMole).
-    $known = Get-MoleInstallEntries
-    $nestedRoots = @(Get-MoleInstallNestedFiles | ForEach-Object { ($_ -split '\\')[0] } | Select-Object -Unique)
+    # Remove only what Sweepr installed; another app may share the folder
+    # (for example app data in %LOCALAPPDATA%\Sweepr).
+    $known = Get-SweeprInstallEntries
+    $nestedRoots = @(Get-SweeprInstallNestedFiles | ForEach-Object { ($_ -split '\\')[0] } | Select-Object -Unique)
     $kept = @()
     foreach ($entry in @(Get-ChildItem -LiteralPath $installPath -Force)) {
         if ($entry.Name -eq ".git" -and -not $entry.PSIsContainer) {
@@ -866,10 +856,10 @@ function Uninstall-Mole {
         }
         if ($nestedRoots -contains $entry.Name -or ($entry.PSIsContainer -and $known -contains $entry.Name)) {
             try {
-                Remove-MoleNestedFiles -InstallPath $installPath -Root $entry.Name
+                Remove-SweeprNestedFiles -InstallPath $installPath -Root $entry.Name
             }
             catch {
-                Write-MoleError "Failed to remove $($entry.FullName): $_"
+                Write-SweeprError "Failed to remove $($entry.FullName): $_"
                 return $false
             }
             if (Test-Path -LiteralPath $entry.FullName) { $kept += $entry.Name }
@@ -884,7 +874,7 @@ function Uninstall-Mole {
             Remove-Item -LiteralPath $entry.FullName -Force -ErrorAction Stop
         }
         catch {
-            Write-MoleError "Failed to remove $($entry.FullName): $_"
+            Write-SweeprError "Failed to remove $($entry.FullName): $_"
             return $false
         }
     }
@@ -895,45 +885,45 @@ function Uninstall-Mole {
             Write-Success "Removed directory: $installPath"
         }
         catch {
-            Write-MoleError "Failed to remove directory: $_"
+            Write-SweeprError "Failed to remove directory: $_"
             return $false
         }
     }
     else {
-        Write-Success "Removed freeMole from: $installPath"
-        Write-MoleWarning "Kept $($kept.Count) item(s) freeMole did not install: $($kept -join ', ')"
+        Write-Success "Removed Sweepr from: $installPath"
+        Write-SweeprWarning "Kept $($kept.Count) item(s) Sweepr did not install: $($kept -join ', ')"
     }
 
-    # The cache folder is freeMole-owned and rebuildable, like the macOS CLI's
-    # ~/.cache/freemole: downloaded tool binaries and scan caches, never
+    # The cache folder is Sweepr-owned and rebuildable: downloaded tool
+    # binaries and scan caches, never
     # user-authored state. A linked cache root is kept rather than followed.
     if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-        $cachePath = Join-Path $env:USERPROFILE ".cache\freemole"
+        $cachePath = Join-Path $env:USERPROFILE ".cache\sweepr"
         if (Test-Path -LiteralPath $cachePath) {
             try {
                 $cacheRoot = Get-Item -LiteralPath $cachePath -Force -ErrorAction Stop
                 if ($cacheRoot.PSIsContainer -and
                     -not ($cacheRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-                    Remove-MoleConfigEntry -Item $cacheRoot
-                    if (Get-Command Write-MoleOperation -ErrorAction SilentlyContinue) {
-                        Write-MoleOperation -Action "REMOVED" -Path $cachePath -Detail "cache"
+                    Remove-SweeprConfigEntry -Item $cacheRoot
+                    if (Get-Command Write-SweeprOperation -ErrorAction SilentlyContinue) {
+                        Write-SweeprOperation -Action "REMOVED" -Path $cachePath -Detail "cache"
                     }
                     Write-Success "Removed cache: $cachePath"
                 }
             }
             catch {
-                Write-MoleWarning "Kept cache: $cachePath ($($_.Exception.Message))"
+                Write-SweeprWarning "Kept cache: $cachePath ($($_.Exception.Message))"
             }
         }
     }
 
     # Remove config directory if different from install
-    $configDir = Join-Path $env:USERPROFILE ".config\freemole"
+    $configDir = Join-Path $env:USERPROFILE ".config\sweepr"
     if (Test-Path $configDir) {
         Write-Info "Found config directory: $configDir"
         $response = Read-Host "  Remove config files? (y/N)"
         if ($response -eq "y" -or $response -eq "Y") {
-            # operations.log is the record of what freeMole removed; support reads it after
+            # operations.log is the record of what Sweepr removed; support reads it after
             # a report, so it outlives the CLI along with its rotated copy.
             try {
                 # Checking children cannot protect a linked config root or ancestor:
@@ -943,7 +933,7 @@ function Uninstall-Mole {
                 foreach ($item in @(Get-ChildItem -LiteralPath $configDir -Force -ErrorAction Stop)) {
                     Assert-InstallPhysicalPath -Path $configDir
                     if ($item.Name -like 'operations.log*') { $kept += $item.Name; continue }
-                    Remove-MoleConfigEntry -Item $item
+                    Remove-SweeprConfigEntry -Item $item
                 }
                 if ($kept.Count -eq 0) {
                     Remove-Item -LiteralPath $configDir -Force -ErrorAction Stop
@@ -954,13 +944,13 @@ function Uninstall-Mole {
                 }
             }
             catch {
-                Write-MoleWarning "Failed to remove config: $_"
+                Write-SweeprWarning "Failed to remove config: $_"
             }
         }
     }
 
     Write-Host ""
-    Write-Success "freeMole uninstalled successfully!"
+    Write-Success "Sweepr uninstalled successfully!"
     Write-Host ""
     return $true
 }
@@ -978,10 +968,10 @@ function Main {
     Show-Banner
 
     if ($Uninstall) {
-        $ok = Uninstall-Mole
+        $ok = Uninstall-Sweepr
     }
     else {
-        $ok = Install-Mole
+        $ok = Install-Sweepr
     }
 
     if (-not $ok) {

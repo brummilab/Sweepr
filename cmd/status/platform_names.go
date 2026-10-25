@@ -51,7 +51,7 @@ func isPlaceholderModel(value string) bool {
 }
 
 // windowsModelName picks the readable machine name from the BIOS registry
-// values, the counterpart of "MacBook Pro" in main's header. Lenovo stores a
+// values for the header. Lenovo stores a
 // machine-type code in SystemProductName and the marketing name in
 // SystemVersion, so that one vendor reads the version field instead.
 func windowsModelName(manufacturer, product, version string) string {
@@ -73,8 +73,8 @@ var (
 	cpuSuffixPattern    = regexp.MustCompile(`(?i)\s+(cpu|processor|\d+-core processor)$`)
 )
 
-// cleanCPUName shortens ProcessorNameString to the part main shows for a Mac
-// chip: "Intel(R) Core(TM) i7-1165G7 @ 2.80GHz" becomes "Intel Core i7-1165G7".
+// cleanCPUName shortens ProcessorNameString to a readable
+// chip name: "Intel(R) Core(TM) i7-1165G7 @ 2.80GHz" becomes "Intel Core i7-1165G7".
 func cleanCPUName(name string) string {
 	name = cpuTrademarkPattern.ReplaceAllString(name, "")
 	name = cpuClockPattern.ReplaceAllString(name, "")
@@ -133,7 +133,7 @@ func formatBatteryTimeLeft(seconds uint32) string {
 }
 
 // batteryHealthPercent is full-charge capacity over design capacity, clamped
-// to 0-100 like main's AppleSmartBattery reading.
+// to 0-100.
 func batteryHealthPercent(design, full int) int {
 	if design <= 0 || full <= 0 {
 		return 0

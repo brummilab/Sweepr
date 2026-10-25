@@ -1,12 +1,12 @@
-# freeMole - User Cleanup Module
+# Sweepr - User Cleanup Module
 # Cleans user-level temporary files, caches, and downloads
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_CLEAN_USER_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_CLEAN_USER_LOADED) { return }
-$script:MOLE_CLEAN_USER_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_CLEAN_USER_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_USER_LOADED) { return }
+$script:SWEEPR_CLEAN_USER_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -123,7 +123,7 @@ function Clear-RecycleBin {
 
 # A report is retained as a whole when any descendant is recent or unreadable.
 # The same bounded check runs after sizing and at the removal boundary.
-function Test-MoleOldErrorReport {
+function Test-SweeprOldErrorReport {
     param([string]$Path, [datetime]$Cutoff)
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
@@ -156,7 +156,7 @@ function Clear-ErrorReports {
         "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue",
         "$env:LOCALAPPDATA\CrashDumps"
     )) {
-        $snapshot = Get-MolePathSnapshot -Path $root
+        $snapshot = Get-SweeprPathSnapshot -Path $root
         if (-not $snapshot) { continue }
         $reports = New-Object 'System.Collections.Generic.List[System.IO.FileSystemInfo]'
         $scan = [Diagnostics.Stopwatch]::StartNew()
@@ -169,13 +169,13 @@ function Clear-ErrorReports {
         }
         catch { $complete = $false }
         if (-not $complete -or $scan.Elapsed.TotalSeconds -gt 2) { continue }
-        if (-not (Test-MolePathSnapshot $snapshot)) { continue }
+        if (-not (Test-SweeprPathSnapshot $snapshot)) { continue }
         foreach ($report in $reports) {
             if ($root -eq "$env:LOCALAPPDATA\CrashDumps" -and
                 ($report.PSIsContainer -or $report.Extension -ine '.dmp')) { continue }
             $reportPath = $report.FullName
-            if (-not (Test-MoleOldErrorReport -Path $reportPath -Cutoff $cutoff)) { continue }
-            $guard = { (Test-MolePathSnapshot $snapshot) -and (Test-MoleOldErrorReport -Path $reportPath -Cutoff $cutoff) }
+            if (-not (Test-SweeprOldErrorReport -Path $reportPath -Cutoff $cutoff)) { continue }
+            $guard = { (Test-SweeprPathSnapshot $snapshot) -and (Test-SweeprOldErrorReport -Path $reportPath -Cutoff $cutoff) }
             Remove-SafeItems -Paths @($reportPath) -Description 'Error reports' -CanRemove $guard
         }
     }

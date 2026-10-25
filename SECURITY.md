@@ -1,16 +1,16 @@
 # Security Policy
 
-freeMole (a fork of the Mole CLI for Windows) is a local system maintenance tool. It includes high-risk operations such as cleanup, uninstall, optimization, and artifact removal, so safety boundaries, deletion logic, and release integrity are treated as security-sensitive.
+Sweepr is a local system maintenance tool. It includes high-risk operations such as cleanup, uninstall, optimization, and artifact removal, so safety boundaries, deletion logic, and release integrity are treated as security-sensitive.
 
 ## Reporting a Vulnerability
 
-Please report suspected security issues privately through GitHub's private vulnerability reporting for this repository: <https://github.com/brummilab/freeMole/security/advisories/new>.
+Please report suspected security issues privately through GitHub's private vulnerability reporting for this repository: <https://github.com/brummilab/sweepr/security/advisories/new>.
 
-Do not open a public GitHub issue for an unpatched vulnerability. Do not send freeMole reports to the upstream Mole maintainer; if an issue also affects upstream Mole, report it there separately through the channel described in [tw93/Mole](https://github.com/tw93/Mole/blob/windows/SECURITY.md).
+Do not open a public GitHub issue for an unpatched vulnerability.
 
 Include as much of the following as possible:
 
-- Output of `fm --version` and how freeMole was installed
+- Output of `sw --version` and how Sweepr was installed
 - Windows version
 - Exact command or workflow involved
 - Reproduction steps or proof of concept
@@ -39,7 +39,7 @@ Security fixes are only guaranteed for the current `main` branch and, once relea
 ## What Usually Does Not Qualify
 
 - Cleanup misses that leave recoverable junk behind
-- freeMole refusing to clean something
+- Sweepr refusing to clean something
 - Cosmetic UI problems
 - Requests for broader or more aggressive cleanup
 
@@ -51,5 +51,3 @@ If you are unsure whether something is security-relevant, report it privately fi
 - `C:\Windows`, `C:\Program Files`, `C:\Program Files (x86)`, Windows Defender folders, and the user profile root are protected; an empty or unparsable path counts as protected.
 - Automatic cleanup generally deletes permanently. Verified uninstall leftovers use the shell's recycle-only operation; Analyze requests Recycle Bin behavior and a Windows warning if permanent deletion would be required. Third-party uninstallers retain their own removal semantics.
 - The release process requires Authenticode signing and `SHA256SUMS.txt` for release assets. Downloaded prebuilt `analyze` and `status` tools are accepted only when their SHA-256 matches that list; a source review alone does not verify a published package.
-
-See [the Windows CLI security review](SECURITY_AUDIT.md) for implementation boundaries, regression coverage and known limitations.

@@ -1,24 +1,24 @@
-# freeMole - REA bridge
+# Sweepr - REA bridge
 # Read-only application inspection through REA (https://github.com/morluto/rea).
-# freeMole never bundles REA: it runs an installed `rea` command, or
+# Sweepr never bundles REA: it runs an installed `rea` command, or
 # `npx -y rea-agents@latest` when only Node.js is present.
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
-if ((Get-Variable -Name 'MOLE_REA_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_REA_LOADED) {
+if ((Get-Variable -Name 'SWEEPR_REA_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_REA_LOADED) {
     return
 }
-$script:MOLE_REA_LOADED = $true
+$script:SWEEPR_REA_LOADED = $true
 
-$script:MoleReaPackage = "rea-agents@latest"
+$script:SweeprReaPackage = "rea-agents@latest"
 
 # How to start REA: @{ File; Prefix; Description }, or $null when neither REA
-# nor npx is on PATH. MOLE_REA_COMMAND names an explicit rea executable.
-function Get-MoleReaInvocation {
-    if ($env:MOLE_REA_COMMAND) {
-        if (-not (Test-Path -LiteralPath $env:MOLE_REA_COMMAND -PathType Leaf)) { return $null }
-        return @{ File = $env:MOLE_REA_COMMAND; Prefix = @(); Description = $env:MOLE_REA_COMMAND }
+# nor npx is on PATH. SWEEPR_REA_COMMAND names an explicit rea executable.
+function Get-SweeprReaInvocation {
+    if ($env:SWEEPR_REA_COMMAND) {
+        if (-not (Test-Path -LiteralPath $env:SWEEPR_REA_COMMAND -PathType Leaf)) { return $null }
+        return @{ File = $env:SWEEPR_REA_COMMAND; Prefix = @(); Description = $env:SWEEPR_REA_COMMAND }
     }
 
     $rea = Get-Command -Name "rea" -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -28,7 +28,7 @@ function Get-MoleReaInvocation {
 
     $npx = Get-Command -Name "npx" -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($npx) {
-        return @{ File = $npx.Source; Prefix = @("-y", $script:MoleReaPackage); Description = "npx $($script:MoleReaPackage)" }
+        return @{ File = $npx.Source; Prefix = @("-y", $script:SweeprReaPackage); Description = "npx $($script:SweeprReaPackage)" }
     }
 
     return $null
@@ -36,7 +36,7 @@ function Get-MoleReaInvocation {
 
 # The text an REA error object carries: its first issue's message, else the
 # top-level message.
-function Get-MoleReaErrorMessage {
+function Get-SweeprReaErrorMessage {
     param($Data)
 
     if ($null -eq $Data) { return $null }
@@ -52,7 +52,7 @@ function Get-MoleReaErrorMessage {
 
 # Runs one REA CLI operation with --json and returns
 # @{ ExitCode; Data; Error }. Data is the parsed Evidence object, or $null.
-function Invoke-MoleRea {
+function Invoke-SweeprRea {
     param(
         [Parameter(Mandatory)] [hashtable]$Invocation,
         [Parameter(Mandatory)] [string[]]$Arguments
@@ -77,7 +77,7 @@ function Invoke-MoleRea {
     }
 
     if ($exitCode -ne 0 -or $null -eq $data) {
-        $message = Get-MoleReaErrorMessage -Data $data
+        $message = Get-SweeprReaErrorMessage -Data $data
         if (-not $message) { $message = "REA exited with code $exitCode" }
         return @{ ExitCode = $(if ($exitCode -eq 0) { 1 } else { $exitCode }); Data = $null; Error = $message }
     }
@@ -85,7 +85,7 @@ function Invoke-MoleRea {
 }
 
 # Registry uninstall entries that name an install folder or an icon file.
-function Get-MoleInspectAppEntries {
+function Get-SweeprInspectAppEntries {
     $roots = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -108,7 +108,7 @@ function Get-MoleInspectAppEntries {
 }
 
 # DisplayIcon is `"C:\path\app.exe",0` or a bare path; return the file path.
-function ConvertFrom-MoleDisplayIcon {
+function ConvertFrom-SweeprDisplayIcon {
     param([string]$DisplayIcon)
 
     if (-not $DisplayIcon) { return $null }
@@ -121,7 +121,7 @@ function ConvertFrom-MoleDisplayIcon {
 # Resolves a path or an installed app name. Returns
 # @{ Path; Kind = "Directory"|"File"; Name; MainExecutable } or
 # @{ Error; Matches } when nothing or more than one app matches.
-function Resolve-MoleInspectTarget {
+function Resolve-SweeprInspectTarget {
     param(
         [Parameter(Mandatory)] [string]$Target,
         [object[]]$Entries = $null
@@ -135,10 +135,10 @@ function Resolve-MoleInspectTarget {
         return @{ Path = $item.FullName; Kind = "File"; Name = $item.Name; MainExecutable = $item.FullName }
     }
 
-    if ($null -eq $Entries) { $Entries = @(Get-MoleInspectAppEntries) }
+    if ($null -eq $Entries) { $Entries = @(Get-SweeprInspectAppEntries) }
     $candidates = @()
     foreach ($entry in $Entries) {
-        $icon = ConvertFrom-MoleDisplayIcon -DisplayIcon $entry.DisplayIcon
+        $icon = ConvertFrom-SweeprDisplayIcon -DisplayIcon $entry.DisplayIcon
         $folder = $null
         if ($entry.InstallLocation -and (Test-Path -LiteralPath $entry.InstallLocation -PathType Container)) {
             $folder = $entry.InstallLocation
@@ -170,7 +170,7 @@ function Resolve-MoleInspectTarget {
 
 # The executable REA should read in an install folder: the largest top-level
 # .exe that is not an uninstaller or updater.
-function Get-MoleInspectMainExecutable {
+function Get-SweeprInspectMainExecutable {
     param([Parameter(Mandatory)] [string]$Directory)
 
     $exes = @(Get-ChildItem -LiteralPath $Directory -Filter "*.exe" -File -Force -ErrorAction SilentlyContinue |
@@ -180,7 +180,7 @@ function Get-MoleInspectMainExecutable {
 }
 
 # One value from an X.509 name: the first attribute with that oid_name.
-function Get-MoleReaNameAttribute {
+function Get-SweeprReaNameAttribute {
     param($Name, [string]$Attribute)
 
     if ($null -eq $Name -or -not $Name.PSObject.Properties['attributes']) { return $null }
@@ -192,7 +192,7 @@ function Get-MoleReaNameAttribute {
 
 # The signer certificate's subject from inspect-pe-certificates: the
 # embedded certificate whose serial and issuer match the first SignerInfo.
-function Get-MoleReaSigner {
+function Get-SweeprReaSigner {
     param($Certificates)
 
     if ($null -eq $Certificates) { return $null }
@@ -205,9 +205,9 @@ function Get-MoleReaSigner {
             foreach ($cert in @($pkcs7.certificates)) {
                 if (-not $cert) { continue }
                 if ($cert.serial_hex -eq $signer.serial_hex -and $cert.issuer.text -eq $signer.issuer.text) {
-                    $commonName = Get-MoleReaNameAttribute -Name $cert.subject -Attribute "commonName"
-                    $organization = Get-MoleReaNameAttribute -Name $cert.subject -Attribute "organizationName"
-                    $issuer = Get-MoleReaNameAttribute -Name $cert.issuer -Attribute "commonName"
+                    $commonName = Get-SweeprReaNameAttribute -Name $cert.subject -Attribute "commonName"
+                    $organization = Get-SweeprReaNameAttribute -Name $cert.subject -Attribute "organizationName"
+                    $issuer = Get-SweeprReaNameAttribute -Name $cert.issuer -Attribute "commonName"
                     return [pscustomobject]@{
                         Subject      = if ($commonName) { $commonName } else { $cert.subject.text }
                         Organization = $organization
@@ -222,7 +222,7 @@ function Get-MoleReaSigner {
 }
 
 # Folds the REA Evidence records into one summary object.
-function ConvertTo-MoleInspectSummary {
+function ConvertTo-SweeprInspectSummary {
     param(
         [Parameter(Mandatory)] [hashtable]$Target,
         $Desktop = $null,
@@ -248,7 +248,7 @@ function ConvertTo-MoleInspectSummary {
     $signer = $null
     if ($Certificates) {
         $signed = @($Certificates.normalized_result.entries | Where-Object { $_ }).Count -gt 0
-        $signer = Get-MoleReaSigner -Certificates $Certificates
+        $signer = Get-SweeprReaSigner -Certificates $Certificates
     }
 
     $architecture = $null

@@ -17,7 +17,7 @@ import (
 // Exercise the actual streaming loop in a child so its stdout and collector
 // probes stay isolated from other tests. Every platform reader is stubbed.
 func TestStatusWatchProcess(t *testing.T) {
-	mode := os.Getenv("MOLE_STATUS_WATCH_TEST_MODE")
+	mode := os.Getenv("SWEEPR_STATUS_WATCH_TEST_MODE")
 	if mode == "" {
 		t.Skip("watch subprocess helper")
 	}
@@ -25,7 +25,7 @@ func TestStatusWatchProcess(t *testing.T) {
 	readBatteriesFunc = func() ([]BatteryStatus, error) {
 		// This probe runs only during full collection. Count real dispatches
 		// to ensure a process failure cannot restart it each tick.
-		file, err := os.OpenFile(filepath.Join(os.Getenv("MOLE_STATUS_WATCH_TRACE_DIR"), "full-refreshes"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		file, err := os.OpenFile(filepath.Join(os.Getenv("SWEEPR_STATUS_WATCH_TRACE_DIR"), "full-refreshes"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err == nil {
 			_, _ = file.WriteString("full\n")
 			file.Close()
@@ -53,7 +53,7 @@ func TestWatchHonorsIntervalAfterInitialSnapshot(t *testing.T) {
 			defer cancel()
 			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStatusWatchProcess$")
 			fixtureHome := t.TempDir()
-			cmd.Env = append(os.Environ(), "MOLE_STATUS_WATCH_TEST_MODE="+mode, "MOLE_STATUS_WATCH_TRACE_DIR="+fixtureHome)
+			cmd.Env = append(os.Environ(), "SWEEPR_STATUS_WATCH_TEST_MODE="+mode, "SWEEPR_STATUS_WATCH_TRACE_DIR="+fixtureHome)
 			var stderr bytes.Buffer
 			cmd.Stderr = &stderr
 			stdout, err := cmd.StdoutPipe()

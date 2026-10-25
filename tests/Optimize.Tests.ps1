@@ -1,4 +1,4 @@
-# freeMole Windows - optimize step tests
+# Sweepr Windows - optimize step tests
 # Main is lifted out of bin/optimize.ps1 and run with every side effect mocked,
 # so no real repair, reset or prompt runs on the test machine.
 
@@ -51,7 +51,7 @@ Describe "Read-only system health queries" {
     }
 }
 
-Describe "fm optimize steps" {
+Describe "sw optimize steps" {
     BeforeEach {
         $script:OptimizationsApplied = 0
         $script:IssuesFound = 0
@@ -83,7 +83,7 @@ Describe "fm optimize steps" {
         Mock Start-Process { }
         Mock Stop-Process { }
         Mock Remove-Item { }
-        Mock Write-MoleOperation { }
+        Mock Write-SweeprOperation { }
     }
 
     AfterEach {
@@ -179,10 +179,10 @@ Describe "fm optimize steps" {
         $output | Should -Match "Optimizations applied: \S*3"
 
         # Each state change leaves one operations.log row.
-        Should -Invoke Write-MoleOperation -Times 3 -Exactly
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "C:" -and $Detail -eq "Optimize-Volume" }
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "DNS client cache" }
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "ARP cache" }
+        Should -Invoke Write-SweeprOperation -Times 3 -Exactly
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "C:" -and $Detail -eq "Optimize-Volume" }
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "DNS client cache" }
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq "OPTIMIZED" -and $Path -eq "ARP cache" }
     }
 
     It "Counts only the steps it lists in an elevated dry run" {
@@ -199,7 +199,7 @@ Describe "fm optimize steps" {
         $output | Should -Match "Would flush DNS cache"
         $output | Should -Match "Would clear ARP cache"
         $output | Should -Match "Would apply \S*3\S* optimizations"
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
         $output | Should -Not -Match "Winsock|TCP/IP|Font Cache|Icon Cache|Search Index|Store Cache|wsreset"
     }
 
@@ -243,7 +243,7 @@ Describe "Native optimization outcomes" {
         $script:OptimizationsApplied = 0
         $script:DryRun = $false
         Mock Test-IsAdmin { $true }
-        Mock Write-MoleOperation { }
+        Mock Write-SweeprOperation { }
     }
     It "Does not count a failing native ARP operation as applied" {
         Mock netsh { $global:LASTEXITCODE = 5 }
@@ -251,7 +251,7 @@ Describe "Native optimization outcomes" {
         $script:OptimizationsApplied | Should -Be 0
         $output | Should -Not -Match 'ARP cache cleared'
         $output | Should -Match 'ARP cache clear failed'
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Path -eq 'ARP cache' -and $Detail -like '*code 5' }
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Path -eq 'ARP cache' -and $Detail -like '*code 5' }
     }
     It "Counts a successful native ARP operation" {
         Mock netsh { $global:LASTEXITCODE = 0 }
@@ -266,7 +266,7 @@ Describe "System image and file checks" {
         $script:IssuesFixed = 0
         $script:DryRun = $false
         Mock Test-IsAdmin { $true }
-        Mock Write-MoleOperation { }
+        Mock Write-SweeprOperation { }
     }
 
     It "Reads the image verdict as '<State>' and only suggests the repair" -ForEach @(
@@ -328,7 +328,7 @@ Describe "System image and file checks" {
             $output = Test-SystemFiles 6>&1 | Out-String
             $output | Should -Match ([regex]::Escape($Expect))
             $output | Should -Not -Match "Scan completed"
-            Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq $script:ExpectedSfcAction -and $Path -eq "System files" -and $Detail -like "sfc /scannow exit code 0: *" }
+            Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq $script:ExpectedSfcAction -and $Path -eq "System files" -and $Detail -like "sfc /scannow exit code 0: *" }
         }
         finally { $env:TEMP = $savedTemp }
     }
@@ -357,7 +357,7 @@ Describe 'SFC scratch ownership and outcome' {
         $script:IssuesFixed = 0
         $script:SfcScratch = $null
         Mock Test-IsAdmin { $true }
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
     }
     It 'Preserves an existing fixed-name file and removes its own scratch after <Mode>' -ForEach @(
         @{ Mode = 'success' }, @{ Mode = 'start failure' }, @{ Mode = 'read failure' }
@@ -393,7 +393,7 @@ Describe 'SFC scratch ownership and outcome' {
         $output | Should -Match 'did not complete \(exit code 5\)'
         $output | Should -Not -Match 'Corrupt files were repaired'
         $script:IssuesFixed | Should -Be 0
-        Should -Invoke Write-MoleOperation -Exactly -Times 1 -ParameterFilter { $Action -eq 'FAILED' -and $Detail -like '*exit code 5:*' }
+        Should -Invoke Write-SweeprOperation -Exactly -Times 1 -ParameterFilter { $Action -eq 'FAILED' -and $Detail -like '*exit code 5:*' }
     }
 }
 

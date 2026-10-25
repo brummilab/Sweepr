@@ -1,4 +1,4 @@
-# freeMole - Base Definitions and Utilities
+# Sweepr - Base Definitions and Utilities
 # Core definitions, constants, and basic utility functions used by all modules
 
 #Requires -Version 5.1
@@ -6,13 +6,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_BASE_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_BASE_LOADED) { return }
-$script:MOLE_BASE_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_BASE_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_BASE_LOADED) { return }
+$script:SWEEPR_BASE_LOADED = $true
 
 # ============================================================================
 # Color Definitions (ANSI escape codes for modern terminals)
 # ============================================================================
-function Get-MoleDefaultColors {
+function Get-SweeprDefaultColors {
     $esc = [char]27
     return @{
         Green      = "$esc[0;32m"
@@ -31,7 +31,7 @@ function Get-MoleDefaultColors {
 # ============================================================================
 # Icon Definitions
 # ============================================================================
-function Get-MoleDefaultIcons {
+function Get-SweeprDefaultIcons {
     # Keep this block ASCII-only so Windows PowerShell 5.1 does not
     # mis-parse BOM-less source files and collapse comment lines.
     return @{
@@ -53,8 +53,8 @@ function Get-MoleDefaultIcons {
     }
 }
 
-$script:DefaultColors = Get-MoleDefaultColors
-$script:DefaultIcons = Get-MoleDefaultIcons
+$script:DefaultColors = Get-SweeprDefaultColors
+$script:DefaultIcons = Get-SweeprDefaultIcons
 
 function Get-OrCreateScriptHashtable {
     param(
@@ -72,7 +72,7 @@ function Get-OrCreateScriptHashtable {
     return $table
 }
 
-function Get-MoleDefaultHashtable {
+function Get-SweeprDefaultHashtable {
     param(
         [Parameter(Mandatory)]
         [ValidateSet('Colors', 'Icons')]
@@ -85,13 +85,13 @@ function Get-MoleDefaultHashtable {
     }
 
     switch ($Name) {
-        'Colors' { return Get-MoleDefaultColors }
-        'Icons' { return Get-MoleDefaultIcons }
+        'Colors' { return Get-SweeprDefaultColors }
+        'Icons' { return Get-SweeprDefaultIcons }
     }
 }
 
-function Initialize-MoleVisualDefaults {
-    $defaultColors = Get-MoleDefaultHashtable -Name "Colors"
+function Initialize-SweeprVisualDefaults {
+    $defaultColors = Get-SweeprDefaultHashtable -Name "Colors"
     $colors = Get-OrCreateScriptHashtable -Name "Colors"
 
     foreach ($entry in $defaultColors.GetEnumerator()) {
@@ -100,7 +100,7 @@ function Initialize-MoleVisualDefaults {
         }
     }
 
-    $defaultIcons = Get-MoleDefaultHashtable -Name "Icons"
+    $defaultIcons = Get-SweeprDefaultHashtable -Name "Icons"
     $icons = Get-OrCreateScriptHashtable -Name "Icons"
 
     foreach ($entry in $defaultIcons.GetEnumerator()) {
@@ -110,7 +110,7 @@ function Initialize-MoleVisualDefaults {
     }
 }
 
-function Get-MoleVisualValue {
+function Get-SweeprVisualValue {
     param(
         [Parameter(Mandatory)]
         [ValidateSet('Colors', 'Icons')]
@@ -122,7 +122,7 @@ function Get-MoleVisualValue {
 
     $table = Get-OrCreateScriptHashtable -Name $TableName
     if (-not $table.ContainsKey($Key)) {
-        $defaults = Get-MoleDefaultHashtable -Name $TableName
+        $defaults = Get-SweeprDefaultHashtable -Name $TableName
         if ($defaults.ContainsKey($Key)) {
             $table[$Key] = $defaults[$Key]
         }
@@ -135,17 +135,17 @@ function Get-MoleVisualValue {
     return $null
 }
 
-function Get-MoleColor {
+function Get-SweeprColor {
     param([Parameter(Mandatory)][string]$Name)
-    return Get-MoleVisualValue -TableName "Colors" -Key $Name
+    return Get-SweeprVisualValue -TableName "Colors" -Key $Name
 }
 
-function Get-MoleIcon {
+function Get-SweeprIcon {
     param([Parameter(Mandatory)][string]$Name)
-    return Get-MoleVisualValue -TableName "Icons" -Key $Name
+    return Get-SweeprVisualValue -TableName "Icons" -Key $Name
 }
 
-Initialize-MoleVisualDefaults
+Initialize-SweeprVisualDefaults
 
 # ============================================================================
 # Global Configuration Constants
@@ -157,9 +157,9 @@ $script:Config = @{
     LogAgeDays             = 7       # Log retention (days)
     CrashReportAgeDays     = 7       # Crash report retention (days)
     MaxIterations          = 100     # Max iterations for scans
-    ConfigPath             = "$env:USERPROFILE\.config\freemole"
-    CachePath              = "$env:USERPROFILE\.cache\freemole"
-    WhitelistFile          = "$env:USERPROFILE\.config\freemole\whitelist.txt"
+    ConfigPath             = "$env:USERPROFILE\.config\sweepr"
+    CachePath              = "$env:USERPROFILE\.cache\sweepr"
+    WhitelistFile          = "$env:USERPROFILE\.config\sweepr\whitelist.txt"
 }
 
 # ============================================================================
@@ -199,7 +199,7 @@ $script:ExactProtectedPaths = @(
     "$env:USERPROFILE" # Protect the user profile root without blocking targeted cache cleanup below it.
 )
 
-# Path segments no freeMole command may delete under, wherever they appear: DPAPI
+# Path segments no Sweepr command may delete under, wherever they appear: DPAPI
 # master keys, the credential vault, certificates and the Start Menu, several of
 # which sit right beside real caches under AppData. Matched case-insensitively
 # as whole path segments, so "Cryptography" or "MyVault" is not a match.
@@ -212,7 +212,7 @@ $script:ProtectedPathSegments = @(
     "Microsoft\Windows\Start Menu"
 )
 
-# Clean only, enabled by bin/clean.ps1 through $script:MoleCleanPathGuard: SSH,
+# Clean only, enabled by bin/clean.ps1 through $script:SweeprCleanPathGuard: SSH,
 # GPG and cloud CLI keys and cached tokens, browser and Electron profile stores
 # (sign-ins, site data, open tabs), VS Code's local file history and AI assistant
 # transcripts. Purge and uninstall do not use this list, because a project's
@@ -245,8 +245,8 @@ $script:CleanProtectedPathSegments = @(
     ".codex\history.jsonl"
 )
 
-if (-not (Get-Variable -Name 'MoleCleanPathGuard' -Scope Script -ErrorAction SilentlyContinue)) {
-    $script:MoleCleanPathGuard = $false
+if (-not (Get-Variable -Name 'SweeprCleanPathGuard' -Scope Script -ErrorAction SilentlyContinue)) {
+    $script:SweeprCleanPathGuard = $false
 }
 
 # ============================================================================
@@ -341,12 +341,12 @@ function Test-PathHasSegment {
 #   Exists = $false             no such path; callers keep the lexical answer
 #   Exists = $true, Path = ...  the path resolved to its final spelling
 #   Exists = $true, Path = $null the path exists but cannot be resolved
-function Resolve-MoleExistingPathInfo {
+function Resolve-SweeprExistingPathInfo {
     param([string]$Path)
 
     $resolved = $null
     try {
-        if (-not ('freeMole.PathAliasResolver' -as [type])) {
+        if (-not ('Sweepr.PathAliasResolver' -as [type])) {
             Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
@@ -354,7 +354,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
-namespace freeMole {
+namespace Sweepr {
     public static class PathAliasResolver {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern SafeFileHandle CreateFile(string path, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
@@ -386,7 +386,7 @@ namespace freeMole {
 }
 '@ -ErrorAction Stop
         }
-        $resolved = [freeMole.PathAliasResolver]::Resolve($Path)
+        $resolved = [Sweepr.PathAliasResolver]::Resolve($Path)
     }
     catch {
         $resolved = $null
@@ -430,13 +430,13 @@ namespace freeMole {
 # final filesystem spelling, so a short-name or environment spelling in the
 # list still protects the long path a walk yields. Normalized forms are built
 # once per distinct entry, not once per candidate.
-$script:MoleProtectedPathFormCache = @{}
+$script:SweeprProtectedPathFormCache = @{}
 
-function Get-MoleProtectedPathForms {
+function Get-SweeprProtectedPathForms {
     param([string]$Protected)
 
-    if ($script:MoleProtectedPathFormCache.ContainsKey($Protected)) {
-        return $script:MoleProtectedPathFormCache[$Protected]
+    if ($script:SweeprProtectedPathFormCache.ContainsKey($Protected)) {
+        return $script:SweeprProtectedPathFormCache[$Protected]
     }
 
     $forms = New-Object System.Collections.Generic.List[string]
@@ -445,7 +445,7 @@ function Get-MoleProtectedPathForms {
     }
     catch {
     }
-    $info = Resolve-MoleExistingPathInfo -Path $Protected
+    $info = Resolve-SweeprExistingPathInfo -Path $Protected
     if ($info.Exists -and $info.Path) {
         try {
             $canonical = [System.IO.Path]::GetFullPath($info.Path).TrimEnd('\')
@@ -456,13 +456,13 @@ function Get-MoleProtectedPathForms {
         catch {
         }
     }
-    $script:MoleProtectedPathFormCache[$Protected] = $forms.ToArray()
-    return $script:MoleProtectedPathFormCache[$Protected]
+    $script:SweeprProtectedPathFormCache[$Protected] = $forms.ToArray()
+    return $script:SweeprProtectedPathFormCache[$Protected]
 }
 
 # Existing lexical list checks, factored out so the typed spelling and the
 # resolved final path are judged by exactly the same rules.
-function Test-MoleProtectedPathForm {
+function Test-SweeprProtectedPathForm {
     param([string]$NormalizedPath)
 
     $normalizedPath = $NormalizedPath
@@ -471,7 +471,7 @@ function Test-MoleProtectedPathForm {
         return $true
     }
 
-    if ($script:MoleCleanPathGuard -and
+    if ($script:SweeprCleanPathGuard -and
         (Test-PathHasSegment -NormalizedPath $normalizedPath -Segments $script:CleanProtectedPathSegments)) {
         return $true
     }
@@ -479,11 +479,11 @@ function Test-MoleProtectedPathForm {
     # UWP data stays protected. Only automatic clean may reach the named Teams
     # WebView profile's three disposable leaves; user whitelist rules still win.
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-        foreach ($packages in (Get-MoleProtectedPathForms -Protected (Join-Path $env:LOCALAPPDATA 'Packages'))) {
+        foreach ($packages in (Get-SweeprProtectedPathForms -Protected (Join-Path $env:LOCALAPPDATA 'Packages'))) {
             if ($normalizedPath -eq $packages -or $normalizedPath.StartsWith($packages + '\', [StringComparison]::OrdinalIgnoreCase)) {
                 $relative = $normalizedPath.Substring($packages.Length)
                 $teamsCache = '^\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\[^\\]+\\(Cache|Code Cache|GPUCache)(\\|$)'
-                if (-not $script:MoleCleanPathGuard -or $relative -notmatch $teamsCache) { return $true }
+                if (-not $script:SweeprCleanPathGuard -or $relative -notmatch $teamsCache) { return $true }
             }
         }
     }
@@ -493,7 +493,7 @@ function Test-MoleProtectedPathForm {
             continue
         }
 
-        foreach ($normalizedProtected in (Get-MoleProtectedPathForms -Protected $protected)) {
+        foreach ($normalizedProtected in (Get-SweeprProtectedPathForms -Protected $protected)) {
             if ($normalizedPath -eq $normalizedProtected) {
                 return $true
             }
@@ -505,7 +505,7 @@ function Test-MoleProtectedPathForm {
             continue
         }
 
-        foreach ($normalizedProtected in (Get-MoleProtectedPathForms -Protected $protected)) {
+        foreach ($normalizedProtected in (Get-SweeprProtectedPathForms -Protected $protected)) {
             if ($normalizedPath -eq $normalizedProtected -or
                 $normalizedPath.StartsWith("$normalizedProtected\", [StringComparison]::OrdinalIgnoreCase)) {
                 return $true
@@ -535,7 +535,7 @@ function Test-ProtectedPath {
     }
 
     # The typed spelling first, including protected prefixes and segments.
-    if (Test-MoleProtectedPathForm -NormalizedPath $normalizedPath) {
+    if (Test-SweeprProtectedPathForm -NormalizedPath $normalizedPath) {
         return $true
     }
 
@@ -545,7 +545,7 @@ function Test-ProtectedPath {
 
     # Existing aliases (8.3 short names, trailing-dot spellings, reparse
     # points) reach the same tree under a spelling the lexical rules miss.
-    $alias = Resolve-MoleExistingPathInfo -Path $fullPath
+    $alias = Resolve-SweeprExistingPathInfo -Path $fullPath
     if (-not $alias.Exists) {
         return $false
     }
@@ -557,7 +557,7 @@ function Test-ProtectedPath {
     if ($resolvedPath -eq $normalizedPath) {
         return $false
     }
-    return (Test-MoleProtectedPathForm -NormalizedPath $resolvedPath)
+    return (Test-SweeprProtectedPathForm -NormalizedPath $resolvedPath)
 }
 
 function Test-WhitelistPattern {
@@ -624,7 +624,7 @@ function Get-WhitelistState {
         # final spelling. Keep both, so the resolved candidate matches the
         # protection the user wrote for the root.
         if (-not $hasWildcard) {
-            $info = Resolve-MoleExistingPathInfo -Path $root
+            $info = Resolve-SweeprExistingPathInfo -Path $root
             if ($info.Exists -and $info.Path) {
                 $canonical = $info.Path.TrimEnd('\')
                 if (-not [string]::Equals($canonical, $root, [StringComparison]::OrdinalIgnoreCase)) {
@@ -684,7 +684,7 @@ function Resolve-SafePath {
     # protection checks see the target, not an 8.3 or trailing-dot alias of it.
     # A path that exists but cannot be resolved is refused, never treated as a
     # missing candidate.
-    $alias = Resolve-MoleExistingPathInfo -Path $resolved
+    $alias = Resolve-SweeprExistingPathInfo -Path $resolved
     if (-not $alias.Exists) {
         return $resolved
     }
@@ -729,7 +729,7 @@ function Format-ByteSize {
 function Get-ConfigPath {
     <#
     .SYNOPSIS
-        Get freeMole config directory, creating it if needed
+        Get Sweepr config directory, creating it if needed
     #>
     $path = $script:Config.ConfigPath
     if (-not (Test-Path $path)) {
@@ -741,7 +741,7 @@ function Get-ConfigPath {
 function Get-CachePath {
     <#
     .SYNOPSIS
-        Get freeMole cache directory, creating it if needed
+        Get Sweepr cache directory, creating it if needed
     #>
     $path = $script:Config.CachePath
     if (-not (Test-Path $path)) {

@@ -1,23 +1,23 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 
-PackageIdentifier: tw93.MoleCLI
+PackageIdentifier: brummilab.Sweepr
 PackageVersion: {{VERSION}}
 PackageLocale: en-US
-Publisher: tw93
-PublisherUrl: https://github.com/tw93
-PublisherSupportUrl: https://github.com/brummilab/freeMole/issues
-Author: tw93
-PackageName: freeMole CLI
-PackageUrl: https://github.com/brummilab/freeMole/tree/windows
+Publisher: brummilab
+PublisherUrl: https://github.com/brummilab
+PublisherSupportUrl: https://github.com/brummilab/sweepr/issues
+Author: brummilab
+PackageName: Sweepr CLI
+PackageUrl: https://github.com/brummilab/sweepr/tree/main
 License: GPL-3.0-or-later
-LicenseUrl: https://github.com/brummilab/freeMole/blob/windows/LICENSE
+LicenseUrl: https://github.com/brummilab/sweepr/blob/main/LICENSE
 ShortDescription: Deep clean, uninstall apps, optimize, analyze disk, and monitor Windows from the terminal.
 Description: |-
-  freeMole is a free, open-source command-line toolkit for Windows maintenance.
+  Sweepr is a free, open-source command-line toolkit for Windows maintenance.
   It cleans caches and temporary files, removes apps together with their leftovers,
   runs bounded maintenance tasks, explores disk usage, and shows live system status.
   Every destructive command can be previewed with --dry-run.
-Moniker: mole
+Moniker: sweepr
 Tags:
   - cleanup
   - cache
@@ -26,6 +26,6 @@ Tags:
   - maintenance
   - system-monitor
   - cli
-ReleaseNotesUrl: https://github.com/brummilab/freeMole/releases/tag/{{TAG}}
+ReleaseNotesUrl: https://github.com/brummilab/sweepr/releases/tag/{{TAG}}
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0

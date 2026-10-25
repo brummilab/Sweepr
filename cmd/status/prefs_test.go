@@ -77,11 +77,11 @@ func TestSavePrefConcurrentProcessesPreserveEveryKey(t *testing.T) {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestSavePrefProcessHelper$")
 		cmd.Env = append(os.Environ(),
 			"HOME="+home,
-			"MOLE_PREFS_TEST_HELPER=1",
-			fmt.Sprintf("MOLE_PREFS_TEST_KEY=key_%02d", i),
-			"MOLE_PREFS_TEST_VALUE="+strconv.Itoa(i),
-			"MOLE_PREFS_TEST_BARRIER="+barrier,
-			fmt.Sprintf("MOLE_PREFS_TEST_READY=%s", filepath.Join(readyDir, strconv.Itoa(i))),
+			"SWEEPR_PREFS_TEST_HELPER=1",
+			fmt.Sprintf("SWEEPR_PREFS_TEST_KEY=key_%02d", i),
+			"SWEEPR_PREFS_TEST_VALUE="+strconv.Itoa(i),
+			"SWEEPR_PREFS_TEST_BARRIER="+barrier,
+			fmt.Sprintf("SWEEPR_PREFS_TEST_READY=%s", filepath.Join(readyDir, strconv.Itoa(i))),
 		)
 		if err := cmd.Start(); err != nil {
 			t.Fatalf("start writer %d: %v", i, err)
@@ -123,11 +123,11 @@ func TestSavePrefConcurrentProcessesPreserveEveryKey(t *testing.T) {
 }
 
 func TestSavePrefProcessHelper(t *testing.T) {
-	if os.Getenv("MOLE_PREFS_TEST_HELPER") != "1" {
+	if os.Getenv("SWEEPR_PREFS_TEST_HELPER") != "1" {
 		return
 	}
-	if barrier := os.Getenv("MOLE_PREFS_TEST_BARRIER"); barrier != "" {
-		if ready := os.Getenv("MOLE_PREFS_TEST_READY"); ready != "" {
+	if barrier := os.Getenv("SWEEPR_PREFS_TEST_BARRIER"); barrier != "" {
+		if ready := os.Getenv("SWEEPR_PREFS_TEST_READY"); ready != "" {
 			if err := os.WriteFile(ready, []byte("1"), 0o600); err != nil {
 				t.Fatalf("signal ready: %v", err)
 			}
@@ -143,7 +143,7 @@ func TestSavePrefProcessHelper(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	savePref(os.Getenv("MOLE_PREFS_TEST_KEY"), os.Getenv("MOLE_PREFS_TEST_VALUE"))
+	savePref(os.Getenv("SWEEPR_PREFS_TEST_KEY"), os.Getenv("SWEEPR_PREFS_TEST_VALUE"))
 }
 
 // setTestHome points os.UserHomeDir at dir: it reads HOME on Unix and

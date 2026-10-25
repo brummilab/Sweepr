@@ -14,8 +14,8 @@ import (
 	"unicode/utf16"
 )
 
-// The JSON output follows the macOS CLI's `fm analyze --json` contract field
-// for field, so one agent skill can read both.
+// The JSON output is the stable `sw analyze --json` contract for scripts and
+// agents.
 type jsonOutput struct {
 	ScanStatus scanState       `json:"scan_status"`
 	Path       string          `json:"path"`
@@ -79,7 +79,7 @@ func runJSONMode(w io.Writer, path string, isOverview bool) error {
 }
 
 // escapeNonASCII writes every non-ASCII character of encoded JSON as a \u
-// escape, astral ones as a surrogate pair, the way `fm uninstall --list` does.
+// escape, astral ones as a surrogate pair, the way `sw uninstall --list` does.
 // Windows PowerShell 5.1 decodes a native command's stdout with the console
 // code page, so raw UTF-8 would garble a non-ASCII path before ConvertFrom-Json
 // reads it. JSON syntax is ASCII, so only string contents change.

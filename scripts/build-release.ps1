@@ -1,4 +1,4 @@
-# freeMole Windows - Release Build Script
+# Sweepr Windows - Release Build Script
 # Builds release artifacts for distribution via package managers
 # Outputs: ZIP, EXE, and generates SHA256 hashes
 
@@ -37,7 +37,7 @@ if (-not $Version) {
 }
 
 $buildDate = Get-Date -Format "yyyy-MM-dd"
-$archiveName = "freemole-$Version-x64"
+$archiveName = "sweepr-$Version-x64"
 
 # ============================================================================
 # Help
@@ -45,17 +45,17 @@ $archiveName = "freemole-$Version-x64"
 
 function Show-BuildHelp {
     Write-Host ""
-    Write-Host "freeMole Windows Release Build Script" -ForegroundColor Cyan
+    Write-Host "Sweepr Windows Release Build Script" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Usage: .\build-release.ps1 [-Version <version>] [-SkipTests]"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version <ver>  Specify version (default: auto-detect from freemole.ps1)"
+    Write-Host "  -Version <ver>  Specify version (default: auto-detect from sweepr.ps1)"
     Write-Host "  -SkipTests      Skip running tests before building"
     Write-Host "  -ShowHelp       Show this help message"
     Write-Host ""
     Write-Host "Output:"
-    Write-Host "  release/freemole-<version>-x64.zip        Portable archive"
+    Write-Host "  release/sweepr-<version>-x64.zip        Portable archive"
     Write-Host "  release/analyze-windows-x64.exe       Disk analyzer TUI"
     Write-Host "  release/status-windows-x64.exe        Status TUI"
     Write-Host "  release/SHA256SUMS.txt                 Hash file for verification"
@@ -73,7 +73,7 @@ if ($ShowHelp) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  freeMole Windows - Release Build" -ForegroundColor Cyan
+Write-Host "  Sweepr Windows - Release Build" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Version: $Version" -ForegroundColor Yellow
@@ -194,17 +194,17 @@ try {
     $statusSize = (Get-Item "$binDir\status.exe").Length / 1KB
     Write-Host "  Built: status.exe ($([math]::Round($statusSize, 0)) KB)" -ForegroundColor Green
 
-    # fm.exe is the launcher package managers put on PATH; it sits at the
-    # archive root next to freemole.ps1, so it is built outside bin\.
-    Write-Host "  Building fm.exe..." -ForegroundColor Gray
+    # sw.exe is the launcher package managers put on PATH; it sits at the
+    # archive root next to sweepr.ps1, so it is built outside bin\.
+    Write-Host "  Building sw.exe..." -ForegroundColor Gray
     $launcherDir = Join-Path $releaseDir "launcher"
     New-Item -ItemType Directory -Path $launcherDir -Force | Out-Null
-    & go build -ldflags "-s -w" -o "$launcherDir\fm.exe" "./cmd/fm/"
+    & go build -ldflags "-s -w" -o "$launcherDir\sw.exe" "./cmd/sw/"
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  Failed to build fm.exe" -ForegroundColor Red
+        Write-Host "  Failed to build sw.exe" -ForegroundColor Red
         exit 1
     }
-    Write-Host "  Built: fm.exe" -ForegroundColor Green
+    Write-Host "  Built: sw.exe" -ForegroundColor Green
 }
 finally {
     Pop-Location
@@ -222,14 +222,14 @@ New-Item -ItemType Directory -Path $tempBuildDir -Force | Out-Null
 
 # Copy all necessary files
 $filesToInclude = @(
-    @{Source = "$projectRoot\freemole.ps1"; Dest = "$tempBuildDir\freemole.ps1"},
+    @{Source = "$projectRoot\sweepr.ps1"; Dest = "$tempBuildDir\sweepr.ps1"},
     @{Source = "$projectRoot\install.ps1"; Dest = "$tempBuildDir\install.ps1"},
     @{Source = "$projectRoot\go.mod"; Dest = "$tempBuildDir\go.mod"},
     @{Source = "$projectRoot\go.sum"; Dest = "$tempBuildDir\go.sum"},
     @{Source = "$projectRoot\VERSION"; Dest = "$tempBuildDir\VERSION"},
     @{Source = "$projectRoot\LICENSE"; Dest = "$tempBuildDir\LICENSE"},
     @{Source = "$projectRoot\README.md"; Dest = "$tempBuildDir\README.md"},
-    @{Source = "$releaseDir\launcher\fm.exe"; Dest = "$tempBuildDir\fm.exe"}
+    @{Source = "$releaseDir\launcher\sw.exe"; Dest = "$tempBuildDir\sw.exe"}
 )
 
 foreach ($file in $filesToInclude) {

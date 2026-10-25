@@ -1,4 +1,4 @@
-module github.com/brummilab/freemole
+module github.com/brummilab/sweepr
 
 go 1.24.0
 

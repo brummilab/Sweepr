@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-const usageText = `Usage: fm analyze [OPTIONS] [PATH]
+const usageText = `Usage: sw analyze [OPTIONS] [PATH]
 
 Explore disk usage. Without PATH, shows an overview of your folders and drives.
 
@@ -18,10 +18,10 @@ Options:
   -h, --help      Show this help message
 
 Examples:
-  fm analyze                 Folders and drives overview
-  fm analyze ~\Downloads     Scan one directory
-  fm analyze D:\             Scan a whole drive
-  fm analyze --json D:\      Machine-readable output
+  sw analyze                 Folders and drives overview
+  sw analyze ~\Downloads     Scan one directory
+  sw analyze D:\             Scan a whole drive
+  sw analyze --json D:\      Machine-readable output
 `
 
 // cliOptions is what one invocation asked for. path is the legacy -path flag;
@@ -32,13 +32,12 @@ type cliOptions struct {
 	args     []string
 }
 
-// parseArgs applies freeMole's CLI conventions to the flag package: help goes to
+// parseArgs applies Sweepr's CLI conventions to the flag package: help goes to
 // stdout and exits 0, and an unknown flag goes to stderr and exits 1. It
-// returns the parsed options, the exit code and whether main should run. Like
-// the macOS analyzer, flags must come before PATH: parsing stops at the first
-// positional argument.
+// returns the parsed options, the exit code and whether main should run. Flags
+// must come before PATH: parsing stops at the first positional argument.
 func parseArgs(args []string, stdout, stderr io.Writer) (cliOptions, int, bool) {
-	flags := flag.NewFlagSet("fm analyze", flag.ContinueOnError)
+	flags := flag.NewFlagSet("sw analyze", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.Usage = func() {}
 	pathFlag := flags.String("path", "", "Path to analyze")
@@ -51,7 +50,7 @@ func parseArgs(args []string, stdout, stderr io.Writer) (cliOptions, int, bool) 
 		return cliOptions{}, 0, false
 	case err != nil:
 		_, _ = fmt.Fprintln(stderr, err)
-		_, _ = fmt.Fprintln(stderr, "Use 'fm analyze --help' for usage information")
+		_, _ = fmt.Fprintln(stderr, "Use 'sw analyze --help' for usage information")
 		return cliOptions{}, 1, false
 	}
 	return cliOptions{path: *pathFlag, jsonMode: *jsonFlag, args: flags.Args()}, 0, true

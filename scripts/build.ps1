@@ -1,4 +1,4 @@
-# freeMole Windows - Build Script
+# Sweepr Windows - Build Script
 # Builds Go binaries and validates PowerShell scripts
 
 #Requires -Version 5.1
@@ -18,7 +18,7 @@ $binDir = Join-Path $windowsDir "bin"
 
 function Show-BuildHelp {
     Write-Host ""
-    Write-Host "freeMole Windows Build Script" -ForegroundColor Cyan
+    Write-Host "Sweepr Windows Build Script" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Usage: .\build.ps1 [options]"
     Write-Host ""
@@ -37,7 +37,7 @@ if ($ShowHelp) {
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  freeMole Windows - Build" -ForegroundColor Cyan
+Write-Host "  Sweepr Windows - Build" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

@@ -271,11 +271,11 @@ func TestMeasureOverviewSizeExcludesAppDataFromHome(t *testing.T) {
 }
 
 // TestRecycleBinIntegration moves a real fixture to the Recycle Bin. It only
-// runs when MOLE_ANALYZE_RECYCLE_FIXTURE names a scratch folder to use.
+// runs when SWEEPR_ANALYZE_RECYCLE_FIXTURE names a scratch folder to use.
 func TestRecycleBinIntegration(t *testing.T) {
-	fixture := os.Getenv("MOLE_ANALYZE_RECYCLE_FIXTURE")
+	fixture := os.Getenv("SWEEPR_ANALYZE_RECYCLE_FIXTURE")
 	if fixture == "" {
-		t.Skip("set MOLE_ANALYZE_RECYCLE_FIXTURE to a scratch folder to run")
+		t.Skip("set SWEEPR_ANALYZE_RECYCLE_FIXTURE to a scratch folder to run")
 	}
 	if err := os.MkdirAll(fixture, 0o755); err != nil {
 		t.Fatal(err)

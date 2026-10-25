@@ -1,12 +1,12 @@
-# freeMole - Application-Specific Cleanup Module
+# Sweepr - Application-Specific Cleanup Module
 # Cleans leftover data from uninstalled apps and app-specific caches
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_CLEAN_APPS_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_CLEAN_APPS_LOADED) { return }
-$script:MOLE_CLEAN_APPS_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_CLEAN_APPS_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_APPS_LOADED) { return }
+$script:SWEEPR_CLEAN_APPS_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

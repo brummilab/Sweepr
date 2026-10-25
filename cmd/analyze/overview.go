@@ -28,8 +28,7 @@ func createOverviewEntries() []dirEntry {
 		}
 	}
 
-	// Home and AppData are separate rows so AppData is not counted twice,
-	// the way the macOS overview splits Home and ~/Library.
+	// Home and AppData are separate rows so AppData is not counted twice.
 	home := userProfileDir()
 	if home != "" {
 		addDir("Home", home)

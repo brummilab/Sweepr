@@ -51,7 +51,7 @@ func stubPlatform(t *testing.T) {
 	stubPlatformForTest()
 }
 
-// main's other SMART states. Windows never reports SMART, so production only
+// the other SMART states. Windows never reports SMART, so production only
 // needs smartStatusFailing; the ported view tests still pin how each renders.
 const (
 	smartStatusVerified    = "verified"

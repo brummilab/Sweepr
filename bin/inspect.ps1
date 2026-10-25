@@ -1,4 +1,4 @@
-# freeMole - Inspect Command
+# Sweepr - Inspect Command
 # Read-only look inside an installed app with REA: runtime, code signer,
 # imported DLLs and .NET metadata. Never runs, changes or deletes the target.
 
@@ -36,7 +36,7 @@ function Show-InspectHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm inspect$esc[0m - Look inside an installed app with REA (read-only)"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm inspect [options] <app name | folder | file.exe>"
+    Write-Host "$esc[33mUsage:$esc[0m sw inspect [options] <app name | folder | file.exe>"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --deep          Also list imported DLLs and .NET assembly metadata"
@@ -46,9 +46,9 @@ function Show-InspectHelp {
     Write-Host "  -h, --help      Show this help message"
     Write-Host ""
     Write-Host "$esc[33mExamples:$esc[0m"
-    Write-Host "  fm inspect Slack                         # Find Slack among installed apps"
-    Write-Host "  fm inspect `"C:\Program Files\App`" --deep"
-    Write-Host "  fm inspect .\tool.exe --json"
+    Write-Host "  sw inspect Slack                         # Find Slack among installed apps"
+    Write-Host "  sw inspect `"C:\Program Files\App`" --deep"
+    Write-Host "  sw inspect .\tool.exe --json"
     Write-Host ""
     Write-Host "Needs REA: 'npm install --global rea-agents', or Node.js 22+ for npx."
     Write-Host "REA reads headers and metadata only. It does not run the app or verify signatures."
@@ -137,9 +137,9 @@ function Main {
         return
     }
 
-    $invocation = Get-MoleReaInvocation
+    $invocation = Get-SweeprReaInvocation
     if (-not $invocation) {
-        Write-MoleError "REA was not found. Install it with 'npm install --global rea-agents' (Node.js 22 or newer)."
+        Write-SweeprError "REA was not found. Install it with 'npm install --global rea-agents' (Node.js 22 or newer)."
         Write-Host "More: https://github.com/morluto/rea"
         exit 1
     }
@@ -153,20 +153,20 @@ function Main {
 
     $targetText = (@($Rest | Where-Object { $_ }) -join ' ').Trim()
     if (-not $targetText) {
-        Write-MoleError "Name an installed app, a folder or an .exe to inspect"
-        Write-Host "Run 'fm inspect --help' for usage."
+        Write-SweeprError "Name an installed app, a folder or an .exe to inspect"
+        Write-Host "Run 'sw inspect --help' for usage."
         exit 2
     }
 
-    $target = Resolve-MoleInspectTarget -Target $targetText
+    $target = Resolve-SweeprInspectTarget -Target $targetText
     if ($target.ContainsKey("Error")) {
-        Write-MoleError $target.Error
+        Write-SweeprError $target.Error
         foreach ($name in @($target.Matches)) { Write-Host "  $($script:Icons.List) $name" }
         exit 2
     }
 
     if ($target.Kind -eq "Directory" -and -not $target.MainExecutable) {
-        $target.MainExecutable = Get-MoleInspectMainExecutable -Directory $target.Path
+        $target.MainExecutable = Get-SweeprInspectMainExecutable -Directory $target.Path
     }
 
     $errors = @()
@@ -181,24 +181,24 @@ function Main {
 
     if ($target.Kind -eq "Directory") {
         Write-InspectStatus "Inspecting install folder..."
-        $run = Invoke-MoleRea -Invocation $invocation -Arguments @("inspect-desktop-application", $target.Path, "--detail", "complete")
+        $run = Invoke-SweeprRea -Invocation $invocation -Arguments @("inspect-desktop-application", $target.Path, "--detail", "complete")
         if ($run.ExitCode -eq 0) { $desktop = $run.Data } else { $errors += "Folder inspection failed: $($run.Error)" }
     }
 
     $exe = $target.MainExecutable
     if ($exe -and $exe -match '\.(exe|dll|sys)$') {
         Write-InspectStatus "Reading code signature of $(Split-Path -Leaf $exe)..."
-        $run = Invoke-MoleRea -Invocation $invocation -Arguments @("inspect-pe-certificates", $exe)
+        $run = Invoke-SweeprRea -Invocation $invocation -Arguments @("inspect-pe-certificates", $exe)
         if ($run.ExitCode -eq 0) { $certificates = $run.Data } else { $errors += "Signature check failed: $($run.Error)" }
 
         $isDotnet = $desktop -and @($desktop.normalized_result.candidates | Where-Object { $_ -and $_.family -eq "dotnet" }).Count -gt 0
         if ($Deep) {
             Write-InspectStatus "Reading imported DLLs..."
-            $run = Invoke-MoleRea -Invocation $invocation -Arguments @("inspect-pe-imports", $exe)
+            $run = Invoke-SweeprRea -Invocation $invocation -Arguments @("inspect-pe-imports", $exe)
             if ($run.ExitCode -eq 0) { $imports = $run.Data } else { $errors += "Import listing failed: $($run.Error)" }
         }
         if ($Deep -or $isDotnet) {
-            $run = Invoke-MoleRea -Invocation $invocation -Arguments @("inspect-managed-artifact", $exe)
+            $run = Invoke-SweeprRea -Invocation $invocation -Arguments @("inspect-managed-artifact", $exe)
             # A native image is not an error: it simply has no .NET metadata.
             if ($run.ExitCode -eq 0 -and $run.Data.normalized_result.classification.status -eq "managed") { $managed = $run.Data }
         }
@@ -207,7 +207,7 @@ function Main {
         $errors += "No main executable found; signature not checked"
     }
 
-    $summary = ConvertTo-MoleInspectSummary -Target $target -Desktop $desktop -Certificates $certificates -Imports $imports -Managed $managed -Errors $errors
+    $summary = ConvertTo-SweeprInspectSummary -Target $target -Desktop $desktop -Certificates $certificates -Imports $imports -Managed $managed -Errors $errors
     if ($Json) {
         $summary | ConvertTo-Json -Depth 6
     }

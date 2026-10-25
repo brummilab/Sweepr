@@ -4,13 +4,13 @@ BeforeAll {
     $ast = [Management.Automation.Language.Parser]::ParseFile($source, [ref]$null, [ref]$null)
     $definition = $ast.Find({ param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq 'Invoke-MoleUninstallProcess'
+        $node.Name -eq 'Invoke-SweeprUninstallProcess'
     }, $true)
     if ($definition) { . ([scriptblock]::Create($definition.Extent.Text)) }
     else {
         # Execute exactly the previous wait for old-source red runs. Fixture
         # processes exit naturally after 15 seconds, so even this run is bounded.
-        function Invoke-MoleUninstallProcess {
+        function Invoke-SweeprUninstallProcess {
             param($FilePath, $ArgumentList, $TimeoutMilliseconds)
             Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -Wait -PassThru
         }
@@ -56,7 +56,7 @@ Describe 'Bounded vendor uninstaller wait' {
     It 'Times out without killing the vendor parent or child' {
         $arguments = New-WaitFixture
         $clock = [Diagnostics.Stopwatch]::StartNew()
-        { Invoke-MoleUninstallProcess -FilePath $script:Shell -ArgumentList $arguments -TimeoutMilliseconds 5000 } | Should -Throw '*timed out*'
+        { Invoke-SweeprUninstallProcess -FilePath $script:Shell -ArgumentList $arguments -TimeoutMilliseconds 5000 } | Should -Throw '*timed out*'
         $clock.Elapsed.TotalSeconds | Should -BeLessThan 10
         Test-Path -LiteralPath $script:IdentityFile | Should -BeTrue
         $identities = Get-Content -LiteralPath $script:IdentityFile -Raw | ConvertFrom-Json
@@ -69,7 +69,7 @@ Describe 'Bounded vendor uninstaller wait' {
     }
     It 'Keeps waiting for a child after the parent exits' {
         $arguments = New-WaitFixture -ExitParent
-        { Invoke-MoleUninstallProcess -FilePath $script:Shell -ArgumentList $arguments -TimeoutMilliseconds 5000 } | Should -Throw '*timed out*'
+        { Invoke-SweeprUninstallProcess -FilePath $script:Shell -ArgumentList $arguments -TimeoutMilliseconds 5000 } | Should -Throw '*timed out*'
         $identities = Get-Content -LiteralPath $script:IdentityFile -Raw | ConvertFrom-Json
         $process = Get-FixtureProcess $identities[1]
         $process | Should -Not -BeNullOrEmpty
@@ -78,8 +78,8 @@ Describe 'Bounded vendor uninstaller wait' {
     It 'Cancels the waiting pipeline without killing fixture processes' {
         $arguments = New-WaitFixture
         $outer = [powershell]::Create()
-        $waitDefinition = (Get-Item function:Invoke-MoleUninstallProcess).ScriptBlock.ToString()
-        $null = $outer.AddScript('param($definition, $exe, $arguments); Set-Item function:Invoke-MoleUninstallProcess ([scriptblock]::Create($definition)); Invoke-MoleUninstallProcess -FilePath $exe -ArgumentList $arguments')
+        $waitDefinition = (Get-Item function:Invoke-SweeprUninstallProcess).ScriptBlock.ToString()
+        $null = $outer.AddScript('param($definition, $exe, $arguments); Set-Item function:Invoke-SweeprUninstallProcess ([scriptblock]::Create($definition)); Invoke-SweeprUninstallProcess -FilePath $exe -ArgumentList $arguments')
         $null = $outer.AddArgument($waitDefinition).AddArgument($script:Shell).AddArgument($arguments)
         try {
             $pending = $outer.BeginInvoke()
@@ -100,7 +100,7 @@ Describe 'Bounded vendor uninstaller wait' {
     }
     It 'Returns the real exit code after normal completion' {
         $script:IdentityFile = $null
-        $result = Invoke-MoleUninstallProcess -FilePath $script:Shell -ArgumentList '-NoProfile -NonInteractive -Command "exit 7"' -TimeoutMilliseconds 10000
+        $result = Invoke-SweeprUninstallProcess -FilePath $script:Shell -ArgumentList '-NoProfile -NonInteractive -Command "exit 7"' -TimeoutMilliseconds 10000
         $result.ExitCode | Should -Be 7
     }
 }

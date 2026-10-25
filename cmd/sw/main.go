@@ -1,8 +1,8 @@
-// Command fm starts freemole.ps1 from the same folder with Windows PowerShell.
+// Command sw starts sweepr.ps1 from the same folder with Windows PowerShell.
 //
 // Package managers that can only expose an executable (winget portable
-// installs) put this on PATH as `fm`. It passes every argument through as a
-// literal PowerShell string, the same call shape as the fm.cmd launcher that
+// installs) put this on PATH as `sw`. It passes every argument through as a
+// literal PowerShell string, the same call shape as the sw.cmd launcher that
 // install.ps1 writes, and returns the script's exit code.
 package main
 
@@ -23,7 +23,7 @@ func main() {
 func run(args []string) int {
 	script, err := scriptPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fm: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sw: %v\n", err)
 		return 1
 	}
 
@@ -37,13 +37,13 @@ func run(args []string) int {
 		if errors.As(err, &exitErr) {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintf(os.Stderr, "fm: could not start PowerShell: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sw: could not start PowerShell: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// scriptPath resolves freemole.ps1 beside the real executable; winget runs this
+// scriptPath resolves sweepr.ps1 beside the real executable; winget runs this
 // through a symlink in its Links folder.
 func scriptPath() (string, error) {
 	exe, err := os.Executable()
@@ -53,9 +53,9 @@ func scriptPath() (string, error) {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	script := filepath.Join(filepath.Dir(exe), "freemole.ps1")
+	script := filepath.Join(filepath.Dir(exe), "sweepr.ps1")
 	if _, err := os.Stat(script); err != nil {
-		return "", fmt.Errorf("freemole.ps1 not found next to %s", exe)
+		return "", fmt.Errorf("sweepr.ps1 not found next to %s", exe)
 	}
 	return script, nil
 }

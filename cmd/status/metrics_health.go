@@ -49,9 +49,8 @@ const (
 	scoreFairThreshold      = 45
 )
 
-// calculateHealthScore is main's score without the thermal term: Windows has no
-// unprivileged CPU temperature source, and main skips that term whenever the
-// temperature is unknown, so the remaining weights and bands are unchanged.
+// calculateHealthScore leaves out a thermal term: Windows has no unprivileged
+// CPU temperature source, so the score uses the remaining weights and bands.
 func calculateHealthScore(cpu CPUStatus, mem MemoryStatus, disks []DiskStatus, diskIO DiskIOStatus, batteries []BatteryStatus, uptimeSecs uint64) (int, string) {
 	score := 100.0
 	issues := []string{}

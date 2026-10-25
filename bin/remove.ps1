@@ -1,5 +1,5 @@
-# freeMole - Remove Command
-# Removes freeMole from the current installation directory.
+# Sweepr - Remove Command
+# Removes Sweepr from the current installation directory.
 
 #Requires -Version 5.1
 [CmdletBinding()]
@@ -17,15 +17,15 @@ $installScript = Join-Path $windowsDir "install.ps1"
 function Show-RemoveHelp {
     $esc = [char]27
     Write-Host ""
-    Write-Host "$esc[1;35mfm remove$esc[0m - Remove freeMole from this system"
+    Write-Host "$esc[1;35mfm remove$esc[0m - Remove Sweepr from this system"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm remove"
+    Write-Host "$esc[33mUsage:$esc[0m sw remove"
     Write-Host ""
     Write-Host "$esc[33mBehavior:$esc[0m"
-    Write-Host "  - Removes the current freeMole installation directory"
+    Write-Host "  - Removes the current Sweepr installation directory"
     Write-Host "  - Removes PATH entries created for this install"
-    Write-Host "  - Prompts before deleting freeMole config files"
-    Write-Host "  - Removes the freeMole cache folder after a successful uninstall"
+    Write-Host "  - Prompts before deleting Sweepr config files"
+    Write-Host "  - Removes the Sweepr cache folder after a successful uninstall"
     Write-Host ""
 }
 
@@ -40,18 +40,18 @@ function Get-PackageManagerRemoveCommand {
     param([string]$InstallDir)
 
     $path = $InstallDir.TrimEnd('\') + '\'
-    if ($path -like "*\Microsoft\WinGet\Packages\tw93.MoleCLI_*") {
-        return "winget uninstall tw93.MoleCLI"
+    if ($path -like "*\Microsoft\WinGet\Packages\brummilab.Sweepr_*") {
+        return "winget uninstall brummilab.Sweepr"
     }
-    if ($path -like "*\scoop\apps\mole\*") {
-        return "scoop uninstall mole"
+    if ($path -like "*\scoop\apps\sweepr\*") {
+        return "scoop uninstall sweepr"
     }
     return $null
 }
 
 $removeCommand = Get-PackageManagerRemoveCommand -InstallDir $windowsDir
 if ($removeCommand) {
-    Write-Host "This copy of freeMole is managed by a package manager." -ForegroundColor Yellow
+    Write-Host "This copy of Sweepr is managed by a package manager." -ForegroundColor Yellow
     Write-Host "Remove it with: $removeCommand" -ForegroundColor Yellow
     exit 1
 }
@@ -61,8 +61,8 @@ if (-not (Test-Path $installScript)) {
     exit 1
 }
 
-# Removing freeMole is not undoable, so it is never a side effect of a typo.
-$answer = "$(Read-Host "Remove freeMole from ${windowsDir}? (y/N)")".Trim()
+# Removing Sweepr is not undoable, so it is never a side effect of a typo.
+$answer = "$(Read-Host "Remove Sweepr from ${windowsDir}? (y/N)")".Trim()
 if ($answer -ne "y" -and $answer -ne "Y") {
     Write-Host "Cancelled"
     exit 0

@@ -1,4 +1,4 @@
-# freeMole - Status Command
+# Sweepr - Status Command
 # System status monitor wrapper
 
 #Requires -Version 5.1
@@ -28,7 +28,7 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "$esc[1;35mfm status$esc[0m - Real-time system health monitor"
     Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m fm status [options]"
+    Write-Host "$esc[33mUsage:$esc[0m sw status [options]"
     Write-Host ""
     Write-Host "$esc[33mOptions:$esc[0m"
     Write-Host "  --json             Output one metrics snapshot as JSON"
@@ -42,7 +42,7 @@ function Show-StatusHelp {
     Write-Host ""
     Write-Host "$esc[33mKeybindings:$esc[0m"
     Write-Host "  c            Cycle how many CPU cores are listed"
-    Write-Host "  k            Show or hide the mole"
+    Write-Host "  k            Show or hide the mascot"
     Write-Host "  q / Esc      Quit"
     Write-Host ""
 }
@@ -55,7 +55,7 @@ if ($ShowHelp) {
 $binPath = Ensure-TuiBinary -Name "status" -WindowsDir $windowsDir -DestinationPath $defaultBinPath -SourcePath "./cmd/status/"
 if (-not $binPath) {
     Write-TuiBinaryStatus "Could not download the verified status tool for this version from GitHub Releases." -Color Red
-    Write-TuiBinaryStatus "Check the network and run 'fm status' again. With Go installed, freeMole builds it locally instead." -Color Yellow
+    Write-TuiBinaryStatus "Check the network and run 'sw status' again. With Go installed, Sweepr builds it locally instead." -Color Yellow
     exit 1
 }
 

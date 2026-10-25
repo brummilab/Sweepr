@@ -1,4 +1,4 @@
-// Package main provides the fm status command for real-time system monitoring.
+// Package main provides the sw status command for real-time system monitoring.
 package main
 
 import (
@@ -170,7 +170,7 @@ func (m model) View() string {
 		termWidth = 80
 	}
 
-	header, mole := renderHeader(m.metrics, m.errMessage, m.animFrame, termWidth, m.catHidden)
+	header, mascot := renderHeader(m.metrics, m.errMessage, m.animFrame, termWidth, m.catHidden)
 	alertBar := renderProcessAlertBar(
 		m.metrics.ProcessAlerts,
 		m.metrics.ProcessStale,
@@ -201,20 +201,20 @@ func (m model) View() string {
 			cardContent = renderTwoColumns(cards, termWidth)
 		}
 
-		// Combine header, mole, and cards with consistent spacing
+		// Combine header, mascot, and cards with consistent spacing
 		parts := []string{header}
 		if alertBar != "" {
 			parts = append(parts, alertBar)
 		}
-		if mole != "" {
-			parts = append(parts, mole)
+		if mascot != "" {
+			parts = append(parts, mascot)
 		}
 		parts = append(parts, cardContent)
 		return lipgloss.JoinVertical(lipgloss.Left, parts...)
 	}
 
 	// Every extra core is another card row, and the frame has no scrollback: on
-	// a 20-core Mac "all" adds ~18 lines and pushes the lower cards off a short
+	// a 20-core machine "all" adds ~18 lines and pushes the lower cards off a short
 	// window. Step the preference back down until the frame fits; the stored
 	// preference is untouched, so a taller window gets it back.
 	cpuCores := m.cpuCores
@@ -323,10 +323,10 @@ func parseWatchInterval(raw string) (time.Duration, error) {
 	return d, nil
 }
 
-// usageText is the help every other freeMole subcommand prints by hand. The Go flag
+// usageText is the help every other Sweepr subcommand prints by hand. The Go flag
 // package would otherwise render "Usage of /usr/local/bin/status-go:", naming a
 // bundled binary the user never typed, so the text is written out here instead.
-const usageText = `Usage: fm status [OPTIONS]
+const usageText = `Usage: sw status [OPTIONS]
 
 Monitor system health. Without options it opens the interactive dashboard, and
 switches to a single JSON snapshot when stdout is not a terminal.
@@ -341,17 +341,17 @@ Options:
   -h, --help                      Show this help message
 
 Examples:
-  fm status                       Interactive dashboard
-  fm status --json                One machine-readable snapshot
-  fm status --watch --interval 2s Continuous NDJSON stream
+  sw status                       Interactive dashboard
+  sw status --json                One machine-readable snapshot
+  sw status --watch --interval 2s Continuous NDJSON stream
 `
 
-// parseArgs applies freeMole's CLI conventions to the flag package: help goes to
+// parseArgs applies Sweepr's CLI conventions to the flag package: help goes to
 // stdout and exits 0, and a bad invocation goes to stderr and exits 1 the way
 // every bash subcommand does, rather than the flag package's stderr-and-2.
 // It returns the exit code and whether main should keep running.
 func parseArgs(args []string, stdout, stderr io.Writer) (int, bool) {
-	flag.CommandLine.Init("fm status", flag.ContinueOnError)
+	flag.CommandLine.Init("sw status", flag.ContinueOnError)
 	// Parse must not print: this function decides which stream each message
 	// belongs on, and the default handler writes usage to stderr for both.
 	flag.CommandLine.SetOutput(io.Discard)
@@ -364,13 +364,13 @@ func parseArgs(args []string, stdout, stderr io.Writer) (int, bool) {
 		return 0, false
 	case err != nil:
 		_, _ = fmt.Fprintln(stderr, err)
-		_, _ = fmt.Fprintln(stderr, "Use 'fm status --help' for usage information")
+		_, _ = fmt.Fprintln(stderr, "Use 'sw status --help' for usage information")
 		return 1, false
 	}
 
 	if err := validateFlags(); err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
-		_, _ = fmt.Fprintln(stderr, "Use 'fm status --help' for usage information")
+		_, _ = fmt.Fprintln(stderr, "Use 'sw status --help' for usage information")
 		return 1, false
 	}
 	return 0, true
@@ -385,7 +385,7 @@ func main() {
 		interval, err := parseWatchInterval(*watchInterval)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			fmt.Fprintln(os.Stderr, "Use 'fm status --help' for usage information")
+			fmt.Fprintln(os.Stderr, "Use 'sw status --help' for usage information")
 			os.Exit(1)
 		}
 		runWatchMode(interval)

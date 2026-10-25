@@ -1,12 +1,12 @@
-# freeMole - Cache Cleanup Module
+# Sweepr - Cache Cleanup Module
 # Cleans Windows and application caches
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 # Prevent multiple sourcing
-if ((Get-Variable -Name 'MOLE_CLEAN_CACHES_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_CLEAN_CACHES_LOADED) { return }
-$script:MOLE_CLEAN_CACHES_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_CLEAN_CACHES_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_CACHES_LOADED) { return }
+$script:SWEEPR_CLEAN_CACHES_LOADED = $true
 
 # Import dependencies
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -36,33 +36,33 @@ function Clear-BrowserCaches {
     foreach ($browser in $browsers) {
         $root = Join-Path $env:LOCALAPPDATA $browser.Root
         $lock = Join-Path $root 'lockfile'
-        foreach ($profile in @(Get-MoleCacheProfiles $root)) {
+        foreach ($profile in @(Get-SweeprCacheProfiles $root)) {
             foreach ($leaf in @('Cache', 'Code Cache', 'GPUCache')) {
-                Clear-MoleAppCache -Path (Join-Path $profile.FullName $leaf) -Description "$($browser.Name) $leaf" -Processes $browser.Processes -LockPath $lock
+                Clear-SweeprAppCache -Path (Join-Path $profile.FullName $leaf) -Description "$($browser.Name) $leaf" -Processes $browser.Processes -LockPath $lock
             }
         }
         foreach ($leaf in $browser.RootCaches) {
-            Clear-MoleAppCache -Path (Join-Path $root $leaf) -Description "$($browser.Name) $leaf" -Processes $browser.Processes -LockPath $lock
+            Clear-SweeprAppCache -Path (Join-Path $root $leaf) -Description "$($browser.Name) $leaf" -Processes $browser.Processes -LockPath $lock
         }
     }
 
     # Firefox's disk/startup caches live in Local, not its roaming profile store.
-    foreach ($profile in @(Get-MoleCacheProfiles "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles")) {
+    foreach ($profile in @(Get-SweeprCacheProfiles "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles")) {
         foreach ($leaf in @('cache2', 'startupCache')) {
             $lock = "$env:APPDATA\Mozilla\Firefox\Profiles\$($profile.Name)\parent.lock"
-            Clear-MoleAppCache -Path (Join-Path $profile.FullName $leaf) -Description 'Firefox cache' -Processes @('firefox') -LockPath $lock
+            Clear-SweeprAppCache -Path (Join-Path $profile.FullName $leaf) -Description 'Firefox cache' -Processes @('firefox') -LockPath $lock
         }
     }
-    foreach ($profile in @(Get-MoleCacheProfiles "$env:APPDATA\Mozilla\Firefox\Profiles")) {
-        Clear-MoleAppCache -Path (Join-Path $profile.FullName 'shader-cache') -Description 'Firefox cache' -Processes @('firefox') -LockPath (Join-Path $profile.FullName 'parent.lock')
+    foreach ($profile in @(Get-SweeprCacheProfiles "$env:APPDATA\Mozilla\Firefox\Profiles")) {
+        Clear-SweeprAppCache -Path (Join-Path $profile.FullName 'shader-cache') -Description 'Firefox cache' -Processes @('firefox') -LockPath (Join-Path $profile.FullName 'parent.lock')
     }
 
     # Keep Opera's legacy root layout and its newer Default/profile layout.
     foreach ($root in @("$env:APPDATA\Opera Software\Opera Stable", "$env:LOCALAPPDATA\Opera Software\Opera Stable")) {
-        $profiles = @($root) + @(Get-MoleCacheProfiles $root | ForEach-Object { $_.FullName })
+        $profiles = @($root) + @(Get-SweeprCacheProfiles $root | ForEach-Object { $_.FullName })
         foreach ($profile in $profiles) {
             foreach ($leaf in @('Cache', 'Code Cache', 'GPUCache')) {
-                Clear-MoleAppCache -Path (Join-Path $profile $leaf) -Description 'Opera cache' -Processes @('opera') -LockPath (Join-Path $root 'lockfile')
+                Clear-SweeprAppCache -Path (Join-Path $profile $leaf) -Description 'Opera cache' -Processes @('opera') -LockPath (Join-Path $root 'lockfile')
             }
         }
     }
@@ -92,7 +92,7 @@ function Clear-AppCaches {
     )
     foreach ($path in $discordCachePaths) {
         if (Test-Path $path) {
-            Clear-MoleAppCache -Path $path -Description "Discord cache" -Processes @('discord')
+            Clear-SweeprAppCache -Path $path -Description "Discord cache" -Processes @('discord')
         }
     }
     
@@ -104,7 +104,7 @@ function Clear-AppCaches {
     )
     foreach ($path in $slackCachePaths) {
         if (Test-Path $path) {
-            Clear-MoleAppCache -Path $path -Description "Slack cache" -Processes @('slack')
+            Clear-SweeprAppCache -Path $path -Description "Slack cache" -Processes @('slack')
         }
     }
     
@@ -115,21 +115,21 @@ function Clear-AppCaches {
     )
     foreach ($path in $teamsCachePaths) {
         if (Test-Path $path) {
-            Clear-MoleAppCache -Path $path -Description "Teams cache" -Processes @('Teams')
+            Clear-SweeprAppCache -Path $path -Description "Teams cache" -Processes @('Teams')
         }
     }
     
     # New Teams: only named WebView disk-cache leaves, never the package root.
     $teamsRoot = "$env:LOCALAPPDATA\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView"
-    foreach ($profile in @(Get-MoleCacheProfiles $teamsRoot)) {
+    foreach ($profile in @(Get-SweeprCacheProfiles $teamsRoot)) {
         foreach ($leaf in @('Cache', 'Code Cache', 'GPUCache')) {
-            Clear-MoleAppCache -Path (Join-Path $profile.FullName $leaf) -Description 'Teams cache' -Processes @('ms-teams') -LockPath (Join-Path $teamsRoot 'lockfile')
+            Clear-SweeprAppCache -Path (Join-Path $profile.FullName $leaf) -Description 'Teams cache' -Processes @('ms-teams') -LockPath (Join-Path $teamsRoot 'lockfile')
         }
     }
 
     foreach ($app in @('Cursor', 'Windsurf', 'Obsidian', 'Notion')) {
         foreach ($leaf in @('Cache', 'Code Cache', 'GPUCache')) {
-            Clear-MoleAppCache -Path "$env:APPDATA\$app\$leaf" -Description "$app cache" -Processes @($app)
+            Clear-SweeprAppCache -Path "$env:APPDATA\$app\$leaf" -Description "$app cache" -Processes @($app)
         }
     }
 
@@ -144,7 +144,7 @@ function Clear-AppCaches {
     )
     foreach ($path in $vscodeCachePaths) {
         if (Test-Path $path) {
-            Clear-MoleAppCache -Path $path -Description "VS Code cache" -Processes @('Code')
+            Clear-SweeprAppCache -Path $path -Description "VS Code cache" -Processes @('Code')
         }
     }
     
@@ -175,7 +175,7 @@ function Clear-GPUShaderCaches {
         GPU drivers cache compiled shaders to improve game/app load times.
         These caches can grow very large (10GB+) and are safe to delete.
         They will be rebuilt automatically when needed, but every game then compiles
-        its shaders again on its next launch, so fm clean runs this only with --gpu-shaders.
+        its shaders again on its next launch, so sw clean runs this only with --gpu-shaders.
     #>
     
     Start-Section "GPU shader caches"

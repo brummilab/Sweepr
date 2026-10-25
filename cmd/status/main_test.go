@@ -39,7 +39,7 @@ func TestShouldUseJSONOutput_NonTTYPipe(t *testing.T) {
 }
 
 func TestShouldUseJSONOutput_NonTTYFile(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "freemole-status-stdout-*.txt")
+	tmpFile, err := os.CreateTemp("", "sweepr-status-stdout-*.txt")
 	if err != nil {
 		t.Fatalf("create temp file: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestCollectionRecoveryKeepsReadinessAndSerializesTicks(t *testing.T) {
 // Run the real one-shot JSON path in a child so os.Exit and stdout stay
 // isolated. Every platform reader is stubbed and the process probe fails.
 func TestStatusJSONProcess(t *testing.T) {
-	scenario := os.Getenv("MOLE_STATUS_JSON_TEST")
+	scenario := os.Getenv("SWEEPR_STATUS_JSON_TEST")
 	if scenario == "" {
 		t.Skip("json subprocess helper")
 	}
@@ -315,7 +315,7 @@ func runJSONChild(t *testing.T, scenario string) (stdout, stderr bytes.Buffer, e
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStatusJSONProcess$")
-	cmd.Env = append(os.Environ(), "MOLE_STATUS_JSON_TEST="+scenario)
+	cmd.Env = append(os.Environ(), "SWEEPR_STATUS_JSON_TEST="+scenario)
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err = cmd.Run()
 	return stdout, stderr, err

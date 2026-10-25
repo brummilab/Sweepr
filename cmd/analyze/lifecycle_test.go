@@ -40,7 +40,7 @@ func TestDeletingKeepsQuitKeys(t *testing.T) {
 }
 
 func TestLiveSortStartsFrozenWhateverTheEnvironment(t *testing.T) {
-	t.Setenv("MOLE_ANALYZE_LIVE_SORT", "continuous")
+	t.Setenv("SWEEPR_ANALYZE_LIVE_SORT", "continuous")
 	m := newModel(t.TempDir(), false)
 	if m.liveSortMode != liveSortFreezeOnMove {
 		t.Fatalf("live sort mode = %v, want freeze-on-move", m.liveSortMode)

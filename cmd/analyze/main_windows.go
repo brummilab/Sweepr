@@ -15,7 +15,7 @@ func main() {
 		os.Exit(code)
 	}
 
-	envPath := os.Getenv("MO_ANALYZE_PATH")
+	envPath := os.Getenv("SWEEPR_ANALYZE_PATH")
 	if envPath == "" {
 		envPath = opts.path
 	}

@@ -1,26 +1,26 @@
-# freeMole - History Module
-# Reads the operation log that Write-MoleOperation appends, for fm history.
+# Sweepr - History Module
+# Reads the operation log that Write-SweeprOperation appends, for sw history.
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
-if ((Get-Variable -Name 'MOLE_HISTORY_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:MOLE_HISTORY_LOADED) { return }
-$script:MOLE_HISTORY_LOADED = $true
+if ((Get-Variable -Name 'SWEEPR_HISTORY_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_HISTORY_LOADED) { return }
+$script:SWEEPR_HISTORY_LOADED = $true
 
-$script:MoleHistoryDefaultLimit = 20
-$script:MoleHistoryMaxLimit = 200
+$script:SweeprHistoryDefaultLimit = 20
+$script:SweeprHistoryMaxLimit = 200
 
-# A limit is a plain decimal from 1 to 200, the macOS CLI's range.
-function ConvertTo-MoleHistoryLimit {
+# A limit is a plain decimal from 1 to 200.
+function ConvertTo-SweeprHistoryLimit {
     param([string]$Value)
 
     if ($Value -notmatch '^[0-9]{1,3}$') { return $null }
     $number = [int]$Value
-    if ($number -lt 1 -or $number -gt $script:MoleHistoryMaxLimit) { return $null }
+    if ($number -lt 1 -or $number -gt $script:SweeprHistoryMaxLimit) { return $null }
     return $number
 }
 
-function New-MoleHistorySession {
+function New-SweeprHistorySession {
     param([string]$Command, [string]$RunId, [string]$StartedAt)
 
     return [ordered]@{
@@ -34,7 +34,7 @@ function New-MoleHistorySession {
 
 # Sessions in log order with their action counts, and every record. A record
 # whose run has no start marker (a log cut by rotation) opens its own session.
-function Read-MoleHistory {
+function Read-SweeprHistory {
     param([string]$Path)
 
     $sessions = New-Object System.Collections.Generic.List[object]
@@ -46,7 +46,7 @@ function Read-MoleHistory {
 
     foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
         if ($line -match '^# ========== (\S+)(?: run=(\S+))? session started at (.+) ==========$') {
-            $session = New-MoleHistorySession -Command $Matches[1] -RunId ([string]$Matches[2]) -StartedAt $Matches[3]
+            $session = New-SweeprHistorySession -Command $Matches[1] -RunId ([string]$Matches[2]) -StartedAt $Matches[3]
             $sessions.Add($session)
             $byRun["$($session.command)|$($session.run_id)"] = $session
             continue
@@ -65,7 +65,7 @@ function Read-MoleHistory {
 
         $key = "$($record.command)|$($record.run_id)"
         if (-not $byRun.ContainsKey($key)) {
-            $session = New-MoleHistorySession -Command $record.command -RunId $record.run_id -StartedAt $record.timestamp
+            $session = New-SweeprHistorySession -Command $record.command -RunId $record.run_id -StartedAt $record.timestamp
             $sessions.Add($session)
             $byRun[$key] = $session
         }
@@ -78,7 +78,7 @@ function Read-MoleHistory {
 }
 
 # The newest $Limit entries, newest first.
-function Select-MoleHistoryNewest {
+function Select-SweeprHistoryNewest {
     param($Items, [int]$Limit)
 
     $all = @($Items)
@@ -89,7 +89,7 @@ function Select-MoleHistoryNewest {
     return $newest
 }
 
-function Format-MoleHistoryActions {
+function Format-SweeprHistoryActions {
     param($Actions)
 
     $parts = @()
@@ -100,20 +100,20 @@ function Format-MoleHistoryActions {
     return $parts -join ", "
 }
 
-function Show-MoleHistoryText {
+function Show-SweeprHistoryText {
     param($History, [int]$Limit, [string]$LogPath)
 
-    Write-Host "freeMole History"
+    Write-Host "Sweepr History"
     Write-Host ""
     Write-Host "Recent sessions"
-    $sessions = @(Select-MoleHistoryNewest -Items $History.Sessions -Limit $Limit)
+    $sessions = @(Select-SweeprHistoryNewest -Items $History.Sessions -Limit $Limit)
     if ($sessions.Count -eq 0) { Write-Host "  No operation history yet." }
     foreach ($session in $sessions) {
-        Write-Host ("  {0,-10} {1}, {2}" -f $session.command, $session.started_at, (Format-MoleHistoryActions $session.actions))
+        Write-Host ("  {0,-10} {1}, {2}" -f $session.command, $session.started_at, (Format-SweeprHistoryActions $session.actions))
     }
     Write-Host ""
     Write-Host "Recent operations"
-    $operations = @(Select-MoleHistoryNewest -Items $History.Operations -Limit $Limit)
+    $operations = @(Select-SweeprHistoryNewest -Items $History.Operations -Limit $Limit)
     if ($operations.Count -eq 0) { Write-Host "  No operations recorded yet." }
     foreach ($operation in $operations) {
         $detail = if ($operation.detail) { " ($($operation.detail))" } else { "" }
@@ -125,14 +125,14 @@ function Show-MoleHistoryText {
     Write-Host ""
 }
 
-function ConvertTo-MoleHistoryJson {
+function ConvertTo-SweeprHistoryJson {
     param($History, [int]$Limit, [string]$LogPath)
 
     $report = [ordered]@{
         logs       = [ordered]@{ operations = $LogPath }
         limit      = $Limit
-        sessions   = @(Select-MoleHistoryNewest -Items $History.Sessions -Limit $Limit)
-        operations = @(Select-MoleHistoryNewest -Items $History.Operations -Limit $Limit)
+        sessions   = @(Select-SweeprHistoryNewest -Items $History.Sessions -Limit $Limit)
+        operations = @(Select-SweeprHistoryNewest -Items $History.Operations -Limit $Limit)
     }
     return ConvertTo-Json -InputObject $report -Depth 6
 }

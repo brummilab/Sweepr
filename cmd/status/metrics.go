@@ -50,9 +50,9 @@ func (rb *RingBuffer) Slice() []float64 {
 	return res
 }
 
-// MetricsSnapshot mirrors main's JSON contract for the fields Windows can
-// measure. Fields main fills from macOS-only sources (thermal sensors, GPU,
-// Bluetooth, Trash, zombie processes) are left out rather than emitted as zeros.
+// MetricsSnapshot is the JSON contract for the fields Windows can measure.
+// Fields Windows cannot measure (thermal sensors, GPU, Bluetooth, Trash,
+// zombie processes) are left out rather than emitted as zeros.
 type MetricsSnapshot struct {
 	CollectedAt    time.Time    `json:"collected_at"`
 	Host           string       `json:"host"`
@@ -98,7 +98,7 @@ type ProcessInfo struct {
 	PPID        int     `json:"ppid"`
 	Name        string  `json:"name"`
 	Command     string  `json:"command"`
-	CPU         float64 `json:"cpu"`    // Percent of one logical CPU, like ps on macOS.
+	CPU         float64 `json:"cpu"`    // Percent of one logical CPU, like ps.
 	Memory      float64 `json:"memory"` // Percent of physical memory.
 	MemoryBytes uint64  `json:"memory_bytes,omitempty"`
 }
@@ -119,8 +119,8 @@ type MemoryStatus struct {
 	SwapUsed    uint64  `json:"swap_used"`
 	SwapTotal   uint64  `json:"swap_total"`
 	Cached      uint64  `json:"cached"`
-	// Pressure stays empty on Windows: there is no counterpart to macOS
-	// memory_pressure, so the Status row is never rendered.
+	// Pressure stays empty on Windows: there is no memory-pressure signal,
+	// so the Status row is never rendered.
 	Pressure string `json:"pressure"`
 }
 
@@ -350,7 +350,7 @@ func (c *Collector) collect(includeProcesses, full bool) (MetricsSnapshot, error
 	next := c.enrichment
 
 	// Sample CPU before the other collectors start so their own work does not
-	// land in the usage window, the same ordering main uses (#1237).
+	// land in the usage window.
 	var cpuErr error
 	collected.cpuStats, cpuErr = readCPUFunc()
 
@@ -851,8 +851,8 @@ func processTimes(samples []procSample) map[procKey]int64 {
 }
 
 // processInfoFromSamples reports CPU as a percent of one logical CPU, the scale
-// ps uses on macOS, so the alert threshold and bar colors mean the same thing on
-// both platforms. A process absent from the previous table (new, or a reused
+// ps uses, so the alert threshold and bar colors stay meaningful on any core
+// count. A process absent from the previous table (new, or a reused
 // PID with a different creation time) has no window yet and reports 0.
 func processInfoFromSamples(samples []procSample, prev map[procKey]int64, elapsed time.Duration, logical int, totalMem uint64) []ProcessInfo {
 	procs := make([]ProcessInfo, 0, len(samples))

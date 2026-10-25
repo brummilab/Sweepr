@@ -6,12 +6,12 @@ BeforeAll {
     . "$repo\lib\clean\user.ps1"
     . "$repo\lib\clean\apps.ps1"
     $script:SavedCacheEnvironment = @{}
-    foreach ($name in @('USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'MO_NO_OPLOG')) {
+    foreach ($name in @('USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'SWEEPR_NO_OPLOG')) {
         $script:SavedCacheEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
     }
     $script:SavedCacheWhitelist = $script:Config.WhitelistFile
-    $script:SavedCacheGuard = $script:MoleCleanPathGuard
-    $script:SavedCacheDryRun = $script:MoleDryRunMode
+    $script:SavedCacheGuard = $script:SweeprCleanPathGuard
+    $script:SavedCacheDryRun = $script:SweeprDryRunMode
     function New-CacheFile([string]$Path) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
         [IO.File]::WriteAllText($Path, 'cache fixture')
@@ -23,8 +23,8 @@ AfterAll {
         [Environment]::SetEnvironmentVariable($name, $script:SavedCacheEnvironment[$name])
     }
     $script:Config.WhitelistFile = $script:SavedCacheWhitelist
-    $script:MoleCleanPathGuard = $script:SavedCacheGuard
-    $script:MoleDryRunMode = $script:SavedCacheDryRun
+    $script:SweeprCleanPathGuard = $script:SavedCacheGuard
+    $script:SweeprDryRunMode = $script:SavedCacheDryRun
 }
 
 Describe 'Application cache boundaries' {
@@ -32,14 +32,14 @@ Describe 'Application cache boundaries' {
         $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString('N').Substring(0,8))
         $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'Local'
         $env:APPDATA = Join-Path $env:USERPROFILE 'Roaming'
-        $env:MO_NO_OPLOG = '1'
+        $env:SWEEPR_NO_OPLOG = '1'
         $script:Config.WhitelistFile = Join-Path $env:USERPROFILE 'whitelist.txt'
         $script:ExportListFile = Join-Path $env:USERPROFILE 'preview.txt'
-        $script:MoleCleanPathGuard = $true
+        $script:SweeprCleanPathGuard = $true
         Set-DryRunMode -Enabled $false
         Reset-CleanupStats
         Mock Get-Process { @() }
-        Mock Invoke-MoleOwnerCacheCleanup {}
+        Mock Invoke-SweeprOwnerCacheCleanup {}
         Mock Start-Section {}
         Mock Stop-Section {}
     }
@@ -209,7 +209,7 @@ Describe 'Application cache boundaries' {
         Clear-AppCaches
         Test-Path -LiteralPath $cache | Should -BeFalse
         foreach ($file in $kept) { Test-Path -LiteralPath $file | Should -BeTrue; Test-SafePath $file | Should -BeFalse }
-        $script:MoleCleanPathGuard = $false
+        $script:SweeprCleanPathGuard = $false
         Test-SafePath "$root\Default\Cache" | Should -BeFalse
     }
 
@@ -261,12 +261,12 @@ Describe 'Application cache boundaries' {
             $script:OwnerProbeCalls++
             if ($script:OwnerProbeCalls -ge 3) { [pscustomobject]@{ProcessName='Cursor'} }
         }
-        Mock Write-MoleOperation {}
+        Mock Write-SweeprOperation {}
         Clear-AppCaches
         Test-Path -LiteralPath $cache | Should -BeTrue
         (Get-CleanupStats).FilesCleaned | Should -Be 0
-        Should -Invoke Write-MoleOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'SKIPPED' }
-        Should -Invoke Write-MoleOperation -Times 0 -Exactly -ParameterFilter { $Action -eq 'REMOVED' -or $Action -eq 'FAILED' }
+        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'SKIPPED' }
+        Should -Invoke Write-SweeprOperation -Times 0 -Exactly -ParameterFilter { $Action -eq 'REMOVED' -or $Action -eq 'FAILED' }
     }
 
     It 'Supports Opera root and profile caches in both app-data locations' {
@@ -344,7 +344,7 @@ Describe 'Application cache boundaries' {
 Describe 'Native cache-owner process evidence' {
     It 'Detects the current process and accepts a nonexistent owner without mocks' {
         $current = Get-Process -Id $PID
-        Test-MoleCacheOwnerIdle -Names @($current.ProcessName) | Should -BeFalse
-        Test-MoleCacheOwnerIdle -Names @('freemole-fixture-' + [guid]::NewGuid().ToString('N')) | Should -BeTrue
+        Test-SweeprCacheOwnerIdle -Names @($current.ProcessName) | Should -BeFalse
+        Test-SweeprCacheOwnerIdle -Names @('sweepr-fixture-' + [guid]::NewGuid().ToString('N')) | Should -BeTrue
     }
 }

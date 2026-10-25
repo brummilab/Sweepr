@@ -1,4 +1,4 @@
-# freeMole Windows - release tooling tests
+# Sweepr Windows - release tooling tests
 # Covers the checksum writer, manifest rendering and the package-manager update hint.
 
 BeforeAll {
@@ -36,7 +36,7 @@ Describe "render-packaging.ps1" {
     BeforeAll {
         $script:Hash = "a" * 64
         $script:Sums = Join-Path $TestDrive "SHA256SUMS.txt"
-        Set-Content -Path $script:Sums -Value @("$($script:Hash)  freemole-1.31.0-x64.zip", ("b" * 64) + "  status-windows-x64.exe")
+        Set-Content -Path $script:Sums -Value @("$($script:Hash)  sweepr-1.31.0-x64.zip", ("b" * 64) + "  status-windows-x64.exe")
         $script:Out = Join-Path $TestDrive "packaging"
         & (Join-Path $script:ScriptsDir "render-packaging.ps1") -Version "1.31.0" -SumsFile $script:Sums -OutDir $script:Out -ReleaseDate "2026-10-11" 6>$null
     }
@@ -50,24 +50,24 @@ Describe "render-packaging.ps1" {
     }
 
     It "Points Scoop and winget at the tagged zip and its checksum" {
-        $scoop = Get-Content (Join-Path $script:Out "scoop\mole.json") -Raw | ConvertFrom-Json
+        $scoop = Get-Content (Join-Path $script:Out "scoop\sweepr.json") -Raw | ConvertFrom-Json
         $scoop.version | Should -Be "1.31.0"
-        $scoop.architecture.'64bit'.url | Should -Be "https://github.com/brummilab/freeMole/releases/download/V1.31.0-windows/freemole-1.31.0-x64.zip"
+        $scoop.architecture.'64bit'.url | Should -Be "https://github.com/brummilab/sweepr/releases/download/V1.31.0-windows/sweepr-1.31.0-x64.zip"
         $scoop.architecture.'64bit'.hash | Should -Be $script:Hash
 
-        $installer = Get-Content (Join-Path $script:Out "winget\manifests\t\tw93\MoleCLI\1.31.0\tw93.MoleCLI.installer.yaml") -Raw
+        $installer = Get-Content (Join-Path $script:Out "winget\manifests\b\brummilab\Sweepr\1.31.0\brummilab.Sweepr.installer.yaml") -Raw
         $installer | Should -Match "InstallerSha256: $($script:Hash)"
-        $installer | Should -Match "RelativeFilePath: fm.exe"
+        $installer | Should -Match "RelativeFilePath: sw.exe"
     }
 
     It "Refuses a release whose checksum file lacks the zip" {
         $sums = Join-Path $TestDrive "no-zip.txt"
         Set-Content -Path $sums -Value (("b" * 64) + "  status-windows-x64.exe")
-        { & (Join-Path $script:ScriptsDir "render-packaging.ps1") -Version "1.31.0" -SumsFile $sums -OutDir (Join-Path $TestDrive "x") } | Should -Throw "*freemole-1.31.0-x64.zip*"
+        { & (Join-Path $script:ScriptsDir "render-packaging.ps1") -Version "1.31.0" -SumsFile $sums -OutDir (Join-Path $TestDrive "x") } | Should -Throw "*sweepr-1.31.0-x64.zip*"
     }
 }
 
-Describe "fm update for package-manager installs" {
+Describe "sw update for package-manager installs" {
     BeforeAll {
         $updateScript = Join-Path $script:WindowsDir "bin\update.ps1"
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($updateScript, [ref]$null, [ref]$null)
@@ -79,14 +79,14 @@ Describe "fm update for package-manager installs" {
     }
 
     It "Names the upgrade command for <Manager>" -ForEach @(
-        @{ Manager = "winget"; Dir = "C:\Users\me\AppData\Local\Microsoft\WinGet\Packages\tw93.MoleCLI_Microsoft.Winget.Source_8wekyb3d8bbwe"; Expected = "winget upgrade tw93.MoleCLI" },
-        @{ Manager = "Scoop"; Dir = "C:\Users\me\scoop\apps\mole\1.31.0"; Expected = "scoop update mole" }
+        @{ Manager = "winget"; Dir = "C:\Users\me\AppData\Local\Microsoft\WinGet\Packages\brummilab.Sweepr_Microsoft.Winget.Source_8wekyb3d8bbwe"; Expected = "winget upgrade brummilab.Sweepr" },
+        @{ Manager = "Scoop"; Dir = "C:\Users\me\scoop\apps\sweepr\1.31.0"; Expected = "scoop update sweepr" }
     ) {
         Get-PackageManagerUpgradeCommand -InstallDir $Dir | Should -Be $Expected
     }
 
     It "Returns nothing for a plain folder" {
-        Get-PackageManagerUpgradeCommand -InstallDir "C:\Users\me\AppData\Local\freeMole" | Should -BeNullOrEmpty
+        Get-PackageManagerUpgradeCommand -InstallDir "C:\Users\me\AppData\Local\Sweepr" | Should -BeNullOrEmpty
     }
 }
 
@@ -125,7 +125,7 @@ Describe "new-release-zip.ps1" {
     It "Stores entry names with forward slashes, as winget's archive check requires" {
         $source = Join-Path $TestDrive "zip-source"
         New-Item -ItemType Directory -Path (Join-Path $source "bin\nested") -Force | Out-Null
-        Set-Content -Path (Join-Path $source "freemole.ps1") -Value "#"
+        Set-Content -Path (Join-Path $source "sweepr.ps1") -Value "#"
         Set-Content -Path (Join-Path $source "bin\nested\tool.ps1") -Value "#"
         $zip = Join-Path $TestDrive "release.zip"
 
@@ -140,7 +140,7 @@ Describe "new-release-zip.ps1" {
             $archive.Dispose()
         }
         $names | Should -Contain "bin/nested/tool.ps1"
-        $names | Should -Contain "freemole.ps1"
+        $names | Should -Contain "sweepr.ps1"
         @($names | Where-Object { $_.Contains('\') }).Count | Should -Be 0
     }
 
