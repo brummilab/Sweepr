@@ -249,6 +249,41 @@ Describe "install.ps1 -Uninstall" {
         @(Get-ChildItem -LiteralPath $config -Force | ForEach-Object Name | Sort-Object) | Should -Be @("operations.log", "operations.log.old")
     }
 
+    It "Keeps the restore list of sw features together with the operation log when the user removes the config files" {
+        $own = Join-Path $env:LOCALAPPDATA "Programs\sweepr-cli"
+        New-CliTree -Root $own
+        $InstallDir = $own
+        $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString("N"))
+        $config = Join-Path $env:USERPROFILE ".config\sweepr"
+        New-Item -ItemType Directory -Path (Join-Path $config "cache") -Force | Out-Null
+        foreach ($name in @("operations.log", "features-removed.json", "whitelist.txt", "cache\apps.json")) {
+            Set-Content -LiteralPath (Join-Path $config $name) -Value $name
+        }
+        Mock Read-Host { "y" }
+
+        Uninstall-Sweepr | Should -BeTrue
+
+        Get-Content -LiteralPath (Join-Path $config "features-removed.json") | Should -Be "features-removed.json"
+        Get-Content -LiteralPath (Join-Path $config "operations.log") | Should -Be "operations.log"
+        @(Get-ChildItem -LiteralPath $config -Force | ForEach-Object Name | Sort-Object) | Should -Be @("features-removed.json", "operations.log")
+    }
+
+    It "Keeps the config folder when the restore list is the only file in it" {
+        $own = Join-Path $env:LOCALAPPDATA "Programs\sweepr-cli"
+        New-CliTree -Root $own
+        $InstallDir = $own
+        $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString("N"))
+        $config = Join-Path $env:USERPROFILE ".config\sweepr"
+        New-Item -ItemType Directory -Path $config -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $config "features-removed.json") -Value "list"
+        Set-Content -LiteralPath (Join-Path $config "whitelist.txt") -Value "x"
+        Mock Read-Host { "y" }
+
+        Uninstall-Sweepr | Should -BeTrue
+
+        @(Get-ChildItem -LiteralPath $config -Force | ForEach-Object Name) | Should -Be @("features-removed.json")
+    }
+
     It "Removes the config folder when it holds no operation log" {
         $own = Join-Path $env:LOCALAPPDATA "Programs\sweepr-cli"
         New-CliTree -Root $own
