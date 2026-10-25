@@ -15,8 +15,14 @@ import (
 )
 
 // getConfigPath returns the path to the status preferences file, or "" if the
-// user's home directory cannot be resolved.
+// user's home directory cannot be resolved
+// (and SWEEPR_DATA_DIR is unset).
 func getConfigPath() string {
+	// SWEEPR_DATA_DIR (portable mode) wins so prefs, lock and temp files stay
+	// next to the install instead of leaking into the user profile.
+	if dir := strings.TrimSpace(os.Getenv("SWEEPR_DATA_DIR")); dir != "" {
+		return filepath.Join(dir, "config", "status_prefs")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""

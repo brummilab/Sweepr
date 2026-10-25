@@ -162,3 +162,54 @@ func TestOperationLogFailureStaysQuietWithoutDebug(t *testing.T) {
 		t.Fatalf("unexpected debug log: %v", err)
 	}
 }
+
+func TestDefaultOperationsLogPathUsesSweeprDataDir(t *testing.T) {
+	data := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	t.Setenv("SWEEPR_DATA_DIR", data)
+
+	want := filepath.Join(data, "config", "operations.log")
+	if got := defaultOperationsLogPath(); got != want {
+		t.Errorf("defaultOperationsLogPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultOperationsLogPathTrimsSweeprDataDir(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SWEEPR_DATA_DIR", "  "+data+"  ")
+
+	want := filepath.Join(data, "config", "operations.log")
+	if got := defaultOperationsLogPath(); got != want {
+		t.Errorf("defaultOperationsLogPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultOperationsLogPathIgnoresEmptySweeprDataDir(t *testing.T) {
+	for _, value := range []string{"", "   ", "\t"} {
+		home := t.TempDir()
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("HOME", home)
+		t.Setenv("SWEEPR_DATA_DIR", value)
+
+		want := filepath.Join(home, ".config", "sweepr", "operations.log")
+		if got := defaultOperationsLogPath(); got != want {
+			t.Errorf("SWEEPR_DATA_DIR=%q: defaultOperationsLogPath() = %q, want %q", value, got, want)
+		}
+	}
+}
+
+func TestDefaultOperationsLogPathWithoutSweeprDataDirIsUnchanged(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	t.Setenv("SWEEPR_DATA_DIR", "")
+
+	want := filepath.Join(home, ".config", "sweepr", "operations.log")
+	if got := defaultOperationsLogPath(); got != want {
+		t.Errorf("defaultOperationsLogPath() = %q, want %q", got, want)
+	}
+}

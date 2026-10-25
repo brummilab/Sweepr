@@ -29,6 +29,11 @@ var (
 const operationsLogAttempts = 5
 
 func defaultOperationsLogPath() string {
+	// SWEEPR_DATA_DIR (portable mode) wins so the log stays next to the install
+	// instead of leaking into the user profile.
+	if dir := strings.TrimSpace(os.Getenv("SWEEPR_DATA_DIR")); dir != "" {
+		return filepath.Join(dir, "config", "operations.log")
+	}
 	home := os.Getenv("USERPROFILE")
 	if home == "" {
 		home, _ = os.UserHomeDir()
