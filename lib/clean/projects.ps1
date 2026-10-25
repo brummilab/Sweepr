@@ -9,10 +9,10 @@ if ((Get-Variable -Name 'SWEEPR_CLEAN_PROJECTS_LOADED' -Scope Script -ErrorActio
 $script:SWEEPR_CLEAN_PROJECTS_LOADED = $true
 
 # Import dependencies
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\..\core\base.ps1"
-. "$scriptDir\..\core\log.ps1"
-. "$scriptDir\..\core\file_ops.ps1"
+# $PSScriptRoot, not a variable the loaded modules overwrite: each of them sets its own $scriptDir.
+. "$PSScriptRoot\..\core\base.ps1"
+. "$PSScriptRoot\..\core\log.ps1"
+. "$PSScriptRoot\..\core\file_ops.ps1"
 
 # ============================================================================
 # Configuration

@@ -9,15 +9,15 @@ if ((Get-Variable -Name 'SWEEPR_CLEAN_PREVIEW_LOADED' -Scope Script -ErrorAction
 $script:SWEEPR_CLEAN_PREVIEW_LOADED = $true
 
 # Import dependencies
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\..\core\base.ps1"
-. "$scriptDir\..\core\log.ps1"
-. "$scriptDir\..\core\file_ops.ps1"
-. "$scriptDir\user.ps1"
-. "$scriptDir\caches.ps1"
-. "$scriptDir\dev.ps1"
-. "$scriptDir\apps.ps1"
-. "$scriptDir\system.ps1"
+# $PSScriptRoot, not a variable the loaded modules overwrite: each of them sets its own $scriptDir.
+. "$PSScriptRoot\..\core\base.ps1"
+. "$PSScriptRoot\..\core\log.ps1"
+. "$PSScriptRoot\..\core\file_ops.ps1"
+. "$PSScriptRoot\user.ps1"
+. "$PSScriptRoot\caches.ps1"
+. "$PSScriptRoot\dev.ps1"
+. "$PSScriptRoot\apps.ps1"
+. "$PSScriptRoot\system.ps1"
 
 # ============================================================================
 # Cleanup sections (shared by sw clean and the preview)
@@ -101,7 +101,7 @@ function Get-SweeprCleanPreview {
         Collector = $script:DryRunCollector
         Sections  = $script:SectionCollector
         Skip      = $script:SweeprSkipExternalTools
-        Skipped   = $script:SweeprSkippedTools
+        Skipped   = $script:NotMeasuredCollector
         NoSpinner = $script:SpinnerDisabled
         Size      = $script:TotalSizeCleaned
         Files     = $script:FilesCleaned
@@ -115,7 +115,7 @@ function Get-SweeprCleanPreview {
         $script:DryRunCollector = $hitList
         $script:SectionCollector = $sectionList
         $script:SweeprSkipExternalTools = $SkipExternalTools.IsPresent
-        $script:SweeprSkippedTools = $skippedTools
+        $script:NotMeasuredCollector = $skippedTools
         $script:SpinnerDisabled = $true
         try {
             # Host output (stream 6) and warnings belong to the interactive command, not to data.
@@ -131,7 +131,7 @@ function Get-SweeprCleanPreview {
         $script:DryRunCollector = $saved.Collector
         $script:SectionCollector = $saved.Sections
         $script:SweeprSkipExternalTools = $saved.Skip
-        $script:SweeprSkippedTools = $saved.Skipped
+        $script:NotMeasuredCollector = $saved.Skipped
         $script:SpinnerDisabled = $saved.NoSpinner
         $script:TotalSizeCleaned = $saved.Size
         $script:FilesCleaned = $saved.Files

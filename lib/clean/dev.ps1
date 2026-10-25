@@ -16,9 +16,8 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . "$PSScriptRoot\cache_guard.ps1"
 
-# Set by Get-SweeprCleanPreview -SkipExternalTools; the list collects the skipped tools.
+# Set by Get-SweeprCleanPreview -SkipExternalTools; skipped tools go to the not-measured collector.
 $script:SweeprSkipExternalTools = $false
-$script:SweeprSkippedTools = $null
 
 # ============================================================================
 # Node.js / JavaScript Ecosystem
@@ -104,9 +103,7 @@ function Get-SweeprOwnerCachePath {
     # A read-only check must not start npm, pip, go and friends (they can leave log files
     # in the profile): note the tool as not measured and carry on without its folder.
     if ($script:SweeprSkipExternalTools) {
-        if ($null -ne $script:SweeprSkippedTools -and -not @($script:SweeprSkippedTools | Where-Object { $_.Name -eq $Name })) {
-            $script:SweeprSkippedTools.Add([pscustomobject]@{ Section = [string]$script:CurrentSection.Name; Name = $Name; Reason = 'external tool' })
-        }
+        Add-SweeprNotMeasured -Name $Name -Reason 'external tool'
         return $null
     }
     $result = Invoke-SweeprOwnerProcess -Name $Name -Arguments $Arguments

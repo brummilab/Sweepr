@@ -25,6 +25,17 @@ $script:OwnerCleanups = 0
 # While a list is set here, dry-run hits are collected as data (see Get-SweeprCleanPreview)
 # instead of being appended to the preview list file.
 $script:DryRunCollector = $null
+# Parts a read-only collection could not measure (tool skipped, not previewable) land here.
+$script:NotMeasuredCollector = $null
+
+# Notes a part as not measured once per name; without a collector it does nothing.
+function Add-SweeprNotMeasured {
+    param([string]$Name, [string]$Reason)
+
+    if ($null -eq $script:NotMeasuredCollector) { return }
+    if (@($script:NotMeasuredCollector.ToArray() | Where-Object { $_.Name -eq $Name }).Count -gt 0) { return }
+    $script:NotMeasuredCollector.Add([pscustomobject]@{ Section = [string]$script:CurrentSection.Name; Name = $Name; Reason = $Reason })
+}
 
 # ============================================================================
 # Safety Validation Functions

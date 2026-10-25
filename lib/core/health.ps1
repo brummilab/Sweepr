@@ -11,8 +11,8 @@ if ((Get-Variable -Name 'SWEEPR_HEALTH_LOADED' -Scope Script -ErrorAction Silent
 $script:SWEEPR_HEALTH_LOADED = $true
 
 # Import dependencies
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\base.ps1"
+# $PSScriptRoot, not a variable the loaded modules overwrite: each of them sets its own $scriptDir.
+. "$PSScriptRoot\base.ps1"
 
 # ============================================================================
 # Disks, memory, uptime

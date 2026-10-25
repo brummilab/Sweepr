@@ -300,6 +300,12 @@ function Invoke-SystemCleanup {
     # Memory dumps
     Clear-MemoryDumps
 
+    # A read-only preview cannot size these two; they only report in a dry run.
+    if (Test-DryRunMode) {
+        Add-SweeprNotMeasured -Name 'Component Store cleanup' -Reason 'not previewable'
+        Add-SweeprNotMeasured -Name 'Disk Cleanup tool' -Reason 'not previewable'
+    }
+
     # Optional: Component Store (can take a long time)
     if ($IncludeComponentStore) {
         Invoke-ComponentStoreCleanup
