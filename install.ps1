@@ -866,6 +866,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\DryRunEnvironment.Tests.ps1"
         "tests\e2e_harness_test.py"
         "tests\Features.Tests.ps1"
+        "tests\FeaturesCommand.Tests.ps1"
         "tests\GitProxy.Tests.ps1"
         "tests\History.Tests.ps1"
         "tests\Inspect.Tests.ps1"
