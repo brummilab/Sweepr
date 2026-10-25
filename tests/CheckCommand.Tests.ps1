@@ -32,7 +32,8 @@
 #     Called once, only with --report, after all four areas ran, with the result object below.
 #     -NoOpen is passed as $true exactly when --no-open was given (the hook opens the browser, not the
 #     command). If the function does not exist (F-03c not there yet) the command does not crash: it says
-#     the report is not available in this version and ends with exit code 1.
+#     exactly "The report is not available in this version." and ends with exit code 1. (A hook that exists
+#     but throws gives another message and exit code 1 as well.)
 #
 #   Options: --json is JSON only when the output is redirected (Test-CheckOutputAsJson); on a console it
 #   shows the normal summary. --report asks for the HTML report. --no-open is accepted everywhere, it only
@@ -81,8 +82,12 @@
 #   Arrays stay JSON arrays with one element and with none.
 #   NOT in the result: user, computer or domain name, IP addresses, volume labels, file system, serials,
 #   startup command lines, the descriptions of hits, package names/targets, raw exception messages, search roots.
-#   Paths: below the profile as `~\...`; below another user's folder `C:\Users\<user>\...`; a UNC path
-#   `\\<host>\share\...`; anything else (C:\Windows\Temp\x) unchanged.
+#   Paths (normalized first: a leading `\\?\` or `\\?\UNC\` is dropped, `/` counts as `\`): below the profile
+#   as `~\...`; below another user's folder `C:\Users\<user>\...`; a network path `\\<host>\<share>\...`
+#   (host and share are always replaced); EVERY path part equal to $env:USERNAME (any case) becomes `<user>`
+#   (e.g. a redirected %APPDATA% on `\\srv01\home$\Alice\AppData` -> `\\<host>\<share>\<user>\AppData`);
+#   anything else (C:\Windows\Temp\x) unchanged. Neither user nor computer name appears in the JSON, the
+#   console or the object handed to the report hook.
 #   Reason texts come from a fixed list only: 'external tool', 'needs administrator', 'time limit',
 #   'incomplete', 'not available', 'error'. A source text of 'external tool' or 'needs administrator' is kept,
 #   one starting with 'error' becomes 'error', every other text becomes 'not available'.
@@ -128,8 +133,14 @@ BeforeAll {
             Set-Item -Path "function:script:$name" -Value { param() }
         }
     }
-    # The report hook belongs to F-03c; a stub lets the tests mock it.
-    function script:Invoke-SweeprCheckReport { param($Result, [switch]$NoOpen) throw 'stub of the F-03c hook' }
+    # The report hook belongs to F-03c. A stub (global, so that it can be removed again) lets the tests mock it;
+    # Initialize-CheckEnvironment defines it, Restore-CheckEnvironment removes it.
+    function script:Remove-HookStub {
+        # Not Remove-Item: that cmdlet is a throwing mock inside the tests.
+        if (Test-Path -Path 'Function:\Invoke-SweeprCheckReport') {
+            $ExecutionContext.SessionState.InvokeProvider.Item.Remove('Function:\Invoke-SweeprCheckReport', $false)
+        }
+    }
 
     # Every cmdlet that changes the PC, the profile, the log or the network, or that asks the user. All throw.
     $script:ChangingCommands = @(
@@ -397,7 +408,9 @@ BeforeAll {
             if ($script:Fail.Projects) { throw $script:Fail.Projects }
             return $script:PurgeData
         }
+        Remove-HookStub
         if (-not $SkipHook) {
+            function global:Invoke-SweeprCheckReport { param($Result, [switch]$NoOpen) throw 'stub of the F-03c hook' }
             Mock Invoke-SweeprCheckReport {
                 $script:Order.Add('Report')
                 $script:Seen.Add("Report dry=$(Test-DryRunMode) oplog=$($env:SWEEPR_NO_OPLOG)")
@@ -411,6 +424,7 @@ BeforeAll {
     }
 
     function script:Restore-CheckEnvironment {
+        Remove-HookStub
         Set-DryRunMode -Enabled $false
         $env:USERPROFILE = $script:Saved.UserProfile
         $env:USERNAME = $script:Saved.UserName
@@ -885,7 +899,7 @@ Describe 'sw check result' {
         ($paths | Where-Object { $_ -like '*Downloads\y' }) | Should -Be 'C:\Users\<user>\Downloads\y'
     }
 
-    It 'Hides the name of another user and of a network host in a path' {
+    It 'Hides the name of another user and the host and share of a network path' {
         $script:CleanData = New-CleanPreview -Hits @(
             (New-Hit 'User essentials' 'x' 'C:\Users\Bob\AppData\Local\Temp\b' 3MB)
             (New-Hit 'User essentials' 'x' '\\fileserver01\share\cache\c' 2MB)
@@ -895,7 +909,44 @@ Describe 'sw check result' {
         $r.Raw | Should -Not -Match 'fileserver01'
         $paths = @($r.Json.Sections.Clean.Top | ForEach-Object { $_.Path })
         $paths | Should -Contain 'C:\Users\<user>\AppData\Local\Temp\b'
-        $paths | Should -Contain '\\<host>\share\cache\c'
+        $paths | Should -Contain '\\<host>\<share>\cache\c'
+    }
+
+    It 'Normalizes <Name>' -ForEach @(
+        @{ Name = 'a redirected AppData on a file server'; In = '\\srv01\home$\Alice\AppData\Roaming\Slack\Cache'; Out = '\\<host>\<share>\<user>\AppData\Roaming\Slack\Cache' }
+        @{ Name = 'a user name part in any case, anywhere'; In = 'D:\Data\aLiCe\Cache'; Out = 'D:\Data\<user>\Cache' }
+        @{ Name = 'a part that only starts with the user name'; In = 'D:\Data\Alice2\Cache'; Out = 'D:\Data\Alice2\Cache' }
+        @{ Name = 'an extended-length local path of the profile'; In = '\\?\C:\Users\Alice\AppData\Local\x'; Out = '~\AppData\Local\x' }
+        @{ Name = 'an extended-length local path of another user'; In = '\\?\C:\Users\Bob\AppData\Local\x'; Out = 'C:\Users\<user>\AppData\Local\x' }
+        @{ Name = 'an extended-length network path'; In = '\\?\UNC\srv\share\Alice\Roaming\y'; Out = '\\<host>\<share>\<user>\Roaming\y' }
+        @{ Name = 'a profile path with forward slashes'; In = 'C:/Users/Alice/AppData/z'; Out = '~\AppData\z' }
+        @{ Name = 'another user with forward slashes'; In = 'C:/Users/Bob/AppData/z'; Out = 'C:\Users\<user>\AppData\z' }
+        @{ Name = 'a network path with forward slashes'; In = '//srv/share/Alice/z'; Out = '\\<host>\<share>\<user>\z' }
+    ) {
+        $script:CleanData = New-CleanPreview -Hits @((New-Hit 'User essentials' 'x' $In 3MB))
+        $r = Get-CheckJson
+        @($r.Json.Sections.Clean.Top)[0].Path | Should -BeExactly $Out
+    }
+
+    It 'Keeps user and computer names out of the JSON, the console and the report hook, whatever the path' {
+        $paths = @(
+            '\\fileserver01\home$\Alice\AppData\Roaming\Slack\Cache'
+            '\\?\C:\Users\Bob\AppData\Local\x'
+            '\\?\UNC\srv\share\Alice\y'
+            'C:/Users/Bob/AppData/z'
+            'C:\Users\Alice\AppData\Local\Temp\a'
+        )
+        $script:CleanData = New-CleanPreview -Hits @(foreach ($n in 0..($paths.Count - 1)) { New-Hit 'User essentials' 'x' $paths[$n] ((10 + $n) * 1MB) })
+        $json = Get-CheckJson -Params @{ Json = $true; Report = $true }
+        $console = Invoke-Check -Params @{ Report = $true }
+        $hook = $script:HookArgs.Result | ConvertTo-Json -Depth 10
+        foreach ($text in @($json.Raw, $console.Text, $hook)) {
+            $text | Should -Not -Match 'Alice'
+            $text | Should -Not -Match 'Bob'
+            $text | Should -Not -Match 'fileserver01'
+            $text | Should -Not -Match 'srv'
+            $text | Should -Not -Match 'CONTOSO'
+        }
     }
 
     It 'Sums the clean preview and groups it by cleanup section in run order' {
@@ -1209,28 +1260,32 @@ Describe 'sw check --report' {
 }
 
 Describe 'sw check without the report hook' {
-    BeforeAll {
-        $script:HookBackup = (Get-Item -Path 'function:Invoke-SweeprCheckReport').ScriptBlock
-        Remove-Item -Path 'function:script:Invoke-SweeprCheckReport' -ErrorAction SilentlyContinue
-    }
-    BeforeEach {
-        Initialize-CheckEnvironment -SkipHook
-    }
+    BeforeEach { Initialize-CheckEnvironment -SkipHook }
     AfterEach { Restore-CheckEnvironment }
-    AfterAll {
-        Set-Item -Path 'function:script:Invoke-SweeprCheckReport' -Value $script:HookBackup
+
+    It 'Really has no hook function' {
+        Get-Command -Name Invoke-SweeprCheckReport -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 
-    It 'Does not crash, says the report is not available and ends with exit code 1' {
+    It 'Does not crash, says the report is not available in this version and ends with exit code 1' {
         $run = Invoke-Check -Params @{ Report = $true }
         $run.Exit | Should -Be 1
         $run.Host | Should -Match 'Cleanup potential:'
-        $run.Host | Should -Match '(?i)report is not available'
+        $run.Host | Should -Match ([regex]::Escape('The report is not available in this version.'))
+        $run.Host | Should -Not -Match 'could not be created'
+    }
+
+    It 'Says nothing about the report in JSON mode and still ends with exit code 1' {
+        $run = Invoke-Check -Params @{ Json = $true; Report = $true } -AsJson
+        $run.Exit | Should -Be 1
+        { $run.Raw | ConvertFrom-Json } | Should -Not -Throw
+        Should -Invoke Write-Host -Times 0 -Exactly
     }
 
     It 'Does not mind the missing hook without --report' {
         $run = Invoke-Check
         $run.Exit | Should -Be 0
+        $run.Host | Should -Not -Match 'not available in this version'
     }
 }
 
