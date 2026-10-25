@@ -881,6 +881,7 @@ function Get-SweeprInstallNestedFiles {
         "scripts\test.ps1"
         "scripts\write-checksums.ps1"
         "tests\CheckCleanPreview.Tests.ps1"
+        "tests\CheckCommand.Tests.ps1"
         "tests\CheckHealth.Tests.ps1"
         "tests\CheckPurgePreview.Tests.ps1"
         "tests\CheckRegression.Tests.ps1"
