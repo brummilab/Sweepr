@@ -207,6 +207,8 @@ Describe 'Package manager update without Git' {
 
 Describe 'Release source equivalence' {
     AfterEach {
+        # Restore the caller's Git environment cleared in BeforeEach.
+        foreach ($entry in $script:SavedGitEnv.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value) }
         # Git marks loose objects read-only; Pester 5.7 cannot remove those files.
         # Restore attributes only in this test's own object store before teardown.
         if ($script:SourceFixture) {
@@ -219,9 +221,16 @@ Describe 'Release source equivalence' {
         }
     }
     BeforeEach {
+        # A caller (CI, cloud sessions) may export GIT_* variables such as GIT_CONFIG_COUNT;
+        # the code under test rightly refuses those, so the fixture starts from a clean Git environment.
+        $script:SavedGitEnv = @{}
+        foreach ($item in @(Get-ChildItem Env: | Where-Object { $_.Name -like 'GIT_*' })) {
+            $script:SavedGitEnv[$item.Name] = $item.Value
+            [Environment]::SetEnvironmentVariable($item.Name, $null)
+        }
         $script:SourceFixture = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path (Join-Path $script:SourceFixture 'cmd\analyze') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $script:SourceFixture 'cmd\analyze\main.go') -Value 'package main'
+        New-Item -ItemType Directory -Path (Join-Path $script:SourceFixture 'cmd/analyze') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:SourceFixture 'cmd/analyze/main.go') -Value 'package main'
         Set-Content -LiteralPath (Join-Path $script:SourceFixture 'go.mod') -Value 'module fixture'
         Set-Content -LiteralPath (Join-Path $script:SourceFixture 'go.sum') -Value ''
         & git init --quiet $script:SourceFixture
@@ -247,11 +256,11 @@ Describe 'Release source equivalence' {
     }
     It 'Refuses source modifications, untracked compilation units and missing tags' {
         Test-TuiSourceMatchesRelease -WindowsDir $script:SourceFixture -Name analyze -Version '9.9.8' | Should -BeFalse
-        $extra = Join-Path $script:SourceFixture 'cmd\analyze\extra.go'
+        $extra = Join-Path $script:SourceFixture 'cmd/analyze/extra.go'
         Set-Content -LiteralPath $extra -Value 'package main'
         Test-TuiSourceMatchesRelease -WindowsDir $script:SourceFixture -Name analyze -Version '9.9.9' | Should -BeFalse
         Remove-Item -LiteralPath $extra
-        Add-Content -LiteralPath (Join-Path $script:SourceFixture 'cmd\analyze\main.go') -Value '// changed'
+        Add-Content -LiteralPath (Join-Path $script:SourceFixture 'cmd/analyze/main.go') -Value '// changed'
         Test-TuiSourceMatchesRelease -WindowsDir $script:SourceFixture -Name analyze -Version '9.9.9' | Should -BeFalse
     }
 }
