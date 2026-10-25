@@ -15,6 +15,7 @@
 - **Speicheranalyse** (`sw analyze`): interaktiver Disk-Explorer (TUI), große Dateien finden
 - **Live-Monitoring** (`sw status`): CPU, RAM, Disk, Netzwerk, Prozesse in Echtzeit
 - **Projekt-Purge** (`sw purge`): alte Build-Artefakte (`node_modules`, `bin/obj`, …) entfernen
+- **Windows entschlacken** (`sw features`): vorinstallierte Microsoft-Apps und optionale Windows-Features aus einer geprüften Liste entfernen bzw. abschalten
 - **App-Inspektion mit REA** (`sw inspect`): nur lesend in eine installierte App schauen – Laufzeit (Electron, .NET, Unity, Godot, Unreal), Code-Signatur, importierte DLLs, .NET-Metadaten
 
 ## Schnellstart
@@ -46,6 +47,7 @@ sw analyze                   # Disk-Explorer
 sw status                    # Live-Systemmonitor
 sw purge                     # Projekt-Build-Artefakte entfernen
 sw inspect <App>             # App mit REA untersuchen (nur lesend)
+sw features                  # Vorinstallierte Apps / Windows-Features entfernen
 
 sw update                    # Sweepr aktualisieren (git pull vom main-Branch)
 sw remove                    # Sweepr vom PC entfernen
@@ -60,6 +62,8 @@ sw clean --dry-run
 sw uninstall --dry-run
 sw optimize --dry-run
 sw purge --dry-run
+sw features --dry-run        # Zeigt die exakten Befehle, ändert nichts
+sw features --list           # Nur auflisten (JSON, wenn umgeleitet)
 sw history                   # Was wurde wann entfernt?
 sw history --json
 
@@ -116,6 +120,16 @@ Was dabei passiert:
 Grenzen: REA liest nur Header und Metadaten, startet die App nicht und **prüft Signaturen nicht kryptografisch** (dafür `Get-AuthenticodeSignature` verwenden). Eine fehlende eingebettete Signatur heißt nicht zwingend „unsigniert“ (Katalog-Signaturen). `sw inspect` löscht oder ändert nie etwas.
 
 Einen eigenen REA-Pfad kann man mit der Umgebungsvariable `SWEEPR_REA_COMMAND` setzen.
+
+## Windows entschlacken (`sw features`)
+
+`sw features` bietet nur Einträge aus einer **geprüften Liste** an (vorinstallierte Microsoft-Apps wie Wetter, News, Solitaire, Xbox-Apps sowie optionale Features wie PowerShell 2.0, XPS-Dienste, Internet Explorer 11, Windows Media Player). Was Windows zum Laufen braucht (Store, App Installer, Sicherheit, Edge, WebView2, Laufzeiten, Hyper-V, WSL, SMB, .NET), wird nie angeboten.
+
+- Menü mit Pfeiltasten, Leertaste wählt, Enter bestätigt, Esc/Q bricht ab. **Nichts ist vorausgewählt**; vor dem Entfernen fragt Sweepr `(y/N)`.
+- Apps werden für den aktuellen Benutzer entfernt (ohne Administrator). `--all-users-future` entfernt sie zusätzlich für künftige Benutzer (Administrator nötig).
+- Optionale Features werden nur abgeschaltet (nicht gelöscht) und brauchen eine Administrator-PowerShell. Sweepr fordert keine Rechte an und startet nie neu; braucht Windows einen Neustart, steht am Ende „Restart Windows to finish.“
+- Direkt vor dem Entfernen wird jeder Eintrag noch einmal geprüft; jede Aktion steht im Protokoll (`sw history`).
+- Rückgängig: Apps aus dem Microsoft Store neu installieren, Features unter „Windows-Features aktivieren oder deaktivieren“ wieder einschalten. `sw features --restore` ist in Arbeit.
 
 ## Sicherheit
 
