@@ -11,7 +11,11 @@ param(
     [switch]$CreateShortcut,
     [switch]$Uninstall,
     [switch]$Force,
-    [switch]$ShowHelp
+    [switch]$ShowHelp,
+    # Keep the two newest parameters last: the legacy decoder below depends on
+    # the positions of the older ones.
+    [string]$Components,
+    [switch]$NoPrompt
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +67,8 @@ $resolvedInvocation = Resolve-InstallInvocation `
 $InstallDir = $resolvedInvocation.InstallDir
 $AddToPath = [switch]$resolvedInvocation.AddToPath
 $CreateShortcut = [switch]$resolvedInvocation.CreateShortcut
+# Tools prepared up front by Install-Sweepr; Main narrows it to the selection.
+$script:InstallTools = @("analyze", "status")
 $script:CoreDir = Join-Path $script:SourceDir "lib\core"
 # The Start menu entry names the CLI explicitly; a plain "Sweepr" may belong to another app.
 $script:ShortcutName = "Sweepr CLI"
@@ -240,6 +246,12 @@ function Show-InstallerHelp {
     Write-Host ""
     Write-Host "    $($c.Cyan)-CreateShortcut$($c.NC)      Create Start Menu shortcut"
     Write-Host ""
+    Write-Host "    $($c.Cyan)-Components <list>$($c.NC)   Comma separated components to install:"
+    Write-Host "                         path, shortcut, analyze, status (core is always installed)"
+    Write-Host "                         Overrides the SWEEPR_COMPONENTS environment variable and the menu"
+    Write-Host ""
+    Write-Host "    $($c.Cyan)-NoPrompt$($c.NC)            Never show the component menu"
+    Write-Host ""
     Write-Host "    $($c.Cyan)-Uninstall$($c.NC)           Remove Sweepr from system"
     Write-Host ""
     Write-Host "    $($c.Cyan)-Force$($c.NC)               Overwrite existing installation"
@@ -259,6 +271,9 @@ function Show-InstallerHelp {
     Write-Host ""
     Write-Host "    $($c.Gray)# Full installation$($c.NC)"
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath -CreateShortcut"
+    Write-Host ""
+    Write-Host "    $($c.Gray)# Choose components without the menu (or set SWEEPR_COMPONENTS)$($c.NC)"
+    Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Components path,status -NoPrompt"
     Write-Host ""
     Write-Host "    $($c.Gray)# Uninstall$($c.NC)"
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall"
@@ -382,24 +397,144 @@ function Remove-StartMenuShortcut {
 }
 
 # ============================================================================
+# Component selection
+# ============================================================================
+
+$script:InstallComponentNames = @("analyze", "path", "shortcut", "status")
+
+function ConvertTo-InstallComponents {
+    param([string]$Text)
+
+    $names = @()
+    foreach ($part in @($Text -split "[,\s]+")) {
+        if ($part) { $names += $part.ToLowerInvariant() }
+    }
+    $allowed = @("analyze", "path", "shortcut", "status")
+    foreach ($name in $names) {
+        if ($allowed -notcontains $name) {
+            throw "Unknown component '$name'. Allowed components: $($allowed -join ', ')"
+        }
+    }
+    return @($names | Sort-Object -Unique)
+}
+
+function Test-InstallInteractive {
+    param(
+        [bool]$NoPrompt,
+        [bool]$Uninstall,
+        [bool]$InputRedirected = [Console]::IsInputRedirected,
+        [bool]$OutputRedirected = [Console]::IsOutputRedirected,
+        [bool]$UserInteractive = [Environment]::UserInteractive
+    )
+
+    # The menu reads single keys, so it needs a real console on both sides.
+    return ((-not $NoPrompt) -and (-not $Uninstall) -and (-not $InputRedirected) -and
+        (-not $OutputRedirected) -and $UserInteractive)
+}
+
+# Separate function so tests can replace the key source.
+function Read-InstallMenuKey {
+    return [Console]::ReadKey($true)
+}
+
+function Show-InstallComponentMenu {
+    param([string[]]$Default)
+
+    $items = @(
+        @{ Name = "path"; Text = "Add Sweepr to your user PATH" },
+        @{ Name = "shortcut"; Text = "Create a Start Menu shortcut" },
+        @{ Name = "analyze"; Text = "Prepare the disk explorer (analyze)" },
+        @{ Name = "status"; Text = "Prepare the system monitor (status)" }
+    )
+    $checked = @{}
+    foreach ($item in $items) { $checked[$item.Name] = (@($Default) -contains $item.Name) }
+    $index = 0
+
+    while ($true) {
+        Write-Host ""
+        Write-Host "  Select components (the core is always installed):"
+        Write-Host "  Up/Down = move, Space = toggle, Enter = install, Esc or Q = cancel"
+        Write-Host ""
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $mark = if ($checked[$items[$i].Name]) { "[x]" } else { "[ ]" }
+            $pointer = if ($i -eq $index) { ">" } else { " " }
+            Write-Host ("  {0} {1} {2,-9} {3}" -f $pointer, $mark, $items[$i].Name, $items[$i].Text)
+        }
+
+        $key = Read-InstallMenuKey
+        switch ($key.Key) {
+            "UpArrow" { if ($index -gt 0) { $index-- } }
+            "DownArrow" { if ($index -lt $items.Count - 1) { $index++ } }
+            "Spacebar" { $checked[$items[$index].Name] = -not $checked[$items[$index].Name] }
+            "Enter" {
+                $selected = @($items | Where-Object { $checked[$_.Name] } | ForEach-Object { $_.Name } | Sort-Object)
+                # The comma keeps an empty selection an empty array instead of $null.
+                return , $selected
+            }
+            "Escape" { return $null }
+            "Q" { return $null }
+        }
+    }
+}
+
+function Get-InstallComponentSelection {
+    param(
+        [string]$Components,
+        [string]$EnvComponents,
+        [bool]$AddToPath,
+        [bool]$CreateShortcut,
+        [bool]$Interactive
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Components)) {
+        return , @(ConvertTo-InstallComponents -Text $Components)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($EnvComponents)) {
+        return , @(ConvertTo-InstallComponents -Text $EnvComponents)
+    }
+
+    $default = @("analyze", "status")
+    if ($AddToPath) { $default += "path" }
+    if ($CreateShortcut) { $default += "shortcut" }
+    $default = @($default | Sort-Object)
+
+    if ($Interactive) {
+        $chosen = Show-InstallComponentMenu -Default $default
+        if ($null -eq $chosen) { return $null }
+        return , @($chosen)
+    }
+    return , $default
+}
+
+# ============================================================================
 # Install
 # ============================================================================
 
 function Ensure-OptionalTuiTools {
-    param([string]$RootDir)
+    param(
+        [string]$RootDir,
+        # Only these tools are prepared; others load or build on first use.
+        [string[]]$Tools = @("analyze", "status")
+    )
+
+    $wanted = @($Tools | Where-Object { $_ })
+    if ($wanted.Count -eq 0) {
+        Write-Info "Skipping optional TUI tools (not selected)."
+        return
+    }
 
     Write-Info "Ensuring optional TUI tools..."
 
-    $tools = @(
+    $catalog = @(
         @{ Name = "analyze"; Output = "bin\analyze.exe"; Source = "./cmd/analyze/" },
         @{ Name = "status"; Output = "bin\status.exe"; Source = "./cmd/status/" }
-    )
+    ) | Where-Object { $wanted -contains $_.Name }
 
     $version = Get-SweeprVersionFromScriptFile -WindowsDir $RootDir
     $refreshSourceTools = Test-Path -LiteralPath (Join-Path $RootDir ".git")
     $failedTools = @()
 
-    foreach ($tool in $tools) {
+    foreach ($tool in $catalog) {
         $destination = Join-Path $RootDir $tool.Output
         $hadExisting = Test-Path -LiteralPath $destination
         try {
@@ -510,7 +645,11 @@ function Install-Sweepr {
     }
 
     Write-Host ""
-    Ensure-OptionalTuiTools -RootDir $InstallDir
+    $selectedTools = @("analyze", "status")
+    if (Get-Variable -Name InstallTools -Scope Script -ErrorAction SilentlyContinue) {
+        $selectedTools = @($script:InstallTools)
+    }
+    Ensure-OptionalTuiTools -RootDir $InstallDir -Tools $selectedTools
 
     # Pass native arguments to -File, never interpolate them into PowerShell
     # source. Expand the invocation before ending the self-removing batch.
@@ -720,6 +859,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\History.Tests.ps1"
         "tests\Inspect.Tests.ps1"
         "tests\Install.Tests.ps1"
+        "tests\InstallComponents.Tests.ps1"
         "tests\InstallLifecycle.Tests.ps1"
         "tests\Optimize.Tests.ps1"
         "tests\Protection.Tests.ps1"
@@ -977,6 +1117,30 @@ function Main {
         $ok = Uninstall-Sweepr
     }
     else {
+        # Decide before anything is copied: a bad name or a cancelled menu
+        # must leave the machine untouched.
+        $interactive = Test-InstallInteractive -NoPrompt ([bool]$NoPrompt) -Uninstall $false
+        try {
+            $selection = Get-InstallComponentSelection `
+            -Components $Components `
+            -EnvComponents $env:SWEEPR_COMPONENTS `
+            -AddToPath ([bool]$AddToPath) `
+            -CreateShortcut ([bool]$CreateShortcut) `
+            -Interactive $interactive
+        }
+        catch {
+            Write-SweeprError "$($_.Exception.Message)"
+            exit 2
+        }
+        if ($null -eq $selection) {
+            Write-Host ""
+            Write-Info "Installation cancelled. Nothing was installed."
+            exit 1
+        }
+        $selection = @($selection)
+        $script:AddToPath = [switch]($selection -contains "path")
+        $script:CreateShortcut = [switch]($selection -contains "shortcut")
+        $script:InstallTools = @($selection | Where-Object { $_ -eq "analyze" -or $_ -eq "status" })
         $ok = Install-Sweepr
     }
 

@@ -296,6 +296,8 @@ else {
 
 $installParams = @{
     InstallDir = $windowsDir
+    # An update must never open the component menu.
+    NoPrompt   = $true
 }
 
 if (Test-InstallDirOnUserPath -Path $windowsDir) {
