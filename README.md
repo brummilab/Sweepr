@@ -72,12 +72,12 @@ Get-FileHash .\sweepr-<version>-x64.zip -Algorithm SHA256   # mit SHA256SUMS.txt
 | `analyze` | `analyze.exe` bei der Installation bereitstellen |
 | `status` | `status.exe` bei der Installation bereitstellen |
 
-Nicht gewählte TUI-Tools werden nicht vorab bereitgestellt; sie werden beim ersten `sw analyze` bzw. `sw status` wie sonst auch nachgeladen oder gebaut.
+Die Auswahl von `analyze` und `status` wirkt bei Quell-Installationen: Nicht gewählte TUI-Tools werden nicht vorab bereitgestellt, sondern beim ersten `sw analyze` bzw. `sw status` nachgeladen oder gebaut. Install-ZIP und portables ZIP bringen beide Tools in `bin\` schon mit; der Installer kopiert sie in jedem Fall mit.
 
 Die Auswahl entscheidet die erste zutreffende Regel:
 
-1. `-Components path,shortcut,analyze,status` (kommagetrennt, Groß-/Kleinschreibung egal): genau diese Komponenten. `-AddToPath` und `-CreateShortcut` zählen dann nicht.
-2. Umgebungsvariable `SWEEPR_COMPONENTS` (gleiches Format): genau diese Komponenten.
+1. `-Components path,shortcut,analyze,status` (kommagetrennt, Groß-/Kleinschreibung egal): genau diese Komponenten.
+2. Umgebungsvariable `SWEEPR_COMPONENTS` (gleiches Format): genau diese Komponenten. Bei Regel 1 und 2 zählen `-AddToPath` und `-CreateShortcut` nicht.
 3. Echte Konsole (Ein- und Ausgabe nicht umgeleitet) und kein `-NoPrompt`: ein Menü. Pfeil hoch/runter bewegt, Leertaste schaltet um, Enter installiert, Esc oder Q bricht ab (Meldung „Installation cancelled“, nichts wird installiert, Exit-Code 3).
 4. Sonst der Standard: `analyze` und `status`, dazu `path` mit `-AddToPath` und `shortcut` mit `-CreateShortcut`.
 
@@ -92,7 +92,7 @@ $env:SWEEPR_COMPONENTS = "path,status"
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Die Auswahl wird nicht gespeichert. `sw update` startet den Installer mit `-NoPrompt` (nie ein Menü) und behält den PATH-Eintrag, wenn der Ordner schon im Benutzer-PATH steht. Bricht man in `quick-install.ps1` das Menü ab, meldet es „Installation cancelled“ (Exit-Code 1) und entfernt den in diesem Lauf frisch geklonten Ordner wieder; ein schon vorhandener Ordner bleibt unangetastet.
+Die Auswahl wird nicht gespeichert. `sw update` startet den Installer mit `-NoPrompt` (nie ein Menü) und behält den PATH-Eintrag, wenn der Ordner schon im Benutzer-PATH steht. Bricht man in `quick-install.ps1` das Menü ab, meldet es „Installation cancelled“ (Exit-Code 1) und entfernt den in diesem Lauf frisch geklonten Ordner wieder; ein schon vorhandener Ordner wird nicht gelöscht. Eine vorhandene Quell-Installation wurde allerdings schon vor dem Installer per `git fetch` und `git pull --ff-only` aktualisiert.
 
 ## Portable Version
 
@@ -233,7 +233,7 @@ Sicherheitslücken bitte privat über [GitHub Security Advisories](https://githu
 - **`SWEEPR_DATA_DIR`** gilt vor dem Portable-Modus und vor dem Profil. Ein relativer Pfad wird gegen das aktuelle Verzeichnis aufgelöst. Ist der Ordner nicht beschreibbar, bricht Sweepr ab, statt ins Profil auszuweichen. `sw remove` und `install.ps1 -Uninstall` entfernen nur die Installation, nennen den Datenordner und löschen ihn nie.
 - Der aktive Daten- und Cache-Ordner steht automatisch unter dem Schutz der Whitelist, auch wenn er in einem Bereinigungsziel liegt.
 
-Die Vorlagen für winget/Scoop (`packaging/`) und die Release-/Signatur-Skripte (`scripts/`) sind vorbereitet, aber noch nicht veröffentlicht.
+Die Vorlagen für winget/Scoop (`packaging/`) sind vorbereitet, aber noch nicht veröffentlicht. Die Releases sind noch nicht code-signiert.
 
 ## Entwicklung
 
