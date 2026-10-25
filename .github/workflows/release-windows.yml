@@ -1,0 +1,233 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-windows'  # Windows-specific releases
+      - 'V*.*.*-windows'  # Windows-specific releases (uppercase)
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+# The workflow only creates a draft. The maintainer signs the assets with the
+# code-signing certificate (scripts/sign-release.ps1), uploads them and
+# publishes the draft; see RELEASE.md. A Windows release must never become the
+# repository's "latest" release: the macOS installer and `fm update` resolve
+# stable versions through releases/latest, so make_latest stays false.
+permissions:
+  contents: write  # Required for creating releases
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows Release Artifacts
+    runs-on: windows-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      
+      - name: Setup PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+          Write-Host "Go Version: $(go version)"
+      
+      - name: Extract version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            $version = "${{ github.event.inputs.version }}"
+          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref }}" -replace '^refs/tags/[Vv]', ''
+            $version = $version -replace '-windows$', ''
+          } else {
+            $version = (Get-Content VERSION -Raw).Trim()
+          }
+          if (-not $version) {
+            Write-Error "Could not detect version"
+            exit 1
+          }
+          # 1.31.0 is a stable release; 1.31.0-beta.1 stays a prerelease.
+          $prerelease = if ($version -match '-') { "true" } else { "false" }
+          Write-Host "Version: $version (prerelease: $prerelease)"
+          "VERSION=$version" >> $env:GITHUB_OUTPUT
+          "PRERELEASE=$prerelease" >> $env:GITHUB_OUTPUT
+
+      - name: Verify tag version matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path VERSION)) {
+              throw "VERSION file is missing; the release archive would ship without a version."
+          }
+          $declared = (Get-Content VERSION -Raw).Trim()
+          if ($declared -ne $env:TAG_VERSION) {
+              Write-Host "::error file=VERSION::Tag version $($env:TAG_VERSION) does not match VERSION '$declared'. The archive, its VERSION file and fm --version would report the wrong version."
+              Write-Host "Next action: bump VERSION and lib/core/version.ps1, commit, delete the pushed tag with 'git push origin :refs/tags/<tag>', then tag and push the new commit."
+              exit 1
+          }
+          Write-Host "Tag version $($env:TAG_VERSION) matches VERSION"
+
+      - name: Cache Pester
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Same pinned Pester as Validation; the release gate must run the
+          # suite under both Windows PowerShell 5.1 and pwsh 7, not pwsh alone.
+          path: |
+            ~\Documents\PowerShell\Modules
+            ~\Documents\WindowsPowerShell\Modules
+          key: ${{ runner.os }}-pester-6.2.0
+
+      - name: Install Pester (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $preferred = '6.2.0'
+          $fallback = '5.7.1'
+          $have = Get-Module -ListAvailable -Name Pester |
+              Where-Object { $_.Version.ToString() -eq $preferred }
+          if (-not $have) {
+              try {
+                  Install-Module -Name Pester -RequiredVersion $preferred -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+              }
+              catch {
+                  Write-Host "Pester $preferred is unavailable; falling back to $fallback."
+                  Install-Module -Name Pester -RequiredVersion $fallback -Force -SkipPublisherCheck -Scope CurrentUser
+              }
+          }
+          Import-Module Pester -MinimumVersion '5.0.0'
+          Write-Host "Pester $((Get-Module Pester).Version) ready"
+
+      - name: Install Pester (PowerShell 7)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $preferred = '6.2.0'
+          $fallback = '5.7.1'
+          $have = Get-Module -ListAvailable -Name Pester |
+              Where-Object { $_.Version.ToString() -eq $preferred }
+          if (-not $have) {
+              try {
+                  Install-Module -Name Pester -RequiredVersion $preferred -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+              }
+              catch {
+                  Write-Host "Pester $preferred is unavailable; falling back to $fallback."
+                  Install-Module -Name Pester -RequiredVersion $fallback -Force -SkipPublisherCheck -Scope CurrentUser
+              }
+          }
+          Import-Module Pester -MinimumVersion '5.0.0'
+          Write-Host "Pester $((Get-Module Pester).Version) ready"
+
+      - name: Run tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          & ./scripts/test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run tests (PowerShell 7)
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          & ./scripts/test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      
+
+      - name: Build release artifacts (ZIP)
+        shell: pwsh
+        run: |
+          & scripts\build-release.ps1 -Version ${{ steps.version.outputs.VERSION }}
+
+      - name: List release artifacts
+        shell: pwsh
+        run: |
+          Write-Host "Release artifacts:"
+          Get-ChildItem release\ | ForEach-Object {
+            $size = if ($_.PSIsContainer) { "-" } else { "$([math]::Round($_.Length / 1MB, 2)) MB" }
+            Write-Host "  $($_.Name) - $size"
+          }
+      
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: freemole-${{ steps.version.outputs.VERSION }}-x64-zip
+          path: release/freemole-${{ steps.version.outputs.VERSION }}-x64.zip
+          if-no-files-found: error
+          retention-days: 1
+      
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: checksums
+          path: release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload TUI binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tui-binaries
+          path: |
+            release/analyze-windows-x64.exe
+            release/status-windows-x64.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Collect release files
+        id: release_files
+        shell: pwsh
+        run: |
+          $files = @(
+            "release/freemole-${{ steps.version.outputs.VERSION }}-x64.zip",
+            "release/analyze-windows-x64.exe",
+            "release/status-windows-x64.exe",
+            "release/SHA256SUMS.txt"
+          )
+          "files<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $files | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          name: ${{ github.ref_name }}
+          files: ${{ steps.release_files.outputs.files }}
+          draft: true
+          prerelease: ${{ steps.version.outputs.PRERELEASE }}
+          make_latest: false
+          generate_release_notes: false
+          body: |
+            ## freeMole CLI for Windows ${{ steps.version.outputs.VERSION }}
+
+            Install from PowerShell:
+
+            ```powershell
+            iwr -useb https://raw.githubusercontent.com/brummilab/freeMole/main/quick-install.ps1 | iex
+            ```
+
+            Already installed? Run `fm update`.
+
+            The files below are what package managers and `fm` download. Every script and executable is code-signed, and `SHA256SUMS.txt` lists their checksums.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

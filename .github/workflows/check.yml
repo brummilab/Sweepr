@@ -1,0 +1,69 @@
+name: Check
+
+on:
+  push:
+    branches: [windows]
+  pull_request:
+    branches: [windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Format & Lint
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Formatting is checked, never committed back from CI.
+      - name: Check Go formatting
+        run: |
+          $unformatted = gofmt -l cmd
+          if ($unformatted) {
+            Write-Host "Run gofmt -w on:" -ForegroundColor Red
+            $unformatted | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "Go code is formatted" -ForegroundColor Green
+        shell: pwsh
+
+      # Advisory until the existing findings are fixed; the version is pinned so
+      # a new linter release cannot change the result on its own.
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          args: --timeout 5m ./cmd/...
+        continue-on-error: true
+
+      - name: Check PowerShell syntax
+        run: |
+          $hasErrors = $false
+          $scripts = Get-ChildItem -Path . -Recurse -Include "*.ps1"
+          foreach ($script in $scripts) {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              Write-Host "Syntax errors in $($script.Name):" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host "  $_" }
+              $hasErrors = $true
+            }
+          }
+          if ($hasErrors) { exit 1 }
+          Write-Host "All PowerShell scripts have valid syntax" -ForegroundColor Green
+        # Windows PowerShell 5.1 reads BOM-less files through the ANSI code
+        # page, so parsing here also catches non-ASCII text without a BOM.
+        shell: powershell
