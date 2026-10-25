@@ -687,12 +687,26 @@ function Get-WhitelistState {
     $prefixes = New-Object System.Collections.Generic.List[string]
     $wild = New-Object System.Collections.Generic.List[bool]
     $matchPatterns = New-Object System.Collections.Generic.List[string]
-    foreach ($pattern in $patterns) {
+    # The active data folders (config and cache) are protected like a literal
+    # whitelist directory, so Sweepr's own whitelist, operation log and caches
+    # survive a cleanup target that contains them (e.g. an override below the
+    # temp folder). Read at call time; an empty setting protects nothing. These
+    # rows are literal: brackets and wildcard characters in the folder name are
+    # never interpreted as a pattern.
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($pattern in $patterns) { $rows.Add(@{ Pattern = $pattern; Literal = $false }) }
+    foreach ($dataDir in @($script:Config.ConfigPath, $script:Config.CachePath)) {
+        if (-not [string]::IsNullOrWhiteSpace($dataDir) -and $dataDir.TrimEnd('\')) {
+            $rows.Add(@{ Pattern = $dataDir; Literal = $true })
+        }
+    }
+    foreach ($row in $rows) {
+        $pattern = $row.Pattern
         $root = $pattern.TrimEnd('\')
         $matchPatterns.Add($pattern)
         $roots.Add($root)
         $prefixes.Add($root + '\')
-        $hasWildcard = $pattern.IndexOfAny([char[]]@('*', '?', '[', '`')) -ge 0
+        $hasWildcard = (-not $row.Literal) -and ($pattern.IndexOfAny([char[]]@('*', '?', '[', '`')) -ge 0)
         $wild.Add($hasWildcard)
         # A whitelist root that is itself a junction points at a different
         # final spelling. Keep both, so the resolved candidate matches the
