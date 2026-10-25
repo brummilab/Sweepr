@@ -28,8 +28,10 @@ BeforeAll {
         "Test-SweeprInstallContentFree", "Test-SweeprInstallFolder", "Get-SweeprInstallOwners", "Test-SweeprLeftoverOwnership", "Test-UninstallEntryGone", "Get-MsiProductCode", "Split-UninstallCommand", "Test-InnoUninstaller",
         "Test-NsisUninstaller", "Test-SteamClientUninstaller", "Get-UninstallLaunch"
     )
-    Import-ScriptFunction -Script (Join-Path $script:WindowsDir "bin\purge.ps1") -Names @(
-        "Remove-ProjectArtifacts", "Get-PurgeDisplayPath", "Test-PurgeArtifactKind", "Test-PurgeArtifactContent", "Invoke-PurgeGit"
+    Import-ScriptFunction -Script (Join-Path $script:WindowsDir "bin\purge.ps1") -Names @("Remove-ProjectArtifacts")
+    # Discovery moved to lib/clean/projects.ps1 (F-03a).
+    Import-ScriptFunction -Script (Join-Path $script:LibDir "clean\projects.ps1") -Names @(
+        "Get-PurgeDisplayPath", "Test-PurgeArtifactKind", "Test-PurgeArtifactContent", "Invoke-PurgeGit"
     )
     $script:AppCacheFile = Join-Path $TestDrive "no-cache.json"
 }

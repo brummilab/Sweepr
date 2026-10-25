@@ -22,6 +22,20 @@ $script:TotalSizeCleaned = 0
 $script:FilesCleaned = 0
 $script:TotalItems = 0
 $script:OwnerCleanups = 0
+# While a list is set here, dry-run hits are collected as data (see Get-SweeprCleanPreview)
+# instead of being appended to the preview list file.
+$script:DryRunCollector = $null
+# Parts a read-only collection could not measure (tool skipped, not previewable) land here.
+$script:NotMeasuredCollector = $null
+
+# Notes a part as not measured once per name; without a collector it does nothing.
+function Add-SweeprNotMeasured {
+    param([string]$Name, [string]$Reason)
+
+    if ($null -eq $script:NotMeasuredCollector) { return }
+    if (@($script:NotMeasuredCollector.ToArray() | Where-Object { $_.Name -eq $Name }).Count -gt 0) { return }
+    $script:NotMeasuredCollector.Add([pscustomobject]@{ Section = [string]$script:CurrentSection.Name; Name = $Name; Reason = $Reason })
+}
 
 # ============================================================================
 # Safety Validation Functions
@@ -637,7 +651,9 @@ function Remove-SafeItem {
         $script:TotalItems++
         $name = if ($Description) { $Description } else { Split-Path -Leaf $Path }
         Write-DryRun "$name $($script:Colors.Yellow)($sizeHuman dry)$($script:Colors.NC)"
-        Add-DryRunListEntries -Description $name -Paths @($Path)
+        $fileCount = 1
+        if ($null -ne $validatedTree) { $fileCount = @($validatedTree['Items'] | Where-Object { $null -ne $_ -and -not $_.PSIsContainer }).Count }
+        Add-DryRunListEntries -Description $name -Paths @($Path) -SizeBytes @([long]$size) -FileCounts @($fileCount)
         Set-SectionActivity
         return $true
     }
@@ -696,6 +712,8 @@ function Remove-SafeItems {
     $removedCount = 0
     $failedCount = 0
     $dryRunPaths = New-Object System.Collections.Generic.List[string]
+    $dryRunSizes = New-Object System.Collections.Generic.List[long]
+    $dryRunCounts = New-Object System.Collections.Generic.List[int]
     # One whitelist read for the batch, not several per path.
     $whitelistState = Get-WhitelistState
     
@@ -732,6 +750,8 @@ function Remove-SafeItems {
             $totalSize += $size
             $removedCount++
             $dryRunPaths.Add($path)
+            $dryRunSizes.Add([long]$size)
+            $dryRunCounts.Add($(if ($null -ne $validatedTree) { @($validatedTree['Items'] | Where-Object { $null -ne $_ -and -not $_.PSIsContainer }).Count } else { 1 }))
             continue
         }
         
@@ -773,7 +793,7 @@ function Remove-SafeItems {
         $noun = if ($removedCount -eq 1) { 'item' } else { 'items' }
         if ($script:SweeprDryRunMode) {
             Write-DryRun "$Description $($script:Colors.Yellow)($removedCount $noun, $sizeHuman dry)$($script:Colors.NC)"
-            Add-DryRunListEntries -Description $Description -Paths $dryRunPaths.ToArray()
+            Add-DryRunListEntries -Description $Description -Paths $dryRunPaths.ToArray() -SizeBytes $dryRunSizes.ToArray() -FileCounts $dryRunCounts.ToArray()
         }
         else {
             Write-Success "$Description $($script:Colors.Green)($removedCount $noun, $sizeHuman)$($script:Colors.NC)"
@@ -783,17 +803,33 @@ function Remove-SafeItems {
 }
 
 # Appends a dry run's paths to the preview list clean.ps1 announces. Commands
-# that set no list (purge, uninstall) write nothing.
+# that set no list (purge, uninstall) write nothing. With a collector set, the
+# hits (section, description, path, size, file count) go there as data and the
+# list file is left alone.
 function Add-DryRunListEntries {
     param(
         [string]$Description,
-        [string[]]$Paths
+        [string[]]$Paths,
+        [long[]]$SizeBytes = @(),
+        [int[]]$FileCounts = @()
     )
 
-    if (-not (Test-Path variable:script:ExportListFile) -or -not $script:ExportListFile) {
+    if (-not $Paths -or $Paths.Count -eq 0) {
         return
     }
-    if (-not $Paths -or $Paths.Count -eq 0) {
+    if ($null -ne $script:DryRunCollector) {
+        for ($i = 0; $i -lt $Paths.Count; $i++) {
+            $script:DryRunCollector.Add([pscustomobject]@{
+                    Section     = [string]$script:CurrentSection.Name
+                    Description = $Description
+                    Path        = $Paths[$i]
+                    SizeBytes   = [long]$(if ($i -lt $SizeBytes.Count) { $SizeBytes[$i] } else { 0 })
+                    Count       = [int]$(if ($i -lt $FileCounts.Count) { $FileCounts[$i] } else { 1 })
+                })
+        }
+        return
+    }
+    if (-not (Test-Path variable:script:ExportListFile) -or -not $script:ExportListFile) {
         return
     }
     $lines = @("# $Description") + $Paths + @("")

@@ -140,6 +140,8 @@ function Invoke-ComponentStoreCleanup {
 
     if (Test-DryRunMode) {
         Write-DryRun "Component Store cleanup (DISM)"
+        # A read-only preview cannot size this step.
+        Add-SweeprNotMeasured -Name 'Component Store cleanup' -Reason 'not previewable'
         Set-SectionActivity
         return
     }
@@ -210,6 +212,8 @@ function Invoke-DiskCleanupTool {
 
     if (Test-DryRunMode) {
         Write-DryRun "Windows Disk Cleanup tool"
+        # A read-only preview cannot size this step.
+        Add-SweeprNotMeasured -Name 'Disk Cleanup tool' -Reason 'not previewable'
         return
     }
 

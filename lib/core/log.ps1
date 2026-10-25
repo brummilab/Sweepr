@@ -244,6 +244,11 @@ $script:CurrentSection = @{
     Name     = ""
 }
 
+# A read-only data collection (Get-SweeprCleanPreview) sets a list here to learn which
+# sections ran, and may switch the spinner off.
+$script:SectionCollector = $null
+$script:SpinnerDisabled = $false
+
 function Start-Section {
     <#
     .SYNOPSIS
@@ -251,6 +256,7 @@ function Start-Section {
     #>
     param([string]$Title)
 
+    if ($null -ne $script:SectionCollector) { $script:SectionCollector.Add($Title) }
     Stop-Spinner
     $script:CurrentSection.Active = $true
     $script:CurrentSection.Activity = $false
@@ -394,6 +400,7 @@ namespace Sweepr {
 
 function Start-Spinner {
     param([string]$Message = "Scanning...")
+    if ($script:SpinnerDisabled) { return }
     if (-not (Test-SweeprInteractiveOutput)) { return }
     try {
         Initialize-SweeprSpinner
