@@ -412,9 +412,12 @@ function Initialize-SweeprDataDir {
 }
 
 function Main {
+    # Check the data folder first: Initialize-Sweepr creates the config and cache
+    # folders, and a read-only portable stick must fail with the clear message.
+    Initialize-SweeprDataDir
+
     # Initialize
     Initialize-Sweepr
-    Initialize-SweeprDataDir
 
     # Native -File and the executable launcher bind switches differently.
     # Normalize both forms before routing, keeping command options on the child.
