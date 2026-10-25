@@ -156,7 +156,30 @@ function Get-PowerShellCommand {
     throw "PowerShell executable not found"
 }
 
+# Removes a folder this very run cloned, after the installer was cancelled and
+# so installed nothing. Deliberately narrow: only the exact clone target, only
+# when it did not exist before, never a drive root or the profile folder, and
+# by literal path.
+function Remove-FreshClone {
+    param([string]$Path)
+
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+        $root = [System.IO.Path]::GetPathRoot($full)
+        $profilePath = [Environment]::GetFolderPath("UserProfile")
+        if (-not $full -or $full -eq $root.TrimEnd('\', '/')) { return $false }
+        if ($profilePath -and $full -eq $profilePath.TrimEnd('\', '/')) { return $false }
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) { return $false }
+        Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 # Main installation
+$script:ClonedThisRun = $false
 try {
     Write-Host ""
     Write-Host "  $($Colors.Cyan)Sweepr Quick Installer$($Colors.NC)"
@@ -204,6 +227,7 @@ try {
     }
     else {
         Write-Step "Cloning Sweepr source..."
+        $script:ClonedThisRun = $true
 
         $cloneResult = Invoke-GitCommand -Arguments @("clone", "--quiet", "--single-branch", "--branch", "main", "https://github.com/brummilab/sweepr.git", $InstallDir)
         if ($cloneResult.ExitCode -ne 0) {
@@ -228,6 +252,19 @@ try {
 
     $powerShellCommand = Get-PowerShellCommand
     & $powerShellCommand -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallDir "install.ps1") -InstallDir $InstallDir -AddToPath
+    if ($LASTEXITCODE -eq 3) {
+        # install.ps1 exits with 3 when the component menu was cancelled; it
+        # has installed nothing, so this is not a failure.
+        Write-Host ""
+        Write-Host "  $($Colors.Yellow)Installation cancelled.$($Colors.NC) Nothing was installed."
+        if ($script:ClonedThisRun -and (Remove-FreshClone -Path $InstallDir)) {
+            Write-Host "    The downloaded source folder was removed again."
+        }
+        else {
+            Write-Host "    Source folder kept: $InstallDir"
+        }
+        exit 1
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Installer exited with code $LASTEXITCODE"
     }
