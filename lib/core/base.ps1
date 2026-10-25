@@ -150,6 +150,80 @@ Initialize-SweeprVisualDefaults
 # ============================================================================
 # Global Configuration Constants
 # ============================================================================
+function Test-SweeprPortable {
+    <#
+    .SYNOPSIS
+        True when the marker file sweepr.portable (a file, not a folder) sits in RootDir
+    #>
+    param([string]$RootDir)
+
+    if ([string]::IsNullOrWhiteSpace($RootDir)) { return $false }
+    # File.Exists is false for a folder and (unlike Join-Path) never throws on an unreachable drive.
+    return [System.IO.File]::Exists([System.IO.Path]::Combine($RootDir, 'sweepr.portable'))
+}
+
+function Resolve-SweeprDataPaths {
+    <#
+    .SYNOPSIS
+        Decide where Sweepr keeps its own files. Creates nothing.
+    .DESCRIPTION
+        Order: SWEEPR_DATA_DIR (Override), sweepr.portable marker (Portable), user profile (Profile).
+        A relative override is made absolute against the current directory, so PowerShell and the
+        Go tools (which read the value from the environment) end up in the same folder.
+    #>
+    param([string]$RootDir)
+
+    $override = $env:SWEEPR_DATA_DIR
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        $override = $override.Trim()
+        if (-not [System.IO.Path]::IsPathRooted($override)) {
+            $override = Join-Path (Get-Location).ProviderPath $override
+        }
+        $override = [System.IO.Path]::GetFullPath($override)
+        return @{
+            Mode       = 'Override'
+            ConfigPath = Join-Path $override 'config'
+            CachePath  = Join-Path $override 'cache'
+        }
+    }
+    if (Test-SweeprPortable -RootDir $RootDir) {
+        return @{
+            Mode       = 'Portable'
+            ConfigPath = Join-Path $RootDir 'data\config'
+            CachePath  = Join-Path $RootDir 'data\cache'
+        }
+    }
+    return @{
+        Mode       = 'Profile'
+        ConfigPath = "$env:USERPROFILE\.config\sweepr"
+        CachePath  = "$env:USERPROFILE\.cache\sweepr"
+    }
+}
+
+function Assert-SweeprDataWritable {
+    <#
+    .SYNOPSIS
+        Throw unless Path can be created and written to (create folder, write and remove a probe file)
+    #>
+    param([string]$Path)
+
+    try {
+        if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+            New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+        }
+        $probe = Join-Path $Path ('.write-test-' + [guid]::NewGuid().ToString('N'))
+        [System.IO.File]::WriteAllText($probe, 'x')
+        # Own, just-created single file and not a cleanup target, so no Remove-Safe* here.
+        [System.IO.File]::Delete($probe)
+    }
+    catch {
+        throw "Sweepr data folder is not writable: $Path. Sweepr does not fall back to your user profile."
+    }
+}
+
+# Program folder: two levels above lib\core
+$script:SweeprDataPaths = Resolve-SweeprDataPaths -RootDir (Split-Path (Split-Path $PSScriptRoot))
+
 $script:Config = @{
     TempFileAgeDays        = 7       # Temp file retention (days)
     OrphanAgeDays          = 60      # Orphaned data retention (days)
@@ -157,9 +231,9 @@ $script:Config = @{
     LogAgeDays             = 7       # Log retention (days)
     CrashReportAgeDays     = 7       # Crash report retention (days)
     MaxIterations          = 100     # Max iterations for scans
-    ConfigPath             = "$env:USERPROFILE\.config\sweepr"
-    CachePath              = "$env:USERPROFILE\.cache\sweepr"
-    WhitelistFile          = "$env:USERPROFILE\.config\sweepr\whitelist.txt"
+    ConfigPath             = $script:SweeprDataPaths.ConfigPath
+    CachePath              = $script:SweeprDataPaths.CachePath
+    WhitelistFile          = Join-Path $script:SweeprDataPaths.ConfigPath 'whitelist.txt'
 }
 
 # ============================================================================

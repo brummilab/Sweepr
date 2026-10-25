@@ -48,7 +48,7 @@ $script:DefaultSearchPaths = @(
     "D:\Development"
 )
 
-$script:ConfigFile = "$env:USERPROFILE\.config\sweepr\purge_paths.txt"
+$script:ConfigFile = Join-Path $script:Config.ConfigPath 'purge_paths.txt'
 
 # Artifact patterns to clean
 $script:ArtifactPatterns = @(

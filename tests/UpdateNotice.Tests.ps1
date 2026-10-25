@@ -47,6 +47,7 @@ Describe 'Automatic update notices' {
         @{ Method = 'Source'; Action = 'run sw update' },
         @{ Method = 'winget'; Action = 'run winget upgrade brummilab.Sweepr' },
         @{ Method = 'Scoop'; Action = 'run scoop update sweepr' },
+        @{ Method = 'Copy'; Action = 'download https://github.com/brummilab/sweepr/releases/tag/V1.10.0-windows' },
         @{ Method = 'Portable'; Action = 'download https://github.com/brummilab/sweepr/releases/tag/V1.10.0-windows' }
     ) {
         $script:Context.Method = $Method

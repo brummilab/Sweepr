@@ -19,7 +19,12 @@ Initialize-SweeprVisualDefaults
 
 # --debug keeps one session log a reporter can send. It sits with the CLI's
 # own config, not in %LOCALAPPDATA%\Sweepr, which is reserved for app data.
-$script:SweeprDebugLogFile = "$env:USERPROFILE\.config\sweepr\sweepr_debug_session.log"
+# log.ps1 can be loaded alone; without a Config it falls back to the profile.
+$script:SweeprLogDir = "$env:USERPROFILE\.config\sweepr"
+if ((Get-Variable -Name 'Config' -Scope Script -ErrorAction SilentlyContinue) -and ($script:Config -is [System.Collections.IDictionary]) -and $script:Config['ConfigPath']) {
+    $script:SweeprLogDir = [string]$script:Config['ConfigPath']
+}
+$script:SweeprDebugLogFile = Join-Path $script:SweeprLogDir 'sweepr_debug_session.log'
 
 # Each command script loads this module afresh after the router has set
 # SWEEPR_DEBUG, so the switch has to be read here, at load time.
@@ -32,7 +37,7 @@ $script:LogConfig = @{
 # What clean, purge, optimize and uninstall actually removed, one line per
 # item in operations.log, so a report can carry it.
 # Dry runs write nothing; SWEEPR_NO_OPLOG=1 turns it off.
-$script:SweeprOperationsLogFile = "$env:USERPROFILE\.config\sweepr\operations.log"
+$script:SweeprOperationsLogFile = Join-Path $script:SweeprLogDir 'operations.log'
 $script:SweeprOperationsLogMaxBytes = 5MB
 $script:SweeprOperationsLogStarted = $false
 
