@@ -63,6 +63,11 @@ func recycleIdentityChain(path string) (map[string]recycleIdentity, error) {
 func checkRecycleTree(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), recycleReviewTimeout)
 	defer cancel()
+	// Once per target, thorough: final spellings and file identities. The walk
+	// below only compares spellings, which keeps 100k entries within the timeout.
+	if err := checkDataFolderTarget(path); err != nil {
+		return err
+	}
 	count := 0
 	return filepath.WalkDir(path, func(current string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -92,6 +97,10 @@ func checkRecycleTree(path string) error {
 }
 
 func prepareRecycleTarget(path string) (func() error, error) {
+	// Before the link check, so a link in front of the data folder gets the notice.
+	if err := checkDataFolderTarget(path); err != nil {
+		return nil, err
+	}
 	chain, err := recycleIdentityChain(path)
 	if err != nil {
 		return nil, err

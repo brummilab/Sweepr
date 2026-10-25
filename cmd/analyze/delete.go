@@ -136,8 +136,8 @@ func validateDeleteTarget(path string) error {
 	if err := validatePath(path); err != nil {
 		return err
 	}
-	if isSweeprDataFolderPath(path) {
-		return fmt.Errorf("%s %s", dataFolderRefusal, path)
+	if err := checkDataFolderTarget(path); err != nil {
+		return err
 	}
 	if isProtectedPath(path) {
 		return fmt.Errorf("protected path cannot be deleted: %s", path)
@@ -148,7 +148,7 @@ func validateDeleteTarget(path string) error {
 		return fmt.Errorf("cannot inspect parent of %s: %w", path, err)
 	}
 	resolved := filepath.Join(resolvedParent, filepath.Base(path))
-	if isSweeprDataFolderPath(resolved) {
+	if err := checkDataFolderTarget(resolved); err != nil {
 		return fmt.Errorf("%s %s", dataFolderRefusal, path)
 	}
 	if isProtectedPath(resolved) {
