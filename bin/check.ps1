@@ -110,31 +110,51 @@ function Get-CheckProperty {
     return $property.Value
 }
 
-# A path as it may appear in the result: below the profile as ~\..., below another user's
-# folder as C:\Users\<user>\..., a network path as \\<host>\share\...; anything else unchanged.
+# A path as it may appear in the result. First normalized: "/" counts as "\" and a leading \\?\
+# or \\?\UNC\ is dropped. Then: below the profile as ~\..., below another user's folder as
+# C:\Users\<user>\..., a network path as \\<host>\<share>\...; anything else unchanged. Finally
+# every whole path part equal to the user name becomes <user> (a redirected AppData folder on a
+# file server holds the name).
 function Convert-CheckPath {
     param([string]$Path)
     if ([string]::IsNullOrEmpty($Path)) { return '' }
 
-    $profilePath = [string]$env:USERPROFILE
-    if (-not [string]::IsNullOrEmpty($profilePath)) {
-        $profilePath = $profilePath.TrimEnd('\', '/')
-        if ($profilePath.Length -gt 0) {
-            if ($Path.Equals($profilePath, [StringComparison]::OrdinalIgnoreCase)) { return '~' }
-            if ($Path.Length -gt $profilePath.Length -and
-                $Path.StartsWith($profilePath, [StringComparison]::OrdinalIgnoreCase) -and
-                ($Path[$profilePath.Length] -eq '\' -or $Path[$profilePath.Length] -eq '/')) {
-                return '~' + $Path.Substring($profilePath.Length)
-            }
+    $normalize = {
+        param([string]$Value)
+        $text = $Value.Replace('/', '\')
+        if ($text.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { $text = '\\' + $text.Substring(8) }
+        elseif ($text.StartsWith('\\?\', [StringComparison]::Ordinal) -or $text.StartsWith('\\.\', [StringComparison]::Ordinal)) { $text = $text.Substring(4) }
+        return $text
+    }
+    $text = & $normalize $Path
+    $result = $text
+
+    $profilePath = ''
+    if (-not [string]::IsNullOrEmpty([string]$env:USERPROFILE)) { $profilePath = (& $normalize ([string]$env:USERPROFILE)).TrimEnd('\') }
+
+    if ($profilePath.Length -gt 0 -and $text.Equals($profilePath, [StringComparison]::OrdinalIgnoreCase)) { $result = '~' }
+    elseif ($profilePath.Length -gt 0 -and $text.Length -gt $profilePath.Length -and
+        $text.StartsWith($profilePath, [StringComparison]::OrdinalIgnoreCase) -and $text[$profilePath.Length] -eq '\') {
+        $result = '~' + $text.Substring($profilePath.Length)
+    }
+    elseif ($text -match '^\\\\([^\\]+)(?:\\([^\\]+))?(\\.*)?$') {
+        $rest = ''
+        if ($Matches[3]) { $rest = $Matches[3] }
+        $result = if ($Matches[2]) { '\\<host>\<share>' + $rest } else { '\\<host>' }
+    }
+    elseif ($text -match '^([A-Za-z]:\\Users\\)[^\\]+(\\.*)?$') {
+        $result = $Matches[1] + '<user>' + $Matches[2]
+    }
+
+    $userName = [string]$env:USERNAME
+    if ($userName.Length -gt 0) {
+        $parts = $result.Split([char]92)
+        for ($n = 0; $n -lt $parts.Count; $n++) {
+            if ($parts[$n].Equals($userName, [StringComparison]::OrdinalIgnoreCase)) { $parts[$n] = '<user>' }
         }
+        $result = $parts -join '\'
     }
-    if ($Path -match '^([A-Za-z]:\\Users\\)[^\\]+(\\.*)?$') {
-        return $Matches[1] + '<user>' + $Matches[2]
-    }
-    if ($Path -match '^\\\\[^\\]+(\\.*)?$') {
-        return '\\<host>' + $Matches[1]
-    }
-    return $Path
+    return $result
 }
 
 # Reason texts come from a fixed list only; a source text never reaches the result.
