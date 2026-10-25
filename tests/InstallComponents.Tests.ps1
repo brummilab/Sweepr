@@ -42,6 +42,20 @@
 #   parameters (the legacy decoder depends on positions). Show-InstallerHelp documents both.
 #   Unknown component: error with the allowed names, exit code 2, nothing installed.
 #   bin/update.ps1 passes -NoPrompt to install.ps1.
+#
+# F-01g additions (interface fixed by the tests at the end of this file):
+#
+#   Legacy call (v1.30.0: & install.ps1 @("-InstallDir", $dir, "-AddToPath")): -Components is ignored,
+#   the menu never shows, SWEEPR_COMPONENTS is ignored, and the PATH intent is not taken from the
+#   switches but derived live: Resolve-InstallInvocation calls Test-InstallDirOnUserPath -Path <SourceDir>
+#   (a function in install.ps1, same logic as in bin/update.ps1) and sets AddToPath from it.
+#   Menu cancelled: Main prints "Installation cancelled", installs nothing and exits with code 3
+#   (1 stays "failed", 2 stays "bad arguments").
+#   quick-install.ps1: exit code 3 from install.ps1 is reported as "Installation cancelled", never as
+#   "Installation failed: Installer exited with code 3". A folder this very run cloned (the install
+#   directory did not exist before) is removed again; a folder that already existed is kept and its path
+#   named in the output. Any other non-zero code still reports "Installation failed" and keeps the folder.
+#   $script:InstallComponentNames is the only list of the four names in install.ps1 and is really read.
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -56,10 +70,24 @@ BeforeAll {
             }, $true)
     }
 
+    # The one list of component names, when install.ps1 keeps it in a script variable.
+    $nameAssignment = $script:InstallAst.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left.Extent.Text -eq '$script:InstallComponentNames'
+        }, $true)
+    if ($nameAssignment) {
+        $script:InstallComponentNames = @(& ([scriptblock]::Create($nameAssignment.Right.Extent.Text)))
+    }
+
+    # Stand-in so Mock has a command to replace; the real function from install.ps1 wins when it exists.
+    function Test-InstallDirOnUserPath { param([string]$Path) return $false }
+
     # Functions that must exist. A missing one is a test failure, not a load failure.
     $script:Loaded = @{}
     foreach ($name in @("ConvertTo-InstallComponents", "Get-InstallComponentSelection", "Test-InstallInteractive",
-            "Show-InstallComponentMenu", "Read-InstallMenuKey", "Ensure-OptionalTuiTools", "Resolve-InstallInvocation")) {
+            "Show-InstallComponentMenu", "Read-InstallMenuKey", "Ensure-OptionalTuiTools", "Resolve-InstallInvocation",
+            "Test-InstallDirOnUserPath")) {
         $definition = Get-InstallFunctionAst -Name $name
         if ($definition) {
             . ([scriptblock]::Create($definition.Extent.Text))
@@ -91,6 +119,124 @@ BeforeAll {
         $pwshPath = (Get-Process -Id $PID).Path
         $output = & $pwshPath -NoProfile -NonInteractive -File $script:InstallScript @Arguments 2>&1 | Out-String
         [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    }
+
+    # Exit code install.ps1 uses when the component menu was cancelled.
+    $script:CancelExitCode = 3
+
+    # A sandbox folder holding a copy of the real install.ps1 plus the two library files it dot-sources.
+    # -StubInstall makes Install-Sweepr print the effective choices and return, so nothing is installed,
+    # no PATH is touched and no network is used. -MenuEscape pretends to be a real console and presses
+    # Escape in the component menu (-NoPrompt and -Uninstall are still honored). The rest of install.ps1
+    # (parameter binding, legacy decoder, Main, exit codes) is the real code.
+    function New-InstallSandbox {
+        param([string]$Name, [switch]$StubInstall, [switch]$MenuEscape)
+
+        $root = Join-Path $TestDrive $Name
+        $core = Join-Path $root "lib/core"
+        New-Item -ItemType Directory -Path $core -Force | Out-Null
+        foreach ($file in "version.ps1", "tui_binaries.ps1") {
+            Copy-Item -LiteralPath (Join-Path $script:WindowsDir "lib/core/$file") -Destination $core
+        }
+        Set-Content -LiteralPath (Join-Path $root "VERSION") -Value "1.0.0"
+
+        $text = Get-Content -LiteralPath $script:InstallScript -Raw
+        if ($StubInstall) {
+            $stub = @'
+function Install-Sweepr {
+    Write-Host "HARNESS install reached"
+    Write-Host "HARNESS dir=$InstallDir"
+    Write-Host "HARNESS path=$($script:AddToPath.IsPresent)"
+    Write-Host "HARNESS shortcut=$($script:CreateShortcut.IsPresent)"
+    Write-Host "HARNESS tools=$(@($script:InstallTools) -join ',')"
+    return $true
+    # (the original body follows and is never reached)
+'@
+            $patched = $text.Replace("function Install-Sweepr {", $stub)
+            if ($patched -ceq $text) { throw "Install-Sweepr not found in install.ps1" }
+            $text = $patched
+        }
+        if ($MenuEscape) {
+            $override = @'
+function Test-InstallInteractive { param([bool]$NoPrompt, [bool]$Uninstall) return ((-not $NoPrompt) -and (-not $Uninstall)) }
+function Read-InstallMenuKey { return [System.ConsoleKeyInfo]::new([char]27, [System.ConsoleKey]::Escape, $false, $false, $false) }
+# Run
+'@
+            $patched = $text.Replace("`n# Run", "`n" + $override)
+            if ($patched -ceq $text) { throw "'# Run' marker not found in install.ps1" }
+            $text = $patched
+        }
+        Set-Content -LiteralPath (Join-Path $root "install.ps1") -Value $text -Encoding UTF8
+        return $root
+    }
+
+    # Runs a script body in a child pwsh and returns exit code and output. A terminating error while the
+    # arguments are bound (as opposed to an exit code of the script) shows up as exit code 99.
+    function Invoke-ChildScript {
+        param([string]$Body, [hashtable]$Environment = @{})
+
+        $wrapper = Join-Path $TestDrive ("wrapper-" + [guid]::NewGuid().ToString("N") + ".ps1")
+        Set-Content -LiteralPath $wrapper -Encoding UTF8 -Value @"
+try {
+$Body
+    if (`$null -eq `$LASTEXITCODE) { exit 0 }
+    exit `$LASTEXITCODE
+}
+catch {
+    Write-Output "BINDING-ERROR: `$(`$_.Exception.Message)"
+    exit 99
+}
+"@
+        $saved = @{}
+        foreach ($key in $Environment.Keys) { $saved[$key] = [Environment]::GetEnvironmentVariable($key) }
+        try {
+            foreach ($key in $Environment.Keys) { [Environment]::SetEnvironmentVariable($key, $Environment[$key]) }
+            $pwshPath = (Get-Process -Id $PID).Path
+            $output = & $pwshPath -NoProfile -NonInteractive -File $wrapper 2>&1 | Out-String
+            [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+        }
+        finally {
+            foreach ($key in $Environment.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key]) }
+        }
+    }
+
+    # The v1.30.0 updater call: the argument array is splatted, so every element binds positionally.
+    function Invoke-LegacyInstall {
+        param([string]$Sandbox, [switch]$WithAddToPath, [hashtable]$Environment = @{})
+
+        $elements = "'-InstallDir', '$Sandbox'"
+        if ($WithAddToPath) { $elements += ", '-AddToPath'" }
+        $installScript = Join-Path $Sandbox "install.ps1"
+        $childEnvironment = @{ SWEEPR_COMPONENTS = $null }
+        foreach ($key in $Environment.Keys) { $childEnvironment[$key] = $Environment[$key] }
+        Invoke-ChildScript -Environment $childEnvironment -Body @"
+    `$legacyArguments = @($elements)
+    & '$installScript' @legacyArguments
+"@
+    }
+
+    # quick-install.ps1 with a fake git and a fake powershell.exe, so there is no clone, no network and no real
+    # install. The fake installer exits with $InstallerExit. A function wins over an executable, so the real
+    # quick-install.ps1 runs unchanged on any platform.
+    function Invoke-QuickInstall {
+        param([string]$Target, [int]$InstallerExit, [switch]$PreExisting)
+
+        if ($PreExisting) {
+            New-Item -ItemType Directory -Path (Join-Path $Target ".git") -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $Target "install.ps1") -Value "# fake installer"
+        }
+        $quick = Join-Path $script:WindowsDir "quick-install.ps1"
+        Invoke-ChildScript -Environment @{ HTTPS_PROXY = "http://proxy.example:3128" } -Body @"
+    function git {
+        `$global:LASTEXITCODE = 0
+        if (`$args -contains 'clone') {
+            New-Item -ItemType Directory -Path (Join-Path `$args[-1] '.git') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path `$args[-1] 'install.ps1') -Value '# fake installer'
+        }
+    }
+    function powershell.exe { `$global:LASTEXITCODE = $InstallerExit }
+    & '$quick' -InstallDir '$Target'
+"@
     }
 }
 
@@ -464,5 +610,243 @@ Describe "sw update" {
             }, $true)
         $text = (@($assignments | ForEach-Object { $_.Extent.Text }) -join "`n")
         $text | Should -Match "NoPrompt"
+    }
+}
+
+# ============================================================================
+# F-01g: legacy call from v1.30.0
+# ============================================================================
+
+Describe "Legacy v1.30.0 call under the real parameter binding" {
+    # The real install.ps1 runs in a child pwsh (7 on CI and here); only Install-Sweepr is replaced by a
+    # stub that prints the effective choices. The call is the updater's own shape.
+
+    It "Binds the splatted array and reaches the install without exit code 2 (<Name>)" -ForEach @(
+        @{ Name = "with -AddToPath"; WithAddToPath = $true },
+        @{ Name = "without -AddToPath"; WithAddToPath = $false }
+    ) {
+        $sandbox = New-InstallSandbox -Name "legacy-bind-$($WithAddToPath)" -StubInstall
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath:$WithAddToPath
+        $result.Output | Should -Not -Match "BINDING-ERROR"
+        $result.Output | Should -Not -Match "Unknown component"
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS install reached"
+    }
+
+    It "Installs the folder the script lives in and treats the path as -InstallDir, not as a component list" {
+        $sandbox = New-InstallSandbox -Name "legacy-dir" -StubInstall
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath
+        $result.ExitCode | Should -Be 0
+        $dirLine = @($result.Output -split "\r?\n" | Where-Object { $_ -match "HARNESS dir=" })[0]
+        $dirLine | Should -Not -BeNullOrEmpty
+        ($dirLine -replace ".*HARNESS dir=", "").Trim().TrimEnd('\', '/') | Should -Be $sandbox.TrimEnd('\', '/')
+    }
+
+    It "Never shows the component menu, even on a console" {
+        $sandbox = New-InstallSandbox -Name "legacy-nomenu" -StubInstall -MenuEscape
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath
+        $result.Output | Should -Not -Match "Select components"
+        $result.Output | Should -Not -Match "Installation cancelled"
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS install reached"
+    }
+
+    It "Ignores SWEEPR_COMPONENTS with an unknown name" {
+        $sandbox = New-InstallSandbox -Name "legacy-env-bogus" -StubInstall
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath -Environment @{ SWEEPR_COMPONENTS = "nonsense" }
+        $result.Output | Should -Not -Match "Unknown component"
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS install reached"
+    }
+
+    It "Ignores SWEEPR_COMPONENTS with valid names" {
+        $sandbox = New-InstallSandbox -Name "legacy-env-valid" -StubInstall
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath -Environment @{ SWEEPR_COMPONENTS = "shortcut" }
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS tools=analyze,status"
+        $result.Output | Should -Match "HARNESS shortcut=False"
+    }
+
+    It "Takes the PATH intent from the live user PATH, not from the switches (folder not on PATH, <Name>)" -ForEach @(
+        @{ Name = "with -AddToPath"; WithAddToPath = $true },
+        @{ Name = "without -AddToPath"; WithAddToPath = $false }
+    ) {
+        $sandbox = New-InstallSandbox -Name "legacy-path-$($WithAddToPath)" -StubInstall
+        $result = Invoke-LegacyInstall -Sandbox $sandbox -WithAddToPath:$WithAddToPath
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS path=False"
+        $result.Output | Should -Match "HARNESS shortcut=False"
+    }
+
+    It "Leaves the regular call alone: -AddToPath is honored without a PATH lookup" {
+        $sandbox = New-InstallSandbox -Name "regular-path" -StubInstall
+        $installScript = Join-Path $sandbox "install.ps1"
+        $target = Join-Path $sandbox "target"
+        $result = Invoke-ChildScript -Environment @{ SWEEPR_COMPONENTS = $null } -Body "    & '$installScript' -InstallDir '$target' -AddToPath -NoPrompt"
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "HARNESS path=True"
+    }
+}
+
+Describe "Legacy call: live PATH intent in Resolve-InstallInvocation" {
+    It "Defines Test-InstallDirOnUserPath in install.ps1" {
+        $script:Loaded["Test-InstallDirOnUserPath"] | Should -BeTrue
+    }
+
+    It "Sets AddToPath when the source folder is on the user PATH, whatever the switches say" {
+        Mock Test-InstallDirOnUserPath { $true }
+        $result = Resolve-InstallInvocation -SourceDir "C:\Example\Source" -RequestedInstallDir "-InstallDir" -RequestedAddToPath:$false -RequestedCreateShortcut:$false
+        $result.InstallDir | Should -Be "C:\Example\Source"
+        $result.AddToPath | Should -BeTrue
+        $result.CreateShortcut | Should -BeFalse
+        Should -Invoke Test-InstallDirOnUserPath -Times 1 -Exactly -ParameterFilter { $Path -eq "C:\Example\Source" }
+    }
+
+    It "Clears AddToPath when the source folder is not on the user PATH, even with both legacy switch values set" {
+        Mock Test-InstallDirOnUserPath { $false }
+        $result = Resolve-InstallInvocation -SourceDir "C:\Example\Source" -RequestedInstallDir "-InstallDir" -RequestedAddToPath:$true -RequestedCreateShortcut:$true
+        $result.AddToPath | Should -BeFalse
+        $result.CreateShortcut | Should -BeFalse
+        Should -Invoke Test-InstallDirOnUserPath -Times 1 -Exactly -ParameterFilter { $Path -eq "C:\Example\Source" }
+    }
+
+    It "Accepts the truthy non-boolean result the update.ps1 helper style returns" {
+        Mock Test-InstallDirOnUserPath { "C:\Example\Source" }
+        $result = Resolve-InstallInvocation -SourceDir "C:\Example\Source" -RequestedInstallDir "-InstallDir" -RequestedAddToPath:$false -RequestedCreateShortcut:$false
+        $result.AddToPath | Should -BeTrue
+    }
+
+    It "Does not look at the PATH for a regular call" {
+        Mock Test-InstallDirOnUserPath { $true }
+        $result = Resolve-InstallInvocation -SourceDir "C:\Example\Source" -RequestedInstallDir "C:\Example\Target" -RequestedAddToPath:$false -RequestedCreateShortcut:$true
+        $result.InstallDir | Should -Be "C:\Example\Target"
+        $result.AddToPath | Should -BeFalse
+        $result.CreateShortcut | Should -BeTrue
+        Should -Invoke Test-InstallDirOnUserPath -Times 0 -Exactly
+    }
+}
+
+# ============================================================================
+# F-01g: cancelled menu
+# ============================================================================
+
+Describe "install.ps1 with a cancelled component menu" {
+    It "Says the installation was cancelled and exits with the cancel code, not 1 or 2" {
+        $sandbox = New-InstallSandbox -Name "cancel-menu" -StubInstall -MenuEscape
+        $target = Join-Path $TestDrive "cancel-menu-target"
+        $installScript = Join-Path $sandbox "install.ps1"
+        $result = Invoke-ChildScript -Environment @{ SWEEPR_COMPONENTS = $null } -Body "    & '$installScript' -InstallDir '$target'"
+        $result.Output | Should -Match "Select components"
+        $result.Output | Should -Match "Installation cancelled"
+        $result.Output | Should -Not -Match "Installation failed"
+        $result.ExitCode | Should -Be $script:CancelExitCode
+    }
+
+    It "Installs nothing when the menu is cancelled" {
+        $sandbox = New-InstallSandbox -Name "cancel-nothing" -StubInstall -MenuEscape
+        $target = Join-Path $TestDrive "cancel-nothing-target"
+        $installScript = Join-Path $sandbox "install.ps1"
+        $result = Invoke-ChildScript -Environment @{ SWEEPR_COMPONENTS = $null } -Body "    & '$installScript' -InstallDir '$target'"
+        $result.Output | Should -Not -Match "HARNESS install reached"
+        Test-Path -LiteralPath $target | Should -BeFalse
+    }
+
+    It "Keeps exit code 2 for an unknown component and 0 for a finished selection" {
+        $sandbox = New-InstallSandbox -Name "cancel-others" -StubInstall -MenuEscape
+        $target = Join-Path $TestDrive "cancel-others-target"
+        $installScript = Join-Path $sandbox "install.ps1"
+        $bad = Invoke-ChildScript -Environment @{ SWEEPR_COMPONENTS = $null } -Body "    & '$installScript' -InstallDir '$target' -Components bogus"
+        $bad.ExitCode | Should -Be 2
+        $good = Invoke-ChildScript -Environment @{ SWEEPR_COMPONENTS = $null } -Body "    & '$installScript' -InstallDir '$target' -Components status"
+        $good.ExitCode | Should -Be 0
+        $good.Output | Should -Match "HARNESS tools=status"
+    }
+}
+
+Describe "quick-install.ps1 after the installer was cancelled" {
+    # Fake git and a fake powershell.exe; the real quick-install.ps1 runs. The fake installer exits with the
+    # cancel code, as install.ps1 does when the menu is cancelled.
+
+    It "Reports a cancellation, not a failure" {
+        $target = Join-Path $TestDrive "qi-cancel-message"
+        $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode
+        $result.Output | Should -Match "Installation cancelled"
+        $result.Output | Should -Not -Match "Installation failed"
+        $result.Output | Should -Not -Match "Installer exited with code"
+        $result.ExitCode | Should -Be 1
+    }
+
+    It "Removes the folder this run cloned, because the installer has installed nothing" {
+        $target = Join-Path $TestDrive "qi-cancel-fresh"
+        Test-Path -LiteralPath $target | Should -BeFalse
+        $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode
+        $result.Output | Should -Match "Installation cancelled"
+        Test-Path -LiteralPath $target | Should -BeFalse
+    }
+
+    It "Keeps a source install that already existed and names its folder" {
+        $target = Join-Path $TestDrive "qi-cancel-existing"
+        $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode -PreExisting
+        $result.Output | Should -Match "Installation cancelled"
+        $result.Output | Should -Not -Match "Installation failed"
+        Test-Path -LiteralPath (Join-Path $target "install.ps1") | Should -BeTrue
+        $result.Output | Should -Match ([regex]::Escape($target))
+    }
+
+    It "Still reports a real installer failure as a failure and keeps the folder" {
+        $target = Join-Path $TestDrive "qi-failed"
+        $result = Invoke-QuickInstall -Target $target -InstallerExit 1
+        $result.Output | Should -Match "Installation failed: Installer exited with code 1"
+        $result.Output | Should -Not -Match "Installation cancelled"
+        $result.ExitCode | Should -Be 1
+        Test-Path -LiteralPath (Join-Path $target "install.ps1") | Should -BeTrue
+    }
+
+    It "Reports success without any message about failure or cancellation" {
+        $target = Join-Path $TestDrive "qi-ok"
+        $result = Invoke-QuickInstall -Target $target -InstallerExit 0
+        $result.Output | Should -Not -Match "Installation failed"
+        $result.Output | Should -Not -Match "Installation cancelled"
+        $result.ExitCode | Should -Be 0
+        Test-Path -LiteralPath (Join-Path $target "install.ps1") | Should -BeTrue
+    }
+}
+
+# ============================================================================
+# F-01g: one list of component names
+# ============================================================================
+
+Describe "Component list in install.ps1" {
+    It "Has exactly one literal list of the four component names" {
+        $wanted = "analyze,path,shortcut,status"
+        $lists = $script:InstallAst.FindAll({
+                param($node)
+                if ($node -isnot [System.Management.Automation.Language.ArrayLiteralAst]) { return $false }
+                $values = @($node.Elements | Where-Object { $_ -is [System.Management.Automation.Language.StringConstantExpressionAst] } |
+                        ForEach-Object { $_.Value } | Sort-Object)
+                return (($values -join ",") -eq $wanted -and $values.Count -eq $node.Elements.Count)
+            }, $true)
+        @($lists).Count | Should -Be 1
+    }
+
+    It "Reads `$script:InstallComponentNames somewhere when it is defined" {
+        $uses = @($script:InstallAst.FindAll({
+                    param($node)
+                    $node -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                    $node.VariablePath.UserPath -match "InstallComponentNames$"
+                }, $true))
+        $reads = @($uses | Where-Object {
+                -not ($_.Parent -is [System.Management.Automation.Language.AssignmentStatementAst] -and $_.Parent.Left -eq $_)
+            })
+        if ($uses.Count -gt 0) { $reads.Count | Should -BeGreaterThan 0 }
+    }
+
+    It "Takes the allowed names of ConvertTo-InstallComponents from that one list" {
+        $definition = Get-InstallFunctionAst -Name "ConvertTo-InstallComponents"
+        $literal = $definition.FindAll({
+                param($node)
+                $node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $node.Value -in @("analyze", "path", "shortcut", "status")
+            }, $true)
+        @($literal).Count | Should -Be 0
     }
 }
