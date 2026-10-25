@@ -38,6 +38,7 @@ BeforeAll {
         }
     }
     $script:ChangingCommands = @(
+        'New-Item', 'Set-Content', 'Add-Content', 'Out-File', 'Move-Item', 'Copy-Item', 'Rename-Item', 'Clear-Content', 'New-ItemProperty',
         'Remove-Item', 'Clear-RecycleBin', 'Remove-AppxPackage', 'Start-Process', 'Stop-Process', 'Stop-Service',
         'Set-Service', 'Restart-Service', 'Disable-WindowsOptionalFeature', 'Set-ItemProperty', 'Remove-ItemProperty',
         'Remove-SafeDirectoryTree', 'Clear-Host', 'Read-Host'
@@ -45,6 +46,7 @@ BeforeAll {
     # The real section functions, kept before any test replaces them with a mock.
     $script:RealInvokeUserCleanup = ${function:Invoke-UserCleanup}
     $script:RealInvokeDevToolsCleanup = ${function:Invoke-DevToolsCleanup}
+    $script:RealInvokeSystemCleanup = ${function:Invoke-SystemCleanup}
 
     # A section as the real cleanup modules run it: titled, removing through the shared dry-run sink.
     function script:Invoke-FakeSection {
@@ -57,9 +59,36 @@ BeforeAll {
         param([string]$Path, [int]$Count, [int]$DaysOld = 0)
         # Forward slashes work on every platform; a backslash is a file name character on Linux.
         $Path = $Path.Replace('\', '/')
-        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
         [IO.File]::WriteAllBytes($Path, (New-Object byte[] $Count))
         if ($DaysOld -gt 0) { (Get-Item -LiteralPath $Path).LastWriteTime = (Get-Date).AddDays(-$DaysOld) }
+    }
+
+    # Loads one lib file in a brand-new PowerShell process, with nothing loaded before it.
+    function script:Invoke-FreshLoad {
+        param([string]$File, [string[]]$Functions)
+        $dataDir = Join-Path $TestDrive 'fresh-data'
+        [void][IO.Directory]::CreateDirectory($dataDir)
+        $checks = ($Functions | ForEach-Object { "if (Get-Command $_ -CommandType Function -ErrorAction SilentlyContinue) { 'FOUND $_' } else { 'MISSING $_' }" }) -join '; '
+        $command = "`$ErrorActionPreference = 'Stop'; . '" + $File.Replace("'", "''") + "'; $checks"
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = (Get-Process -Id $PID).Path
+        $start.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.EnvironmentVariables['SWEEPR_DATA_DIR'] = $dataDir
+        $start.EnvironmentVariables['SWEEPR_NO_OPLOG'] = '1'
+        $process = [System.Diagnostics.Process]::Start($start)
+        try {
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'fresh process timed out' }
+            [void]$stdout.Wait(5000); [void]$stderr.Wait(5000)
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
+        }
+        finally { $process.Dispose() }
     }
 
     $script:SavedEnv = @{}
@@ -84,7 +113,7 @@ Describe 'Get-SweeprCleanPreview' {
         $env:APPDATA = Join-Path $script:FakeHome 'Roaming'
         $env:ProgramData = Join-Path $script:FakeHome 'ProgramData'
         $env:WINDIR = Join-Path $script:FakeHome 'Windows'
-        New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
+        [void][IO.Directory]::CreateDirectory($env:TEMP)
 
         $script:FileA = Join-Path $script:FakeHome 'work\a.log'
         $script:FileB = Join-Path $script:FakeHome 'work\b.bin'
@@ -300,6 +329,65 @@ Describe 'Get-SweeprCleanPreview' {
         }
     }
 
+    Context '-System with the optional system tools' {
+        It 'Lists DISM component cleanup and Disk Cleanup as not previewable and never starts them' {
+            Mock Test-IsAdmin { $true }
+            Mock Invoke-SystemCleanup { & $script:RealInvokeSystemCleanup @PSBoundParameters }
+            foreach ($name in @('Clear-SystemTempFiles', 'Clear-WindowsLogs', 'Clear-InstallerCache', 'Clear-MemoryDumps', 'Invoke-ComponentStoreCleanup', 'Invoke-DiskCleanupTool')) {
+                Mock $name {}
+            }
+            $result = Get-SweeprCleanPreview -System
+            Should -Invoke Invoke-ComponentStoreCleanup -Times 0 -Exactly
+            Should -Invoke Invoke-DiskCleanupTool -Times 0 -Exactly
+            Should -Invoke Start-Process -Times 0 -Exactly
+            foreach ($name in @('Component Store cleanup', 'Disk Cleanup tool')) {
+                $entry = @($result.NotMeasured | Where-Object Name -eq $name)
+                $entry.Count | Should -Be 1 -Because "$name is part of -System but cannot be previewed"
+                $entry[0].Section | Should -Be 'System cleanup'
+                $entry[0].Reason | Should -Be 'not previewable'
+            }
+        }
+
+        It 'Does not mention them without -System' {
+            Mock Test-IsAdmin { $true }
+            $result = Get-SweeprCleanPreview
+            @($result.NotMeasured).Count | Should -Be 0
+        }
+    }
+
+    Context 'A section that throws' {
+        It 'Puts mode, statistics and collector back, keeps the earlier hits and reports the error' {
+            $script:ExportListFile = $null
+            Set-DryRunMode -Enabled $true
+            Remove-SafeItems -Paths @($script:FileA) -Description 'caller work'
+            $statsBefore = Get-CleanupStats
+            Set-DryRunMode -Enabled $false
+            Mock Clear-BrowserCaches { throw 'boom' }
+
+            $result = Get-SweeprCleanPreview -SkipExternalTools
+
+            Test-DryRunMode | Should -BeFalse
+            $statsAfter = Get-CleanupStats
+            foreach ($key in @('TotalSizeKB', 'FilesCleaned', 'TotalItems')) { $statsAfter[$key] | Should -Be $statsBefore[$key] }
+            @($result.NotMeasured | Where-Object { $_.Reason -match 'boom' }).Count | Should -Be 1
+            ($result.Sections | Where-Object Name -eq 'User essentials').TotalBytes | Should -Be 3000
+            Test-Path -LiteralPath $script:FileA | Should -BeTrue
+
+            # Nothing of the failed run is left behind for the next one.
+            Mock Clear-BrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
+            $next = Get-SweeprCleanPreview
+            $next.TotalBytes | Should -Be 3060
+            @($next.NotMeasured).Count | Should -Be 0
+        }
+
+        It 'Leaves a caller that is in a dry run in that dry run' {
+            Set-DryRunMode -Enabled $true
+            Mock Invoke-UserCleanup { throw 'boom' }
+            $null = Get-SweeprCleanPreview
+            Test-DryRunMode | Should -BeTrue
+        }
+    }
+
     Context '-GameMedia and -GpuShaders follow sw clean' {
         It 'Runs neither GPU shader caches nor game media by default' {
             $result = Get-SweeprCleanPreview
@@ -357,12 +445,23 @@ Describe 'Get-SweeprCleanPreview' {
         It 'Still measures the folders that need no external program' {
             # Written the way the module builds the path, so the same string works on any platform.
             $yarn = "$env:LOCALAPPDATA\Yarn\Cache"
-            New-Item -ItemType Directory -Path $yarn -Force | Out-Null
+            [void][IO.Directory]::CreateDirectory($yarn.Replace('\', '/'))
             [IO.File]::WriteAllBytes((Join-Path $yarn 'package'), (New-Object byte[] 700))
             $result = Get-SweeprCleanPreview -SkipExternalTools
             $hit = @($result.Hits | Where-Object { $_.Section -eq 'Developer tools' -and $_.Description -eq 'Yarn cache' })
             $hit.Count | Should -Be 1
             $hit[0].SizeBytes | Should -Be 700
+        }
+    }
+}
+
+Describe 'lib/clean/preview.ps1 on its own' {
+    It 'Loads on its own in a new process and defines its functions' {
+        $result = Invoke-FreshLoad -File (Join-Path $script:LibDir 'clean\preview.ps1') -Functions @('Get-SweeprCleanPreview', 'Invoke-UserCleanup', 'Invoke-SystemCleanup')
+        $result.Err | Should -BeNullOrEmpty
+        $result.ExitCode | Should -Be 0
+        foreach ($name in @('Get-SweeprCleanPreview', 'Invoke-UserCleanup', 'Invoke-SystemCleanup')) {
+            $result.Out | Should -Match "FOUND $name"
         }
     }
 }

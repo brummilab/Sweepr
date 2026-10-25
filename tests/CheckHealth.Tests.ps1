@@ -50,6 +50,7 @@ BeforeAll {
         if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { Set-Item -Path "function:script:$name" -Value { param() } }
     }
     $script:ChangingCommands = @(
+        'New-Item', 'Set-Content', 'Add-Content', 'Out-File', 'Move-Item', 'Copy-Item', 'Rename-Item', 'Clear-Content', 'New-ItemProperty',
         'Remove-Item', 'Set-ItemProperty', 'New-ItemProperty', 'Remove-ItemProperty', 'Start-Process', 'Stop-Service',
         'Set-Service', 'Restart-Service', 'Optimize-Volume', 'Repair-Volume', 'Clear-DnsClientCache', 'Clear-Host', 'Read-Host'
     )
@@ -85,6 +86,33 @@ BeforeAll {
             throw "unexpected registry location $location"
         }
         Mock Get-ChildItem { [pscustomobject]@{ Name = 'Example Tool.lnk'; FullName = 'C:\Example\Startup\Example Tool.lnk'; PSIsContainer = $false } }
+    }
+
+    # Loads one lib file in a brand-new PowerShell process, with nothing loaded before it.
+    function script:Invoke-FreshLoad {
+        param([string]$File, [string[]]$Functions)
+        $dataDir = Join-Path $TestDrive 'fresh-data'
+        [void][IO.Directory]::CreateDirectory($dataDir)
+        $checks = ($Functions | ForEach-Object { "if (Get-Command $_ -CommandType Function -ErrorAction SilentlyContinue) { 'FOUND $_' } else { 'MISSING $_' }" }) -join '; '
+        $command = "`$ErrorActionPreference = 'Stop'; . '" + $File.Replace("'", "''") + "'; $checks"
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = (Get-Process -Id $PID).Path
+        $start.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.EnvironmentVariables['SWEEPR_DATA_DIR'] = $dataDir
+        $start.EnvironmentVariables['SWEEPR_NO_OPLOG'] = '1'
+        $process = [System.Diagnostics.Process]::Start($start)
+        try {
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'fresh process timed out' }
+            [void]$stdout.Wait(5000); [void]$stderr.Wait(5000)
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
+        }
+        finally { $process.Dispose() }
     }
 
     $script:SavedSystemDrive = $env:SystemDrive
@@ -491,6 +519,17 @@ Describe 'System state data' {
             $health.Startup.Measured | Should -BeTrue
             @($health.Startup.Missing) | Should -Contain 'HKLM Run'
             Should -Invoke Start-Process -Times 0 -Exactly
+        }
+    }
+}
+
+Describe 'lib/core/health.ps1 on its own' {
+    It 'Loads on its own in a new process and defines its functions' {
+        $result = Invoke-FreshLoad -File (Join-Path $script:LibDir 'core\health.ps1') -Functions @('Get-SweeprHealth', 'Get-SweeprDiskInfo', 'Get-SweeprStartupEntries')
+        $result.Err | Should -BeNullOrEmpty
+        $result.ExitCode | Should -Be 0
+        foreach ($name in @('Get-SweeprHealth', 'Get-SweeprDiskInfo', 'Get-SweeprStartupEntries')) {
+            $result.Out | Should -Match "FOUND $name"
         }
     }
 }

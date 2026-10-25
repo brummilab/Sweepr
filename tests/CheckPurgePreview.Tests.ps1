@@ -39,6 +39,7 @@ BeforeAll {
         }
     }
     $script:ChangingCommands = @(
+        'New-Item', 'Set-Content', 'Add-Content', 'Out-File', 'Move-Item', 'Copy-Item', 'Rename-Item', 'Clear-Content', 'New-ItemProperty', 'Stop-Service', 'Set-Service', 'Restart-Service',
         'Remove-Item', 'Start-Process', 'Stop-Process', 'Set-ItemProperty', 'Remove-ItemProperty',
         'Remove-SafeItem', 'Remove-SafeItems', 'Remove-SafeDirectoryTree', 'Clear-DirectoryContents', 'Clear-Host', 'Read-Host'
     )
@@ -47,9 +48,36 @@ BeforeAll {
         param([string]$Path, [int]$Count)
         # Forward slashes work on every platform; a backslash is a file name character on Linux.
         $Path = $Path.Replace('\', '/')
-        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
         [IO.File]::WriteAllBytes($Path, (New-Object byte[] $Count))
     }
+    # Loads one lib file in a brand-new PowerShell process, with nothing loaded before it.
+    function script:Invoke-FreshLoad {
+        param([string]$File, [string[]]$Functions)
+        $dataDir = Join-Path $TestDrive 'fresh-data'
+        [void][IO.Directory]::CreateDirectory($dataDir)
+        $checks = ($Functions | ForEach-Object { "if (Get-Command $_ -CommandType Function -ErrorAction SilentlyContinue) { 'FOUND $_' } else { 'MISSING $_' }" }) -join '; '
+        $command = "`$ErrorActionPreference = 'Stop'; . '" + $File.Replace("'", "''") + "'; $checks"
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = (Get-Process -Id $PID).Path
+        $start.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.EnvironmentVariables['SWEEPR_DATA_DIR'] = $dataDir
+        $start.EnvironmentVariables['SWEEPR_NO_OPLOG'] = '1'
+        $process = [System.Diagnostics.Process]::Start($start)
+        try {
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'fresh process timed out' }
+            [void]$stdout.Wait(5000); [void]$stderr.Wait(5000)
+            return [pscustomobject]@{ ExitCode = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
+        }
+        finally { $process.Dispose() }
+    }
+
     function script:Find-Hit {
         param($Result, [string]$ProjectPath)
         @($Result.Projects | Where-Object { $_.Path -eq $ProjectPath })
@@ -224,7 +252,7 @@ Describe 'Get-SweeprPurgePreview' {
 
     Context 'Unverified candidates' {
         It 'Leaves out an artifact in a repository when Git cannot confirm it, and says so' {
-            New-Item -ItemType Directory -Path (Join-Path $script:App '.git') -Force | Out-Null
+            [void][IO.Directory]::CreateDirectory((Join-Path $script:App '.git'))
             Mock Invoke-PurgeGit { $null }
             $result = Get-SweeprPurgePreview -SearchPaths @($script:App)
             @($result.Projects).Count | Should -Be 0
@@ -234,19 +262,27 @@ Describe 'Get-SweeprPurgePreview' {
     }
 
     Context 'Search folders' {
-        It 'Ignores the purge_paths.txt of the user when no search path is given' {
+        It 'Searches the built-in default folders, not the purge_paths.txt of the user' {
+            # The defaults are replaced by an empty folder of the test, so no real folder is searched.
+            $defaults = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            [void][IO.Directory]::CreateDirectory($defaults)
             $config = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-            New-Item -ItemType Directory -Path $config -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $config 'purge_paths.txt') -Value $script:Base
+            [void][IO.Directory]::CreateDirectory($config)
+            [IO.File]::WriteAllText((Join-Path $config 'purge_paths.txt'), $script:Base)
             $script:ConfigFile = Join-Path $config 'purge_paths.txt'
             $savedConfigPath = $script:Config.ConfigPath
+            $savedDefaults = $script:DefaultSearchPaths
             try {
                 $script:Config.ConfigPath = $config
+                $script:DefaultSearchPaths = @($defaults)
                 $result = Get-SweeprPurgePreview
             }
-            finally { $script:Config.ConfigPath = $savedConfigPath }
+            finally {
+                $script:Config.ConfigPath = $savedConfigPath
+                $script:DefaultSearchPaths = $savedDefaults
+            }
+            @($result.Roots | ForEach-Object Path) | Should -Be @($defaults)
             @($result.Projects | ForEach-Object Path) | Should -Not -Contain $script:App
-            @($result.Roots | ForEach-Object Path) | Should -Not -Contain $script:Base
         }
     }
 
@@ -265,6 +301,17 @@ Describe 'Get-SweeprPurgePreview' {
             foreach ($name in $script:ChangingCommands) {
                 Should -Invoke -CommandName $name -Times 0 -Exactly
             }
+        }
+    }
+}
+
+Describe 'lib/clean/projects.ps1 on its own' {
+    It 'Loads on its own in a new process and defines its functions' {
+        $result = Invoke-FreshLoad -File (Join-Path $script:LibDir 'clean\projects.ps1') -Functions @('Get-SweeprPurgePreview', 'Find-Projects')
+        $result.Err | Should -BeNullOrEmpty
+        $result.ExitCode | Should -Be 0
+        foreach ($name in @('Get-SweeprPurgePreview', 'Find-Projects')) {
+            $result.Out | Should -Match "FOUND $name"
         }
     }
 }
