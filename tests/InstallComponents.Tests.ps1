@@ -587,6 +587,8 @@ Describe "Legacy invocation from v1.30.0" {
     BeforeEach { $script:Loaded["Resolve-InstallInvocation"] | Should -BeTrue }
 
     It "Still decodes the positional legacy shape" {
+        # AddToPath is derived live from the user PATH, so the lookup is mocked.
+        Mock Test-InstallDirOnUserPath { $true }
         $result = Resolve-InstallInvocation -SourceDir "C:\Example\Source" -RequestedInstallDir "-InstallDir" -RequestedAddToPath:$true -RequestedCreateShortcut:$true
         $result.InstallDir | Should -Be "C:\Example\Source"
         $result.AddToPath | Should -BeTrue
