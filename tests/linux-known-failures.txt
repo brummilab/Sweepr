@@ -115,7 +115,6 @@ File Operations Module.Test-SafePath.Should return false for empty paths
 File Operations Module.Test-SafePath.Should return false for protected paths
 File Operations Module.Test-SafePath.Should return false for the user profile root
 File Operations Module.Test-SafePath.Should return true for safe paths
-Game media scope.Keeps generic captures while still selecting old game captures
 Generated cmd launchers.Preserves apostrophes, exclamation marks, spaces, metacharacters and long flags
 Generated cmd launchers.Returns the script exit code when removal deletes its running batch file
 Generic game content in install folders.Keeps ordinary installs and a single Steam game eligible
@@ -163,19 +162,12 @@ Purge Command.Help Display.Should list artifact types in help
 Purge Command.Help Display.Should show help without error
 Purge project boundaries.checks Git again immediately before removal after sizing
 Purge project boundaries.does not discover dependency packages as independent projects
-Purge project boundaries.does not inherit Git index or pathspec overrides
 Purge project boundaries.finds untracked artifacts under literal bracket project paths
 Purge project boundaries.keeps authored and unrelated generic folders in a Node project
 Purge project boundaries.keeps authored bin in an unversioned Go project
-Purge project boundaries.keeps candidates when Git inspection fails
-Purge project boundaries.keeps candidates when the content walk is incomplete
-Purge project boundaries.keeps nested repositories
 Purge project boundaries.keeps real ecosystem artifacts eligible
-Purge project boundaries.keeps tracked content without relying on wildcard path failure
 Purge project boundaries.matches tracked artifacts under literal bracket project names
 Purge project boundaries.reads Git root paths as UTF8 for Unicode projects
-Purge project labels.keeps other paths, including a profile prefix sibling, in full
-Purge project labels.labels same-named projects by their path
 Purge project labels.names each project by its path while cleaning
 Purge project labels.shows paths under the profile from ~
 Quiet inventory scan.Scans the same inventory without host output
@@ -187,7 +179,6 @@ Recoverable uninstall leftovers.Rechecks newly added protected children after si
 Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: true)
 Recoverable uninstall leftovers.Routes an accepted directory only to the recycle operation
 Registered Proton Pass uninstall compatibility.Uses the exact registered normal command for the known broken quiet command
-Release source equivalence.Accepts the released source even when unrelated files differ
 Remove Command.Help Display.Should mention uninstall behavior
 Remove Command.Help Display.Should show help without error
 Scanning installed apps.Does not reuse the v5 inventory with lost install identities and Game Bar

@@ -1,10 +1,10 @@
 BeforeAll {
     $script:RepoRoot = Split-Path -Parent $PSScriptRoot
-    . "$script:RepoRoot\lib\core\base.ps1"
-    . "$script:RepoRoot\lib\core\log.ps1"
-    . "$script:RepoRoot\lib\core\ui.ps1"
-    . "$script:RepoRoot\lib\core\file_ops.ps1"
-    $ast = [Management.Automation.Language.Parser]::ParseFile("$script:RepoRoot\bin\purge.ps1", [ref]$null, [ref]$null)
+    . (Join-Path $script:RepoRoot 'lib/core/base.ps1')
+    . (Join-Path $script:RepoRoot 'lib/core/log.ps1')
+    . (Join-Path $script:RepoRoot 'lib/core/ui.ps1')
+    . (Join-Path $script:RepoRoot 'lib/core/file_ops.ps1')
+    $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'bin/purge.ps1'), [ref]$null, [ref]$null)
     foreach ($definition in $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ne 'Main' }, $false)) {
         . ([scriptblock]::Create($definition.Extent.Text))
     }
