@@ -453,6 +453,8 @@ Describe "Feature inventory" {
         $entry = New-TestEntry -Id 'app.example' -Kind App -Match @('Contoso.Example')
         $item = @((Get-SweeprFeatureInventory -Catalog @($entry)).Items)[0]
         $item.Provisioned | Should -BeTrue
+        $item.ProvisionedName | Should -BeExactly 'Contoso.Example_1.0.0.0_neutral_~_examplepublisher'
+        $item.ProvisionedName | Should -Not -BeExactly $item.Target
     }
 
     It "Marks Provisioned false when readable but the app is not provisioned" {
@@ -461,6 +463,7 @@ Describe "Feature inventory" {
         $entry = New-TestEntry -Id 'app.example' -Kind App -Match @('Contoso.Example')
         $item = @((Get-SweeprFeatureInventory -Catalog @($entry)).Items)[0]
         $item.Provisioned | Should -BeFalse
+        $item.ProvisionedName | Should -BeNullOrEmpty
     }
 
     It "Never claims Provisioned when the provisioned list is unreadable, and still lists the app" {
@@ -470,6 +473,20 @@ Describe "Feature inventory" {
         $items = @((Get-SweeprFeatureInventory -Catalog @($entry)).Items)
         $items.Count | Should -Be 1
         $items[0].Provisioned | Should -Not -BeTrue
+        $items[0].ProvisionedName | Should -BeNullOrEmpty
+    }
+
+    It "Does not claim Provisioned when the provisioned list has more than one entry for the app" {
+        $script:Packages['Contoso.Example'] = New-TestPackage -Name 'Contoso.Example'
+        $script:Provisioned = @(
+            [pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_1.0.0.0_neutral_~_examplepublisher' },
+            [pscustomobject]@{ DisplayName = 'Contoso.Example'; PackageName = 'Contoso.Example_2.0.0.0_neutral_~_examplepublisher' }
+        )
+        $entry = New-TestEntry -Id 'app.example' -Kind App -Match @('Contoso.Example')
+        $items = @((Get-SweeprFeatureInventory -Catalog @($entry)).Items)
+        $items.Count | Should -Be 1
+        $items[0].Provisioned | Should -Not -BeTrue
+        $items[0].ProvisionedName | Should -BeNullOrEmpty
     }
 
     It "Lists an enabled optional feature by its feature name" {
@@ -565,15 +582,15 @@ Describe "Feature command text" {
     BeforeAll {
         $script:AppRow = [pscustomobject]@{
             Id = 'app.example'; Kind = 'App'; Title = 'Example'; Description = 'Example app'; Warning = $null
-            Target = 'Contoso.Example_1.0.0.0_x64__examplepublisher'; Provisioned = $true
+            Target = 'Contoso.Example_1.0.0.0_x64__examplepublisher'; Provisioned = $true; ProvisionedName = 'Contoso.Example_1.0.0.0_neutral_~_examplepublisher'
         }
         $script:AppRowPlain = [pscustomobject]@{
             Id = 'app.example'; Kind = 'App'; Title = 'Example'; Description = 'Example app'; Warning = $null
-            Target = 'Contoso.Example_1.0.0.0_x64__examplepublisher'; Provisioned = $false
+            Target = 'Contoso.Example_1.0.0.0_x64__examplepublisher'; Provisioned = $false; ProvisionedName = $null
         }
         $script:FeatureRow = [pscustomobject]@{
             Id = 'feature.example'; Kind = 'OptionalFeature'; Title = 'Example feature'; Description = 'Example'; Warning = $null
-            Target = 'ExampleFeature'; Provisioned = $false
+            Target = 'ExampleFeature'; Provisioned = $false; ProvisionedName = $null
         }
     }
 
@@ -584,12 +601,18 @@ Describe "Feature command text" {
 
     It "Appends the provisioned removal for a provisioned app with -AllUsersFuture" {
         Get-SweeprFeatureCommand -Item $script:AppRow -AllUsersFuture |
-            Should -BeExactly 'Remove-AppxPackage -Package Contoso.Example_1.0.0.0_x64__examplepublisher; Remove-AppxProvisionedPackage -Online -PackageName Contoso.Example_1.0.0.0_x64__examplepublisher'
+            Should -BeExactly 'Remove-AppxPackage -Package Contoso.Example_1.0.0.0_x64__examplepublisher; Remove-AppxProvisionedPackage -Online -PackageName Contoso.Example_1.0.0.0_neutral_~_examplepublisher'
     }
 
     It "Adds no provisioned removal when the app is not provisioned" {
         Get-SweeprFeatureCommand -Item $script:AppRowPlain -AllUsersFuture |
             Should -BeExactly 'Remove-AppxPackage -Package Contoso.Example_1.0.0.0_x64__examplepublisher'
+    }
+
+    It "Uses the provisioned PackageName, never the installed FullName, for the provisioned removal" {
+        $text = Get-SweeprFeatureCommand -Item $script:AppRow -AllUsersFuture
+        $text | Should -Match '-PackageName Contoso\.Example_1\.0\.0\.0_neutral_~_examplepublisher$'
+        $text | Should -Not -Match '-PackageName Contoso\.Example_1\.0\.0\.0_x64__'
     }
 
     It "Builds the exact feature disable command without -Remove and without restart" {
