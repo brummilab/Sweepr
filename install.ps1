@@ -964,6 +964,13 @@ function Uninstall-Sweepr {
         return $true
     }
 
+    # Portable keeps everything in its own folder. Checked inline (the library
+    # helper is not loaded here) and before any change to PATH, shortcuts or files.
+    if (Test-Path -LiteralPath (Join-Path $installPath 'sweepr.portable') -PathType Leaf) {
+        Write-SweeprError "$installPath is a portable copy of Sweepr; nothing was removed. Delete the folder yourself if you no longer need it (your data is in its data folder)."
+        return $false
+    }
+
     if (Test-ProtectedInstallRoot -Path $installPath) {
         Write-SweeprError "Refusing to remove protected install directory: $installPath"
         return $false
@@ -1049,57 +1056,64 @@ function Uninstall-Sweepr {
         Write-SweeprWarning "Kept $($kept.Count) item(s) Sweepr did not install: $($kept -join ', ')"
     }
 
-    # The cache folder is Sweepr-owned and rebuildable: downloaded tool
-    # binaries and scan caches, never
-    # user-authored state. A linked cache root is kept rather than followed.
-    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-        $cachePath = Join-Path $env:USERPROFILE ".cache\sweepr"
-        if (Test-Path -LiteralPath $cachePath) {
-            try {
-                $cacheRoot = Get-Item -LiteralPath $cachePath -Force -ErrorAction Stop
-                if ($cacheRoot.PSIsContainer -and
-                    -not ($cacheRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-                    Remove-SweeprConfigEntry -Item $cacheRoot
-                    if (Get-Command Write-SweeprOperation -ErrorAction SilentlyContinue) {
-                        Write-SweeprOperation -Action "REMOVED" -Path $cachePath -Detail "cache"
+    # With SWEEPR_DATA_DIR set, Sweepr kept its data there and nothing in the profile.
+    # That folder belongs to the user, so it is only named, never removed or asked about.
+    if (-not [string]::IsNullOrWhiteSpace($env:SWEEPR_DATA_DIR)) {
+        Write-Info "Your Sweepr data stays in $($env:SWEEPR_DATA_DIR); delete it yourself if you no longer need it."
+    }
+    else {
+        # The cache folder is Sweepr-owned and rebuildable: downloaded tool
+        # binaries and scan caches, never
+        # user-authored state. A linked cache root is kept rather than followed.
+        if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+            $cachePath = Join-Path $env:USERPROFILE ".cache\sweepr"
+            if (Test-Path -LiteralPath $cachePath) {
+                try {
+                    $cacheRoot = Get-Item -LiteralPath $cachePath -Force -ErrorAction Stop
+                    if ($cacheRoot.PSIsContainer -and
+                        -not ($cacheRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                        Remove-SweeprConfigEntry -Item $cacheRoot
+                        if (Get-Command Write-SweeprOperation -ErrorAction SilentlyContinue) {
+                            Write-SweeprOperation -Action "REMOVED" -Path $cachePath -Detail "cache"
+                        }
+                        Write-Success "Removed cache: $cachePath"
                     }
-                    Write-Success "Removed cache: $cachePath"
                 }
-            }
-            catch {
-                Write-SweeprWarning "Kept cache: $cachePath ($($_.Exception.Message))"
+                catch {
+                    Write-SweeprWarning "Kept cache: $cachePath ($($_.Exception.Message))"
+                }
             }
         }
-    }
 
-    # Remove config directory if different from install
-    $configDir = Join-Path $env:USERPROFILE ".config\sweepr"
-    if (Test-Path $configDir) {
-        Write-Info "Found config directory: $configDir"
-        $response = Read-Host "  Remove config files? (y/N)"
-        if ($response -eq "y" -or $response -eq "Y") {
-            # operations.log is the record of what Sweepr removed; support reads it after
-            # a report, so it outlives the CLI along with its rotated copy.
-            try {
-                # Checking children cannot protect a linked config root or ancestor:
-                # enumeration would already have followed it into another directory.
-                Assert-InstallPhysicalPath -Path $configDir
-                $kept = @()
-                foreach ($item in @(Get-ChildItem -LiteralPath $configDir -Force -ErrorAction Stop)) {
+        # Remove config directory if different from install
+        $configDir = Join-Path $env:USERPROFILE ".config\sweepr"
+        if (Test-Path $configDir) {
+            Write-Info "Found config directory: $configDir"
+            $response = Read-Host "  Remove config files? (y/N)"
+            if ($response -eq "y" -or $response -eq "Y") {
+                # operations.log is the record of what Sweepr removed; support reads it after
+                # a report, so it outlives the CLI along with its rotated copy.
+                try {
+                    # Checking children cannot protect a linked config root or ancestor:
+                    # enumeration would already have followed it into another directory.
                     Assert-InstallPhysicalPath -Path $configDir
-                    if ($item.Name -like 'operations.log*') { $kept += $item.Name; continue }
-                    Remove-SweeprConfigEntry -Item $item
+                    $kept = @()
+                    foreach ($item in @(Get-ChildItem -LiteralPath $configDir -Force -ErrorAction Stop)) {
+                        Assert-InstallPhysicalPath -Path $configDir
+                        if ($item.Name -like 'operations.log*') { $kept += $item.Name; continue }
+                        Remove-SweeprConfigEntry -Item $item
+                    }
+                    if ($kept.Count -eq 0) {
+                        Remove-Item -LiteralPath $configDir -Force -ErrorAction Stop
+                        Write-Success "Removed config: $configDir"
+                    }
+                    else {
+                        Write-Success "Removed config: $configDir (kept $($kept -join ', '))"
+                    }
                 }
-                if ($kept.Count -eq 0) {
-                    Remove-Item -LiteralPath $configDir -Force -ErrorAction Stop
-                    Write-Success "Removed config: $configDir"
+                catch {
+                    Write-SweeprWarning "Failed to remove config: $_"
                 }
-                else {
-                    Write-Success "Removed config: $configDir (kept $($kept -join ', '))"
-                }
-            }
-            catch {
-                Write-SweeprWarning "Failed to remove config: $_"
             }
         }
     }

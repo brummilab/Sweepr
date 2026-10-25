@@ -122,6 +122,7 @@ function Get-SweeprUpdateNotice {
         'winget' { $action = 'run winget upgrade brummilab.Sweepr' }
         'Scoop' { $action = 'run scoop update sweepr' }
         'Source' { $action = 'run sw update' }
+        'Portable' { $action = "download https://github.com/brummilab/sweepr/releases (sweepr-$($state.Latest)-x64-portable.zip) and replace the program files, keep the data folder" }
         default { $action = "download https://github.com/brummilab/sweepr/releases/tag/V$($state.Latest)-windows" }
     }
     return "Update $($state.Latest) available, $action"

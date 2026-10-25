@@ -49,6 +49,13 @@ function Get-PackageManagerRemoveCommand {
     return $null
 }
 
+# Portable keeps everything in its own folder, so there is nothing to uninstall
+# and nothing this command may delete.
+if (Test-Path -LiteralPath (Join-Path $windowsDir "sweepr.portable") -PathType Leaf) {
+    Write-Host "Sweepr portable leaves nothing outside its folder. To remove it, delete $windowsDir. Your settings and operation log are in $(Join-Path $windowsDir 'data')." -ForegroundColor Yellow
+    exit 1
+}
+
 $removeCommand = Get-PackageManagerRemoveCommand -InstallDir $windowsDir
 if ($removeCommand) {
     Write-Host "This copy of Sweepr is managed by a package manager." -ForegroundColor Yellow
