@@ -92,12 +92,12 @@ function Edit-Whitelist {
     $whitelistDir = Split-Path -Parent $whitelistPath
 
     # Ensure directory exists
-    if (-not (Test-Path $whitelistDir)) {
+    if (-not (Test-Path -LiteralPath $whitelistDir)) {
         New-Item -ItemType Directory -Path $whitelistDir -Force | Out-Null
     }
 
     # Create default whitelist if doesn't exist
-    if (-not (Test-Path $whitelistPath)) {
+    if (-not (Test-Path -LiteralPath $whitelistPath)) {
         $defaultContent = @"
 # Sweepr Whitelist - Paths listed here will never be cleaned
 # Use full paths or patterns with wildcards (*)
@@ -110,7 +110,7 @@ function Edit-Whitelist {
 # Add your protected paths below:
 
 "@
-        Set-Content -Path $whitelistPath -Value $defaultContent
+        Set-Content -LiteralPath $whitelistPath -Value $defaultContent
     }
 
     # Open in default editor
