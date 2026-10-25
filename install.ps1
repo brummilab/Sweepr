@@ -748,6 +748,7 @@ function Get-SweeprInstallNestedFiles {
         "bin\analyze.exe"
         "bin\analyze.ps1"
         "bin\clean.ps1"
+        "bin\features.ps1"
         "bin\history.ps1"
         "bin\inspect.ps1"
         "bin\optimize.ps1"
