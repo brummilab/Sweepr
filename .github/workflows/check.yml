@@ -26,7 +26,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          # Latest 1.26 patch: go.mod only states the minimum, and older patches
+          # carry standard-library vulnerabilities.
+          go-version: '1.26.x'
+          check-latest: true
 
       # Formatting is checked, never committed back from CI.
       - name: Check Go formatting
