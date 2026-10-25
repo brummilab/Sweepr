@@ -185,6 +185,8 @@ Describe "sw remove" {
 Describe "sw --version install line" {
     BeforeAll {
         $windowsDir = Split-Path -Parent $PSScriptRoot
+        # Get-SweeprInstallMethod asks Test-SweeprPortable, which lives in base.ps1.
+        . (Join-Path $windowsDir "lib\core\base.ps1")
         $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $windowsDir "sweepr.ps1"), [ref]$null, [ref]$null)
         foreach ($name in @("Get-SweeprSourceCommit", "Get-SweeprInstallDescription", "Get-SweeprInstallMethod")) {
             $definition = $ast.Find({
@@ -221,9 +223,9 @@ Describe "sw --version install line" {
         Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source"
     }
 
-    It "Leaves a copy without Git metadata as Portable" {
+    It "Calls a copy without Git metadata Copy" {
         Remove-Item -LiteralPath (Join-Path $script:Root ".git") -Recurse -Force
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Portable"
+        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Copy"
     }
 }
 
