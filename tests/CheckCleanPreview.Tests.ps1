@@ -330,7 +330,7 @@ Describe 'Get-SweeprCleanPreview' {
     }
 
     Context '-System with the optional system tools' {
-        It 'Lists DISM component cleanup and Disk Cleanup as not previewable and never starts them' {
+        It 'Does not list DISM or Disk Cleanup for -System, because sw clean never runs them' {
             Mock Test-IsAdmin { $true }
             Mock Invoke-SystemCleanup { & $script:RealInvokeSystemCleanup @PSBoundParameters }
             foreach ($name in @('Clear-SystemTempFiles', 'Clear-WindowsLogs', 'Clear-InstallerCache', 'Clear-MemoryDumps', 'Invoke-ComponentStoreCleanup', 'Invoke-DiskCleanupTool')) {
@@ -340,9 +340,23 @@ Describe 'Get-SweeprCleanPreview' {
             Should -Invoke Invoke-ComponentStoreCleanup -Times 0 -Exactly
             Should -Invoke Invoke-DiskCleanupTool -Times 0 -Exactly
             Should -Invoke Start-Process -Times 0 -Exactly
+            @($result.NotMeasured | Where-Object { $_.Name -in @('Component Store cleanup', 'Disk Cleanup tool') }).Count | Should -Be 0
+            @($result.NotMeasured).Count | Should -Be 0
+        }
+
+        It 'Reports the optional DISM and Disk Cleanup parts as not previewable in a dry run and starts nothing' {
+            # Called directly with the options, as a future caller could: the real tool functions run their dry-run path.
+            Mock Test-IsAdmin { $true }
+            foreach ($name in @('Clear-SystemTempFiles', 'Clear-WindowsLogs', 'Clear-InstallerCache', 'Clear-MemoryDumps')) { Mock $name {} }
+            $collected = New-Object System.Collections.Generic.List[object]
+            Set-DryRunMode -Enabled $true
+            $script:NotMeasuredCollector = $collected
+            try { & $script:RealInvokeSystemCleanup -IncludeComponentStore -IncludeDiskCleanup 6>$null }
+            finally { $script:NotMeasuredCollector = $null; Set-DryRunMode -Enabled $false }
+            Should -Invoke Start-Process -Times 0 -Exactly
             foreach ($name in @('Component Store cleanup', 'Disk Cleanup tool')) {
-                $entry = @($result.NotMeasured | Where-Object Name -eq $name)
-                $entry.Count | Should -Be 1 -Because "$name is part of -System but cannot be previewed"
+                $entry = @($collected.ToArray() | Where-Object Name -eq $name)
+                $entry.Count | Should -Be 1
                 $entry[0].Section | Should -Be 'System cleanup'
                 $entry[0].Reason | Should -Be 'not previewable'
             }
