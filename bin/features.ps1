@@ -1,5 +1,6 @@
 # Sweepr - Features Command
-# Interactive removal of preinstalled Microsoft apps and optional Windows features.
+# Interactive removal of preinstalled Microsoft apps and optional Windows features,
+# and --restore to bring back what an earlier run removed.
 # The allowlist, the protection lock, the inventory and the command text live in
 # lib/core/features.ps1; this script only runs the flow: list, menu, confirm, remove.
 
@@ -16,6 +17,8 @@ param(
 
     [Alias('all-users-future')]
     [switch]$AllUsersFuture,
+
+    [switch]$Restore,
 
     [Alias('h')]
     [switch]$ShowHelp
@@ -35,7 +38,8 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 . "$libDir\core\file_ops.ps1"
 . "$libDir\core\features.ps1"
 
-# 0 ok, 1 stopped by the administrator rule, 2 usage (no interactive console).
+# 0 ok, 1 stopped by the administrator rule or an unreadable restore list, 2 usage
+# (no interactive console, options that do not go together).
 $script:FeaturesExitCode = 0
 
 # ============================================================================
@@ -53,12 +57,14 @@ function Show-FeaturesHelp {
     Write-Host "  --dry-run            Show the exact commands, change nothing"
     Write-Host "  --list               List what can be removed and exit (JSON when piped)"
     Write-Host "  --all-users-future   Also remove the app for future users (administrator)"
+    Write-Host "  --restore            Bring back what Sweepr removed earlier (cannot be combined with --list or --all-users-future)"
     Write-Host "  --debug              Enable debug logging"
     Write-Host "  --help               Show this help message"
     Write-Host ""
     Write-Host "$esc[33mNotes:$esc[0m"
     Write-Host "  - Only entries from a fixed, reviewed list are offered, nothing is preselected"
-    Write-Host "  - Apps are removed for the current user; the Microsoft Store can reinstall them"
+    Write-Host "  - Apps are removed for the current user; --restore reinstalls them with winget or points to the Microsoft Store"
+    Write-Host "  - Every removal is saved first in features-removed.json in the Sweepr data folder"
     Write-Host "  - Optional Windows features need an administrator PowerShell"
     Write-Host "  - Sweepr never restarts Windows and never asks for administrator rights itself"
     Write-Host ""
@@ -143,7 +149,7 @@ function Show-FeaturesMenu {
     .OUTPUTS
         The checked rows in menu order (an empty array when none), or $null when cancelled.
     #>
-    param([object[]]$Items, [string]$Notice = "")
+    param([object[]]$Items, [string]$Notice = "", [string]$Heading = "Select what to remove")
 
     $rows = @($Items)
     if ($rows.Count -eq 0) { return , @() }
@@ -170,7 +176,7 @@ function Show-FeaturesMenu {
             if ($top -lt 0) { $top = 0 }
 
             Clear-Host
-            Write-Host "Select what to remove"
+            Write-Host $Heading
             Write-Host "Up/Down move | Space select | Enter confirm | Esc/Q cancel"
             if ($Notice) { Write-Host $Notice -ForegroundColor Yellow }
 
@@ -292,6 +298,18 @@ function Get-FeaturesCommandText {
 # Removal
 # ============================================================================
 
+# A removal that failed took nothing away, so the record saved for it goes again.
+# A record that was already there before this run stays.
+function Undo-FeaturesSavedRecord {
+    param($Row, $Saved)
+
+    if (-not $Saved.Added) { return }
+    $undo = Remove-SweeprFeatureRemovedRecord -Id $Row.Id -Target $Row.Target
+    if (-not $undo.Ok) {
+        Write-Host "  Could not take the record back out of features-removed.json: $($undo.Error)" -ForegroundColor Yellow
+    }
+}
+
 function Invoke-FeaturesRemoval {
     <#
     .SYNOPSIS
@@ -309,6 +327,7 @@ function Invoke-FeaturesRemoval {
 
         # Fresh read: the reviewed row must still be offered with the same target.
         $fresh = $null
+        $catalogEntry = $null
         $skipReason = $null
         try {
             if ($WithProvisioned -and -not [bool](Test-IsAdmin)) {
@@ -321,7 +340,8 @@ function Invoke-FeaturesRemoval {
                     $skipReason = "no longer in the list of removable entries"
                 }
                 else {
-                    $inventory = Get-SweeprFeatureInventory -Catalog @($entry[0])
+                    $catalogEntry = $entry[0]
+                    $inventory = Get-SweeprFeatureInventory -Catalog @($catalogEntry)
                     $same = @($inventory.Items | Where-Object { $_.Id -eq $row.Id -and $_.Target -eq $row.Target })
                     if ($same.Count -eq 1) { $fresh = $same[0] }
                     else { $skipReason = "no longer installed, changed or not offered any more since you reviewed it" }
@@ -356,12 +376,29 @@ function Invoke-FeaturesRemoval {
             continue
         }
 
+        # Fail closed: the way back is saved first. When it cannot be saved, nothing is touched.
+        $provisionedForRecord = $null
+        if ($provisionedCommand) { $provisionedForRecord = $fresh.ProvisionedName }
+        try {
+            $record = New-SweeprFeatureRemovedRecord -Item $fresh -CatalogEntry $catalogEntry -ProvisionedName $provisionedForRecord
+            $saved = Add-SweeprFeatureRemovedRecord -Record $record
+        }
+        catch {
+            $saved = [pscustomobject]@{ Ok = $false; Added = $false; Error = "Cannot save the restore list $(Get-SweeprFeaturesRemovedPath) ($($_.Exception.Message))" }
+        }
+        if (-not $saved.Ok) {
+            Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "not removed: $($saved.Error)"
+            Write-Host "failed, not removed ($($saved.Error))" -ForegroundColor Red
+            continue
+        }
+
         if ($fresh.Kind -eq 'App') {
             try {
                 Remove-AppxPackage -Package $fresh.Target -ErrorAction Stop
             }
             catch {
                 $message = Get-FeaturesErrorText $_
+                Undo-FeaturesSavedRecord -Row $fresh -Saved $saved
                 Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$userCommand failed: $message"
                 Write-Host "failed ($message)" -ForegroundColor Red
                 continue
@@ -390,6 +427,7 @@ function Invoke-FeaturesRemoval {
             }
             catch {
                 $message = Get-FeaturesErrorText $_
+                Undo-FeaturesSavedRecord -Row $fresh -Saved $saved
                 Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$userCommand failed: $message"
                 Write-Host "failed ($message)" -ForegroundColor Red
                 continue
@@ -412,6 +450,310 @@ function Invoke-FeaturesRemoval {
 }
 
 # ============================================================================
+# Restore (sw features --restore)
+# ============================================================================
+
+# Separate so tests never run the real winget.
+function Test-FeaturesWingetAvailable {
+    try { return [bool](Get-Command -Name winget -CommandType Application -ErrorAction SilentlyContinue) }
+    catch { return $false }
+}
+
+# The only place that runs winget. Its own output goes to the console, the return value is the exit code.
+function Invoke-FeaturesWinget {
+    param([string[]]$Arguments)
+
+    $global:LASTEXITCODE = 0
+    & winget @Arguments | Out-Host
+    return [int]$global:LASTEXITCODE
+}
+
+# An app counts as installed when exactly one package carries the exact name from the saved
+# full name (the part before the first underscore). Anything else is not guessed.
+function Test-FeaturesAppInstalled {
+    param([string]$Target)
+
+    $name = ([string]$Target).Split('_')[0]
+    if ([string]::IsNullOrWhiteSpace($name)) { return $false }
+    try {
+        $found = @(Get-AppxPackage -Name ([WildcardPattern]::Escape($name)) -ErrorAction Stop |
+            Where-Object { $_ -and [string](Get-SweeprFeatureProperty $_ 'Name') -eq $name })
+        return ($found.Count -eq 1)
+    }
+    catch { return $false }
+}
+
+function Get-FeaturesStoreHint {
+    param([string]$Title, [string]$Reason)
+
+    return "$Reason - install $Title from the Microsoft Store"
+}
+
+# Rows for the menu: one per valid saved record, in file order. The saved record is all that is used;
+# the catalog is not consulted, so a record outlives a change of the list.
+function Get-FeaturesRestoreRows {
+    param([object[]]$Records)
+
+    $rows = @()
+    foreach ($record in @($Records)) {
+        $kind = [string](Get-SweeprFeatureProperty $record 'Kind')
+        $title = Get-SweeprFeatureRecordTitle -Record $record
+        $removedAt = ([string](Get-SweeprFeatureProperty $record 'RemovedAt')) -replace '[^0-9A-Za-z:.\-+ ]', ''
+        $when = if ($removedAt) { "Removed $removedAt. " } else { "" }
+        if ($kind -eq 'App') {
+            $storeId = [string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $record 'Restore') 'StoreId')
+            $how = if ($storeId) { "Reinstalls the app from the Microsoft Store with winget." } else { "No Store id is saved: Sweepr can only point you to the Microsoft Store." }
+        }
+        else {
+            $how = "Turns the Windows feature back on (administrator, may need a restart)."
+        }
+        $rows += [pscustomobject]@{
+            Id          = [string](Get-SweeprFeatureProperty $record 'Id')
+            Kind        = $kind
+            Title       = $title
+            Description = "$when$how"
+            Warning     = $null
+            Target      = [string](Get-SweeprFeatureProperty $record 'Target')
+            Record      = $record
+        }
+    }
+    return , @($rows)
+}
+
+# What a restore of one row would do, for the preview.
+function Get-FeaturesRestorePreviewText {
+    param($Row, [bool]$WingetAvailable)
+
+    $command = Get-SweeprFeatureRestoreCommand -Record $Row.Record
+    if ($Row.Kind -ne 'App') { return $command }
+    if (Test-FeaturesAppInstalled -Target $Row.Target) { return "Already installed: only the saved record would be removed" }
+    if (-not $command) { return (Get-FeaturesStoreHint -Title $Row.Title -Reason "No Store id is saved") }
+    if (-not $WingetAvailable) { return (Get-FeaturesStoreHint -Title $Row.Title -Reason "winget is not available") }
+    return $command
+}
+
+# A restored row leaves the list; an entry that cannot be updated is reported, not hidden.
+function Complete-FeaturesRestoredRecord {
+    param($Row)
+
+    $update = Remove-SweeprFeatureRemovedRecord -Id $Row.Id -Target $Row.Target
+    if (-not $update.Ok) {
+        Write-Host "  Could not remove the entry from features-removed.json: $($update.Error)" -ForegroundColor Yellow
+    }
+}
+
+function Invoke-FeaturesRestoreRun {
+    <#
+    .SYNOPSIS
+        Restores the chosen rows one by one; each success leaves the list right away.
+    .OUTPUTS
+        $true when at least one result needs a Windows restart.
+    #>
+    param([object[]]$Selected, [bool]$WingetAvailable)
+
+    $restartNeeded = $false
+
+    foreach ($row in @($Selected)) {
+        $logPath = Get-FeaturesLogPath -Item $row
+        Write-Host "  $($row.Title) ... " -NoNewline
+
+        $command = $null
+        $failure = $null
+        try { $command = Get-SweeprFeatureRestoreCommand -Record $row.Record }
+        catch { $failure = $_.Exception.Message }
+        if ($failure) {
+            Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail $failure
+            Write-Host "failed ($failure)" -ForegroundColor Red
+            continue
+        }
+
+        if ($row.Kind -eq 'App') {
+            if (Test-FeaturesAppInstalled -Target $row.Target) {
+                Write-SweeprOperation -Action "RESTORED" -Path $logPath -Detail "already installed; saved record removed"
+                Write-Host "already installed" -ForegroundColor Green
+                Complete-FeaturesRestoredRecord -Row $row
+                continue
+            }
+            $hint = $null
+            if (-not $command) { $hint = Get-FeaturesStoreHint -Title $row.Title -Reason "No Store id is saved" }
+            elseif (-not $WingetAvailable) { $hint = Get-FeaturesStoreHint -Title $row.Title -Reason "winget is not available" }
+            if ($hint) {
+                Write-SweeprOperation -Action "SKIPPED" -Path $logPath -Detail $hint
+                Write-Host "skipped ($hint)" -ForegroundColor Yellow
+                continue
+            }
+
+            $exitCode = $null
+            try {
+                $arguments = Get-SweeprFeatureWingetArguments -StoreId ([string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $row.Record 'Restore') 'StoreId'))
+                $exitCode = [int](@(Invoke-FeaturesWinget -Arguments $arguments))[-1]
+            }
+            catch {
+                $failure = Get-FeaturesErrorText $_
+            }
+            # 0x8A15002B: winget reports the package as already installed.
+            if (-not $failure -and $exitCode -eq -1978335189) {
+                Write-SweeprOperation -Action "RESTORED" -Path $logPath -Detail "already installed (winget exit code $exitCode); saved record removed"
+                Write-Host "already installed" -ForegroundColor Green
+                Complete-FeaturesRestoredRecord -Row $row
+                continue
+            }
+            if (-not $failure -and $exitCode -ne 0) { $failure = "exit code $exitCode" }
+            if ($failure) {
+                Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$command failed: $failure"
+                Write-Host "failed ($failure)" -ForegroundColor Red
+                continue
+            }
+            Write-SweeprOperation -Action "RESTORED" -Path $logPath -Detail $command
+            Write-Host "restored" -ForegroundColor Green
+            Complete-FeaturesRestoredRecord -Row $row
+            continue
+        }
+
+        # Optional feature: the rights are checked again right before the change.
+        $isAdmin = $false
+        try { $isAdmin = [bool](Test-IsAdmin) } catch { $isAdmin = $false }
+        if (-not $isAdmin) {
+            $reason = "administrator rights are gone"
+            Write-SweeprOperation -Action "SKIPPED" -Path $logPath -Detail $reason
+            Write-Host "skipped ($reason)" -ForegroundColor Yellow
+            continue
+        }
+        $result = $null
+        try {
+            $result = Enable-WindowsOptionalFeature -Online -FeatureName $row.Target -NoRestart -ErrorAction Stop
+        }
+        catch {
+            $failure = Get-FeaturesErrorText $_
+            Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$command failed: $failure"
+            Write-Host "failed ($failure)" -ForegroundColor Red
+            continue
+        }
+        $needsRestart = $false
+        foreach ($item in @($result)) {
+            if ((Get-SweeprFeatureProperty $item 'RestartNeeded') -eq $true) { $needsRestart = $true }
+        }
+        $detail = $command
+        if ($needsRestart) {
+            $detail = "$command; restart needed"
+            $restartNeeded = $true
+        }
+        Write-SweeprOperation -Action "RESTORED" -Path $logPath -Detail $detail
+        Write-Host "restored" -ForegroundColor Green
+        Complete-FeaturesRestoredRecord -Row $row
+    }
+
+    return $restartNeeded
+}
+
+# The restore flow after the list is read: menu, preview or confirmation, run.
+function Invoke-FeaturesRestoreFlow {
+    param([object[]]$Rows, [string]$Notice, [bool]$Preview)
+
+    $selected = Show-FeaturesMenu -Items $Rows -Notice $Notice -Heading "Select what to restore"
+    if ($null -eq $selected) {
+        Write-Info "Cancelled"
+        return
+    }
+    $selected = @($selected)
+    if ($selected.Count -eq 0) {
+        Write-Info "Nothing selected"
+        return
+    }
+
+    $wingetAvailable = [bool](Test-FeaturesWingetAvailable)
+
+    if ($Preview) {
+        Write-Host ""
+        Write-Host "Dry run: these commands would run, nothing is changed:" -ForegroundColor Yellow
+        Write-Host ""
+        foreach ($row in $selected) {
+            Write-Host "  $($row.Title)"
+            $text = $null
+            try { $text = Get-FeaturesRestorePreviewText -Row $row -WingetAvailable $wingetAvailable }
+            catch { $text = "cannot be restored: $($_.Exception.Message)" }
+            Write-Host "      $text"
+        }
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+    Write-Host "The following will be restored:" -ForegroundColor Yellow
+    Write-Host ""
+    foreach ($row in $selected) { Write-Host "  $($row.Title)" }
+    Write-Host ""
+    $confirm = Read-Host "Continue? (y/N)"
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Info "Cancelled"
+        return
+    }
+
+    Write-Host ""
+    $restartNeeded = Invoke-FeaturesRestoreRun -Selected $selected -WingetAvailable $wingetAvailable
+    Write-Host ""
+    if ($restartNeeded) {
+        Write-Host "Restart Windows to finish." -ForegroundColor Yellow
+    }
+}
+
+function Invoke-FeaturesRestoreCommand {
+    param([switch]$DryRun, [switch]$List, [switch]$AllUsersFuture)
+
+    if ($List -or $AllUsersFuture) {
+        Write-SweeprError "--restore cannot be combined with --list or --all-users-future."
+        $script:FeaturesExitCode = 2
+        return
+    }
+
+    if ($DryRun) {
+        $env:SWEEPR_DRY_RUN = "1"
+        Set-DryRunMode -Enabled $true
+    }
+    $preview = [bool]$DryRun -or [bool](Test-DryRunMode)
+
+    $stored = Read-SweeprFeaturesRemoved
+    if (-not $stored.Ok) {
+        Write-SweeprError "$($stored.Error). The file was not changed; fix or move it aside to use --restore."
+        $script:FeaturesExitCode = 1
+        return
+    }
+    $records = @($stored.Items)
+    if ($records.Count -eq 0) {
+        Write-Info "Nothing to restore: Sweepr has no saved removals."
+        return
+    }
+
+    if (-not (Test-FeaturesInteractive)) {
+        Write-SweeprError "sw features --restore needs an interactive console."
+        $script:FeaturesExitCode = 2
+        return
+    }
+
+    # Invalid records stay in the file untouched; they are just never offered.
+    $valid = @($records | Where-Object { Test-SweeprFeatureRemovedRecord -Record $_ })
+    $invalidCount = $records.Count - $valid.Count
+
+    $isAdmin = $false
+    try { $isAdmin = [bool](Test-IsAdmin) } catch { $isAdmin = $false }
+    $offered = @($valid | Where-Object { (Get-SweeprFeatureProperty $_ 'Kind') -eq 'App' -or $isAdmin })
+    $notice = ""
+    if ($offered.Count -lt $valid.Count) { $notice = Get-FeaturesNeedAdminText }
+
+    if ($offered.Count -eq 0) {
+        if ($notice) { Write-FeaturesNeedAdminHint }
+        else { Write-Info "Nothing to restore: no saved entry in features-removed.json is valid." }
+    }
+    else {
+        Invoke-FeaturesRestoreFlow -Rows (Get-FeaturesRestoreRows -Records $offered) -Notice $notice -Preview $preview
+    }
+
+    if ($invalidCount -gt 0) {
+        Write-Host "$invalidCount saved entries in features-removed.json are not valid and were not offered; the file was left as it is." -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
 # Command
 # ============================================================================
 
@@ -420,6 +762,7 @@ function Invoke-FeaturesCommand {
         [switch]$DryRun,
         [switch]$List,
         [switch]$AllUsersFuture,
+        [switch]$Restore,
         [switch]$ShowHelp
     )
 
@@ -427,6 +770,11 @@ function Invoke-FeaturesCommand {
 
     if ($ShowHelp) {
         Show-FeaturesHelp
+        return
+    }
+
+    if ($Restore) {
+        Invoke-FeaturesRestoreCommand -DryRun:$DryRun -List:$List -AllUsersFuture:$AllUsersFuture
         return
     }
 
@@ -537,6 +885,6 @@ if ($DebugMode) {
     Enable-DebugMode
     $DebugPreference = "Continue"
 }
-try { Invoke-FeaturesCommand -DryRun:$DryRun -List:$List -AllUsersFuture:$AllUsersFuture -ShowHelp:$ShowHelp }
+try { Invoke-FeaturesCommand -DryRun:$DryRun -List:$List -AllUsersFuture:$AllUsersFuture -Restore:$Restore -ShowHelp:$ShowHelp }
 finally { Stop-Spinner }
 if ($script:FeaturesExitCode -ne 0) { exit $script:FeaturesExitCode }

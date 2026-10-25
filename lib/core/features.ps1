@@ -158,13 +158,13 @@ function Get-SweeprFeatureCatalog {
     .SYNOPSIS
         The fixed allowlist of apps and optional features sw features may offer.
     .DESCRIPTION
-        StoreId stays $null until verified on a real Windows PC; restore then only
-        points to the Store. Teams, Copilot, OneDrive, Recall, Widgets and
+        A StoreId is entered only after it was confirmed with winget show on a real
+        Windows PC; until then it stays $null and restore only points to the Store. Teams, Copilot, OneDrive, Recall, Widgets and
         capabilities are deliberately not part of this list.
     #>
     $xboxWarning = 'Xbox games, Game Pass and Minecraft sign-in may need this.'
     return @(
-        (New-SweeprFeatureApp 'app.weather' 'Microsoft.BingWeather' 'Weather' 'Weather app with forecasts for your locations.')
+        (New-SweeprFeatureApp 'app.weather' 'Microsoft.BingWeather' 'Weather' 'Weather app with forecasts for your locations.' $null '9WZDNCRFJ3Q2')
         (New-SweeprFeatureApp 'app.news' 'Microsoft.BingNews' 'News' 'News app that shows headlines from Microsoft News.')
         (New-SweeprFeatureApp 'app.tips' 'Microsoft.Getstarted' 'Tips' 'Tips app with hints for getting started with Windows.')
         (New-SweeprFeatureApp 'app.office-hub' 'Microsoft.MicrosoftOfficeHub' 'Microsoft 365 (Office hub)' 'Launcher and ad surface for Microsoft 365; Office itself is not affected.')
@@ -178,13 +178,13 @@ function Get-SweeprFeatureCatalog {
         (New-SweeprFeatureApp 'app.3d-viewer' 'Microsoft.Microsoft3DViewer' '3D Viewer' 'Viewer for 3D model files.')
         (New-SweeprFeatureApp 'app.print-3d' 'Microsoft.Print3D' 'Print 3D' 'App for preparing and sending 3D prints.')
         (New-SweeprFeatureApp 'app.mixed-reality-portal' 'Microsoft.MixedReality.Portal' 'Mixed Reality Portal' 'Setup and portal app for Windows Mixed Reality headsets.')
-        (New-SweeprFeatureApp 'app.phone-link' 'Microsoft.YourPhone' 'Phone Link' 'Links an Android phone or iPhone to this PC.')
+        (New-SweeprFeatureApp 'app.phone-link' 'Microsoft.YourPhone' 'Phone Link' 'Links an Android phone or iPhone to this PC.' $null '9NMPJ99VJBWV')
         (New-SweeprFeatureApp 'app.clipchamp' 'Clipchamp.Clipchamp' 'Clipchamp' 'Video editor app.')
         (New-SweeprFeatureApp 'app.todo' 'Microsoft.Todos' 'Microsoft To Do' 'Task list app.')
         (New-SweeprFeatureApp 'app.power-automate' 'Microsoft.PowerAutomateDesktop' 'Power Automate' 'Desktop automation app for flows and macros.')
         (New-SweeprFeatureApp 'app.xbox' 'Microsoft.XboxApp' 'Xbox (legacy app)' 'Older Xbox companion app.' $xboxWarning)
         (New-SweeprFeatureApp 'app.xbox-tcui' 'Microsoft.Xbox.TCUI' 'Xbox TCUI' 'Xbox sign-in and social dialogs used by games.' $xboxWarning)
-        (New-SweeprFeatureApp 'app.xbox-identity' 'Microsoft.XboxIdentityProvider' 'Xbox Identity Provider' 'Signs you in to Xbox services for games and apps.' $xboxWarning)
+        (New-SweeprFeatureApp 'app.xbox-identity' 'Microsoft.XboxIdentityProvider' 'Xbox Identity Provider' 'Signs you in to Xbox services for games and apps.' $xboxWarning '9WZDNCRD1HKW')
         (New-SweeprFeatureApp 'app.xbox-speech' 'Microsoft.XboxSpeechToTextOverlay' 'Xbox Speech To Text Overlay' 'Speech-to-text overlay for Xbox game chat.' $xboxWarning)
         (New-SweeprFeatureOptional 'feature.powershell2' 'MicrosoftWindowsPowerShellV2' 'Windows PowerShell 2.0' 'The legacy PowerShell 2.0 engine itself, an old downgrade-attack path. Windows PowerShell 5.1 is not affected.')
         (New-SweeprFeatureOptional 'feature.powershell2-root' 'MicrosoftWindowsPowerShellV2Root' 'Windows PowerShell 2.0 (root)' 'Parent (root) feature of the PowerShell 2.0 engine; turning it off also turns off the engine. Windows PowerShell 5.1 is not affected.')
@@ -361,4 +361,239 @@ function Get-SweeprFeatureCommand {
         $text += "; Remove-AppxProvisionedPackage -Online -PackageName $provisionedName"
     }
     return $text
+}
+
+
+# ============================================================================
+# Restore list (features-removed.json) and restore command text
+# ============================================================================
+
+# Names that may reach a command line or the log: package full names, feature names,
+# Store ids and catalog ids. Anything else in the file is treated as tampered.
+function Test-SweeprFeatureSafeName {
+    param($Value)
+
+    if ($Value -isnot [string]) { return $false }
+    return ($Value -match '^[A-Za-z0-9][A-Za-z0-9._~-]*$')
+}
+
+# The list lives in the active data folder (profile, portable or override).
+function Get-SweeprFeaturesRemovedPath {
+    return (Join-Path $script:Config.ConfigPath 'features-removed.json')
+}
+
+function Read-SweeprFeaturesRemoved {
+    <#
+    .SYNOPSIS
+        Reads the restore list.
+    .OUTPUTS
+        Object with Ok, Items (all records in file order, valid or not) and Error.
+        A missing or empty file is an empty list; anything that is not
+        {"items":[ ... ]} with objects inside is unreadable (Ok = $false).
+    #>
+    $path = Get-SweeprFeaturesRemovedPath
+    $result = [pscustomobject]@{ Ok = $true; Items = @(); Error = $null }
+    try {
+        if (-not [System.IO.File]::Exists($path)) { return $result }
+        $raw = [System.IO.File]::ReadAllText($path)
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $result }
+
+        $document = $raw | ConvertFrom-Json -ErrorAction Stop
+        $itemsProperty = $null
+        if ($document -is [pscustomobject]) { $itemsProperty = $document.PSObject.Properties['items'] }
+        if (-not $itemsProperty -or $itemsProperty.Value -isnot [System.Array]) {
+            throw 'it does not hold an "items" list'
+        }
+        $items = @()
+        foreach ($item in $itemsProperty.Value) {
+            if ($item -isnot [pscustomobject]) { throw 'an entry is not an object' }
+            # Newer PowerShell turns ISO times into dates; keep the text form so a rewrite stays stable.
+            $removedAt = $item.PSObject.Properties['RemovedAt']
+            if ($removedAt -and $removedAt.Value -is [datetime]) {
+                $removedAt.Value = $removedAt.Value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            }
+            $items += $item
+        }
+        $result.Items = @($items)
+    }
+    catch {
+        $result.Ok = $false
+        $result.Items = @()
+        $result.Error = "Cannot read the restore list $path ($($_.Exception.Message))"
+    }
+    return $result
+}
+
+# Writes the whole list; throws when it cannot. The new text is written beside the file and
+# moved over it, so an interrupted write never leaves a half-written list.
+function Save-SweeprFeaturesRemoved {
+    param([object[]]$Items)
+
+    $path = Get-SweeprFeaturesRemovedPath
+    $directory = Split-Path -Parent $path
+    if (-not [System.IO.Directory]::Exists($directory)) { [void][System.IO.Directory]::CreateDirectory($directory) }
+
+    $document = [ordered]@{ version = 1; items = @($Items) }
+    $json = ConvertTo-Json -InputObject $document -Depth 8
+    $temp = "$path.tmp"
+    try {
+        [System.IO.File]::WriteAllText($temp, $json, (New-Object System.Text.UTF8Encoding($false)))
+        if ([System.IO.File]::Exists($path)) { [System.IO.File]::Replace($temp, $path, [NullString]::Value) }
+        else { [System.IO.File]::Move($temp, $path) }
+    }
+    catch {
+        # Only our own temporary file is cleaned up here.
+        try { if ([System.IO.File]::Exists($temp)) { [System.IO.File]::Delete($temp) } } catch { }
+        throw
+    }
+}
+
+function New-SweeprFeatureRemovedRecord {
+    <#
+    .SYNOPSIS
+        The restore record for a row that is about to be removed. Restore comes from the catalog entry.
+    #>
+    param([Parameter(Mandatory)]$Item, [Parameter(Mandatory)]$CatalogEntry, [string]$ProvisionedName)
+
+    $kind = [string](Get-SweeprFeatureProperty $Item 'Kind')
+    $target = [string](Get-SweeprFeatureProperty $Item 'Target')
+    $catalogRestore = Get-SweeprFeatureProperty $CatalogEntry 'Restore'
+    if ($kind -eq 'App') {
+        $storeId = [string](Get-SweeprFeatureProperty $catalogRestore 'StoreId')
+        $restore = [ordered]@{ Type = 'Store'; StoreId = $(if ($storeId) { $storeId } else { $null }) }
+    }
+    else {
+        $restore = [ordered]@{ Type = 'Enable'; Feature = $target }
+    }
+    $record = [ordered]@{
+        Id        = [string](Get-SweeprFeatureProperty $Item 'Id')
+        Kind      = $kind
+        Title     = [string](Get-SweeprFeatureProperty $Item 'Title')
+        Target    = $target
+        Restore   = $restore
+        RemovedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ProvisionedName)) { $record['ProvisionedName'] = $ProvisionedName }
+    return [pscustomobject]$record
+}
+
+function Add-SweeprFeatureRemovedRecord {
+    <#
+    .SYNOPSIS
+        Appends a record unless the same Id and Target is already there.
+    .OUTPUTS
+        Object with Ok, Added (a new record was written) and Error. Nothing is written when the list is unreadable.
+    #>
+    param([Parameter(Mandatory)]$Record)
+
+    $list = Read-SweeprFeaturesRemoved
+    if (-not $list.Ok) { return [pscustomobject]@{ Ok = $false; Added = $false; Error = $list.Error } }
+
+    $id = [string](Get-SweeprFeatureProperty $Record 'Id')
+    $target = [string](Get-SweeprFeatureProperty $Record 'Target')
+    foreach ($existing in $list.Items) {
+        if ([string](Get-SweeprFeatureProperty $existing 'Id') -ceq $id -and [string](Get-SweeprFeatureProperty $existing 'Target') -ceq $target) {
+            return [pscustomobject]@{ Ok = $true; Added = $false; Error = $null }
+        }
+    }
+    try {
+        Save-SweeprFeaturesRemoved -Items (@($list.Items) + @($Record))
+    }
+    catch {
+        return [pscustomobject]@{ Ok = $false; Added = $false; Error = "Cannot save the restore list $(Get-SweeprFeaturesRemovedPath) ($($_.Exception.Message))" }
+    }
+    return [pscustomobject]@{ Ok = $true; Added = $true; Error = $null }
+}
+
+function Remove-SweeprFeatureRemovedRecord {
+    <#
+    .SYNOPSIS
+        Takes the records with this Id and Target out of the list; all other records stay as they are.
+    #>
+    param([Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Target)
+
+    $list = Read-SweeprFeaturesRemoved
+    if (-not $list.Ok) { return [pscustomobject]@{ Ok = $false; Error = $list.Error } }
+
+    $kept = @($list.Items | Where-Object {
+            -not ([string](Get-SweeprFeatureProperty $_ 'Id') -ceq $Id -and [string](Get-SweeprFeatureProperty $_ 'Target') -ceq $Target)
+        })
+    if ($kept.Count -eq @($list.Items).Count) { return [pscustomobject]@{ Ok = $true; Error = $null } }
+    try {
+        Save-SweeprFeaturesRemoved -Items $kept
+    }
+    catch {
+        return [pscustomobject]@{ Ok = $false; Error = "Cannot save the restore list $(Get-SweeprFeaturesRemovedPath) ($($_.Exception.Message))" }
+    }
+    return [pscustomobject]@{ Ok = $true; Error = $null }
+}
+
+function Test-SweeprFeatureRemovedRecord {
+    <#
+    .SYNOPSIS
+        True when a record from the file is complete and safe to turn into a command.
+    .DESCRIPTION
+        The file is user-writable, so every field that reaches a command line is checked again here.
+    #>
+    param($Record)
+
+    if ($null -eq $Record) { return $false }
+    $kind = Get-SweeprFeatureProperty $Record 'Kind'
+    $target = Get-SweeprFeatureProperty $Record 'Target'
+    if (-not (Test-SweeprFeatureSafeName (Get-SweeprFeatureProperty $Record 'Id'))) { return $false }
+    if (-not (Test-SweeprFeatureSafeName $target)) { return $false }
+
+    $restore = Get-SweeprFeatureProperty $Record 'Restore'
+    $type = Get-SweeprFeatureProperty $restore 'Type'
+    if ($kind -ceq 'App') {
+        if ($type -cne 'Store') { return $false }
+        $storeId = Get-SweeprFeatureProperty $restore 'StoreId'
+        if ($null -ne $storeId -and $storeId -ne '' -and -not (Test-SweeprFeatureSafeName $storeId)) { return $false }
+        return $true
+    }
+    if ($kind -ceq 'OptionalFeature') {
+        if ($type -cne 'Enable') { return $false }
+        return ((Get-SweeprFeatureProperty $restore 'Feature') -ceq $target)
+    }
+    return $false
+}
+
+# Text for the console and the log: no control characters from a hand-edited file.
+function Get-SweeprFeatureRecordTitle {
+    param($Record)
+
+    $title = ([string](Get-SweeprFeatureProperty $Record 'Title')) -replace '[\x00-\x1F\x7F]', ' '
+    $title = $title.Trim()
+    if (-not $title) { $title = [string](Get-SweeprFeatureProperty $Record 'Id') }
+    return $title
+}
+
+function Get-SweeprFeatureWingetArguments {
+    param([Parameter(Mandatory)][string]$StoreId)
+
+    if (-not (Test-SweeprFeatureSafeName $StoreId)) { throw "Refusing to build a command for an unexpected Store id: $StoreId" }
+    return @('install', '--id', $StoreId, '--source', 'msstore', '--accept-package-agreements', '--accept-source-agreements')
+}
+
+function Get-SweeprFeatureRestoreCommand {
+    <#
+    .SYNOPSIS
+        Exact command text to restore a record, for the preview and the log; never executed here.
+    .OUTPUTS
+        The text, or $null for an app without a Store id (only a Store hint is possible).
+    #>
+    param([Parameter(Mandatory)]$Record)
+
+    $kind = [string](Get-SweeprFeatureProperty $Record 'Kind')
+    $target = [string](Get-SweeprFeatureProperty $Record 'Target')
+    if (-not (Test-SweeprFeatureSafeName $target)) { throw "Refusing to build a command for an unexpected target: $target" }
+
+    if ($kind -eq 'OptionalFeature') {
+        return "Enable-WindowsOptionalFeature -Online -FeatureName $target -NoRestart"
+    }
+    if ($kind -ne 'App') { throw "Unknown feature kind: $kind" }
+
+    $storeId = [string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $Record 'Restore') 'StoreId')
+    if ([string]::IsNullOrWhiteSpace($storeId)) { return $null }
+    return ('winget ' + ((Get-SweeprFeatureWingetArguments -StoreId $storeId) -join ' '))
 }

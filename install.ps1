@@ -891,6 +891,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\e2e_harness_test.py"
         "tests\Features.Tests.ps1"
         "tests\FeaturesCommand.Tests.ps1"
+        "tests\FeaturesRestore.Tests.ps1"
         "tests\GitProxy.Tests.ps1"
         "tests\History.Tests.ps1"
         "tests\Inspect.Tests.ps1"
@@ -1122,7 +1123,8 @@ function Uninstall-Sweepr {
             $response = Read-Host "  Remove config files? (y/N)"
             if ($response -eq "y" -or $response -eq "Y") {
                 # operations.log is the record of what Sweepr removed; support reads it after
-                # a report, so it outlives the CLI along with its rotated copy.
+                # a report, so it outlives the CLI along with its rotated copy. The restore list
+                # of sw features (features-removed.json) is the only way back to what it removed.
                 try {
                     # Checking children cannot protect a linked config root or ancestor:
                     # enumeration would already have followed it into another directory.
@@ -1130,7 +1132,7 @@ function Uninstall-Sweepr {
                     $kept = @()
                     foreach ($item in @(Get-ChildItem -LiteralPath $configDir -Force -ErrorAction Stop)) {
                         Assert-InstallPhysicalPath -Path $configDir
-                        if ($item.Name -like 'operations.log*') { $kept += $item.Name; continue }
+                        if ($item.Name -like 'operations.log*' -or $item.Name -eq 'features-removed.json') { $kept += $item.Name; continue }
                         Remove-SweeprConfigEntry -Item $item
                     }
                     if ($kept.Count -eq 0) {
