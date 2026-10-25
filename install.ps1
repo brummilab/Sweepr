@@ -764,6 +764,7 @@ function Get-SweeprInstallNestedFiles {
         ".github\workflows\test.yml"
         "bin\analyze.exe"
         "bin\analyze.ps1"
+        "bin\check.ps1"
         "bin\clean.ps1"
         "bin\features.ps1"
         "bin\history.ps1"

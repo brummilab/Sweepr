@@ -161,6 +161,7 @@ function Show-MainHelp {
     Write-HelpRow "sw clean" "Free up disk space"
     Write-HelpRow "sw uninstall" "Remove apps completely"
     Write-HelpRow "sw features" "Remove preinstalled apps and Windows features"
+    Write-HelpRow "sw check" "Look at this PC once and report (changes nothing)"
     Write-HelpRow "sw optimize" "Refresh caches and services"
     Write-HelpRow "sw analyze" "Explore disk usage"
     Write-HelpRow "sw status" "Monitor system health"
@@ -178,6 +179,7 @@ function Show-MainHelp {
     Write-HelpRow "sw uninstall --dry-run" "Preview app uninstall"
     Write-HelpRow "sw features --dry-run" "Preview what would be removed"
     Write-HelpRow "sw features --restore" "Bring back apps and features removed earlier"
+    Write-HelpRow "sw check --report" "Check this PC and write an HTML report"
     Write-HelpRow "sw purge --dry-run" "Preview project purge"
     Write-HelpRow "sw purge --paths" "Configure scan directories"
     Write-HelpRow "sw history --json" "Export cleanup history"
@@ -308,7 +310,7 @@ function Invoke-SweeprCommand {
     }
 
     # A previous native command must not make a help-only invocation fail.
-    if ($CommandName -in @("analyze", "status", "history", "features")) { $global:LASTEXITCODE = 0 }
+    if ($CommandName -in @("analyze", "status", "history", "features", "check")) { $global:LASTEXITCODE = 0 }
 
     # Execute the command script with arguments using splatting
     # This properly handles switch parameters passed as strings
@@ -384,7 +386,7 @@ function Invoke-SweeprCommand {
     finally {
         if ($debugSession) { Complete-SweeprDebugSession }
     }
-    if ($CommandName -in @("analyze", "status", "history", "features")) {
+    if ($CommandName -in @("analyze", "status", "history", "features", "check")) {
         $script:SweeprExitCode = $LASTEXITCODE
     }
 }
@@ -475,7 +477,7 @@ function Main {
         $updateContext = Start-SweeprUpdateCheck -RootDir $script:SWEEPR_ROOT -Version $script:SWEEPR_VER -Method (Get-SweeprInstallMethod -RootDir $script:SWEEPR_ROOT)
     }
     if ($effectiveCommand) {
-        $validCommands = @("clean", "uninstall", "analyze", "status", "optimize", "purge", "history", "features", "update", "remove")
+        $validCommands = @("clean", "uninstall", "analyze", "status", "optimize", "purge", "history", "features", "check", "update", "remove")
 
         if ($effectiveCommand -in $validCommands) {
             Invoke-SweeprCommand -CommandName $effectiveCommand -Arguments $effectiveArguments
