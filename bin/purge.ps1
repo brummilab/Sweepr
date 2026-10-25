@@ -93,7 +93,7 @@ function Show-PurgeHelp {
     Write-Host ""
     Write-Host "$esc[33mDefault Search Paths:$esc[0m"
     foreach ($path in $script:DefaultSearchPaths) {
-        if (Test-Path $path) {
+        if (Test-Path -LiteralPath $path) {
             Write-Host "  $esc[32m+$esc[0m $path"
         }
         else {
@@ -119,13 +119,13 @@ function Get-SearchPaths {
     $paths = @()
 
     # Load custom paths if available
-    if (Test-Path $script:ConfigFile) {
-        $customPaths = Get-Content $script:ConfigFile -ErrorAction SilentlyContinue |
+    if (Test-Path -LiteralPath $script:ConfigFile) {
+        $customPaths = Get-Content -LiteralPath $script:ConfigFile -ErrorAction SilentlyContinue |
                        Where-Object { $_ -and -not $_.StartsWith('#') } |
                        ForEach-Object { $_.Trim() }
 
         foreach ($path in $customPaths) {
-            if (Test-Path $path) {
+            if (Test-Path -LiteralPath $path) {
                 $paths += $path
             }
         }
@@ -134,7 +134,7 @@ function Get-SearchPaths {
     # Add default paths if no custom paths or custom paths don't exist
     if ($null -eq $paths -or @($paths).Count -eq 0) {
         foreach ($path in $script:DefaultSearchPaths) {
-            if (Test-Path $path) {
+            if (Test-Path -LiteralPath $path) {
                 $paths += $path
             }
         }
@@ -151,11 +151,11 @@ function Edit-SearchPaths {
 
     $configDir = Split-Path -Parent $script:ConfigFile
 
-    if (-not (Test-Path $configDir)) {
+    if (-not (Test-Path -LiteralPath $configDir)) {
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
     }
 
-    if (-not (Test-Path $script:ConfigFile)) {
+    if (-not (Test-Path -LiteralPath $script:ConfigFile)) {
         $defaultContent = @"
 # Sweepr Purge - Custom Search Paths
 # Add directories to scan for project artifacts (one per line)
@@ -171,7 +171,7 @@ function Edit-SearchPaths {
 # $env:USERPROFILE\Code
 
 "@
-        Set-Content -Path $script:ConfigFile -Value $defaultContent
+        Set-Content -LiteralPath $script:ConfigFile -Value $defaultContent
     }
 
     Write-Info "Opening paths configuration: $($script:ConfigFile)"
