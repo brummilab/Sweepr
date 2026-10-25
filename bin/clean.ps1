@@ -183,7 +183,7 @@ function Start-Cleanup {
 
         # Prepare export file
         $exportDir = Split-Path -Parent $script:ExportListFile
-        if (-not (Test-Path $exportDir)) {
+        if (-not (Test-Path -LiteralPath $exportDir)) {
             New-Item -ItemType Directory -Path $exportDir -Force | Out-Null
         }
 
@@ -196,7 +196,7 @@ function Start-Cleanup {
 #
 
 "@
-        Set-Content -Path $script:ExportListFile -Value $header
+        Set-Content -LiteralPath $script:ExportListFile -Value $header
     }
     else {
         Write-Host "$esc[90m$($script:Icons.Solid) Use --dry-run to preview, --whitelist to manage protected paths$esc[0m"

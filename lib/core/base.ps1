@@ -806,7 +806,7 @@ function Get-ConfigPath {
         Get Sweepr config directory, creating it if needed
     #>
     $path = $script:Config.ConfigPath
-    if (-not (Test-Path $path)) {
+    if (-not (Test-Path -LiteralPath $path)) {
         New-Item -ItemType Directory -Path $path -Force | Out-Null
     }
     return $path
@@ -818,7 +818,7 @@ function Get-CachePath {
         Get Sweepr cache directory, creating it if needed
     #>
     $path = $script:Config.CachePath
-    if (-not (Test-Path $path)) {
+    if (-not (Test-Path -LiteralPath $path)) {
         New-Item -ItemType Directory -Path $path -Force | Out-Null
     }
     return $path
