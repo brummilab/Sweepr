@@ -73,6 +73,14 @@ Conservative cleanup targets.Keeps Spotify offline stores during automatic clean
 Conservative cleanup targets.Keeps Teams blob_storage while still cleaning its exact cache leaves
 Conservative cleanup targets.Keeps Teams tmp while still cleaning its exact cache leaves
 Copied installation ownership.Refuses a linked destination ancestor without modifying its target
+Data folder below a cleanup target.Clear-DirectoryContents still clears a prefix sibling of the data folder
+Data folder below a cleanup target.Remove-OldFiles still removes old files in the cleanup target itself
+Data folder below a cleanup target.Remove-SafeItem still removes a prefix sibling of the data folder
+Data folder below a cleanup target.Remove-SafeItems keeps data and cache files and removes the rest of a batch
+Data folder below a cleanup target.Reports Test-SafePath false for the data and cache folders and their files
+Data folder protection in dry run.Clear-DirectoryContents on the parent does not count the data folder in dry run
+Data folder protection in dry run.Remove-SafeItems still lists a prefix sibling in dry run and removes nothing
+Data folder with brackets in its name.Does not let the bracket name act as a wildcard that protects a lookalike folder
 Debug through installed launcher call shapes.Creates a debug session through Command
 Debug through installed launcher call shapes.Creates a debug session through File
 File Operations Module.Format-ByteSize.Should format bytes correctly
@@ -158,6 +166,8 @@ Owner cache cleanup whitelist.Runs an owner for a known unprotected ordinary cac
 Owner process timeout.Says when it stops an owner process tree that ran past its timeout
 Package manager update without Git.Prints the winget command before requiring Git
 Portable update without Git.Prints the portable message with an empty PATH
+Profile mode stays unchanged.Protects the profile data and cache folders the same way
+Profile mode stays unchanged.Still cleans an ordinary temp folder that is not the data folder
 Protected system cleanup does not disturb services.Never stops, starts or restarts FontCache or Windows Update during system cleanup
 Purge Command.Help Display.Should list artifact types in help
 Purge Command.Help Display.Should show help without error
