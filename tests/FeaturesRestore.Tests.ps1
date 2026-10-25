@@ -31,6 +31,8 @@
 #   The list is read as: missing file, empty file or {"items":[]} = no records; anything that is not
 #   JSON of that shape = unreadable. A file is never deleted (bin\features.ps1 has no Remove-Item): when
 #   the last record goes, {"version":1,"items":[]} stays (tests accept a missing file too).
+#   Atomic write: the new text goes to <file>.tmp and replaces the file (a blocked .tmp means the old list is
+#   kept and the save fails); no .tmp is left behind after a save.
 #
 # Removal side (sw features, real run), per entry, after the re-check passed and BEFORE the Remove-*/Disable-*
 # cmdlet is called: the record is saved (no duplicate for the same Id + Target).
@@ -42,7 +44,7 @@
 #     (nothing was removed). A failing provisioned step after the user package went keeps the record.
 #   - SKIPPED entries, dry run, cancel and "n" write no record.
 #
-# Restore side, sw features --restore (all of it works from the list alone, not from the catalog):
+# Restore side, sw features --restore (bound to the CURRENT catalog, Get-SweeprFeatureCatalog; the file alone decides nothing):
 #   Order: help; --all-users-future or --list together with --restore -> error text naming --restore, exit 2,
 #   nothing read or changed; read the list (nothing to restore -> message "Nothing to restore", exit 0;
 #   unreadable -> error naming features-removed.json, exit 1, file untouched, no menu); no interactive
@@ -52,7 +54,18 @@
 #   (all records need admin and none left -> notice, no menu, exit 0).
 #   Invalid record: Id/Kind/Target missing, Kind unknown, Target or StoreId with characters outside
 #   [A-Za-z0-9._~-], Restore.Type not matching the Kind (Store for App, Enable for OptionalFeature),
-#   Restore.Feature different from Target.
+#   Restore.Feature different from Target. A name must match [A-Za-z0-9][A-Za-z0-9._~-]*\z (a trailing newline
+#   is NOT allowed; Test-SweeprFeatureSafeName "SMB1Protocol`n" is $false).
+#   Catalog binding (lead decision): the file is user-writable, so what it asks for must also be allowed today.
+#     - OptionalFeature record: offered and run only when the catalog has an entry with the same Id, the same
+#       Kind (OptionalFeature) and the record's Target is (-ceq) one of that entry's Match names. Otherwise it is
+#       not offered (it stays in the file untouched) and a warning line naming features-removed.json says
+#       "... not offered ..."; it counts like an invalid record. The catalog is read again right before each
+#       feature (an entry that left the catalog meanwhile: SKIPPED, no Enable call).
+#     - App record: stays offered when the catalog entry is gone (or changed Kind); winget only runs with the
+#       StoreId of the CURRENT catalog entry with the same Id. The StoreId in the file is ignored (neither used
+#       nor needed). No such entry or no StoreId in it: only the Store hint (SKIPPED), the record stays.
+#     - The y/N screen names, for every selected row, the Target or the command (not only the Title).
 #   Menu: Show-FeaturesMenu with the records (file order), one row per record, Title shown, nothing
 #   preselected, head says restore (not "remove"). Esc/Q -> "Cancelled", empty selection -> "Nothing
 #   selected", both without prompt or change.
@@ -60,7 +73,8 @@
 #     OptionalFeature: Enable-WindowsOptionalFeature -Online -FeatureName <Name> -NoRestart
 #     App with StoreId and winget: winget install --id <StoreId> --source msstore --accept-package-agreements --accept-source-agreements
 #         run as Invoke-FeaturesWinget -Arguments @('install','--id',<StoreId>,'--source','msstore','--accept-package-agreements','--accept-source-agreements')
-#         exit code 0 = success, anything else (or a throw) = FAILED
+#         exit code 0 = success; -1978335189 (0x8A15002B) and -1978335135 (0x8A150061) = RESTORED "already installed";
+#         anything else (or a throw) = FAILED
 #     App without StoreId, or without winget: no command; the text names the "Microsoft Store" and the Title
 #   Dry run (-DryRun or Test-DryRunMode): menu, then one line per selected record with the command (or
 #   Store hint); no cmdlet, no winget, no log line, the list file byte-identical.
@@ -857,12 +871,17 @@ Describe "sw features --restore menu" {
         }
     }
 
-    It "Offers the records even when the catalog no longer has them" {
+    It "Offers the apps but not the features when the catalog no longer has them" {
         $null = Write-RemovedFile
         $script:Catalog = @()
-        $null = Invoke-Restore -Select @()
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select @() -Rows 3)
         $script:FirstScreen | Should -Match 'Example App'
-        $script:FirstScreen | Should -Match 'Legacy Feature'
+        $script:FirstScreen | Should -Match 'Other App'
+        $script:FirstScreen | Should -Match 'Third App'
+        $script:FirstScreen | Should -Not -Match 'Legacy Feature'
+        $script:FirstScreen | Should -Not -Match 'Second Feature'
+        $result.Text | Should -Match 'features-removed\.json'
+        @(Get-RemovedIds) | Should -Be @('app.example', 'app.other', 'app.third', 'feature.legacy', 'feature.second')
     }
 
     It "Offers what was saved, not what is installed now" {
@@ -920,6 +939,7 @@ Describe "sw features --restore menu" {
     }
 
     It "Does not offer an invalid record, keeps it in the file and still offers the valid ones: <Name>" -ForEach @(
+        @{ Name = 'feature name with a trailing newline'; Bad = @{ Id = 'feature.legacy'; Kind = 'OptionalFeature'; Target = "Contoso-Legacy`n"; Type = 'Enable'; Feature = "Contoso-Legacy`n"; StoreId = $null } }
         @{ Name = 'feature name with a command'; Bad = @{ Id = 'feature.bad'; Kind = 'OptionalFeature'; Target = 'Contoso-Bad; calc'; Type = 'Enable'; Feature = 'Contoso-Bad; calc'; StoreId = $null } }
         @{ Name = 'feature other than target'; Bad = @{ Id = 'feature.bad'; Kind = 'OptionalFeature'; Target = 'Contoso-Bad'; Type = 'Enable'; Feature = 'Contoso-Other'; StoreId = $null } }
         @{ Name = 'store id with a space'; Bad = @{ Id = 'app.bad'; Kind = 'App'; Target = 'Contoso.Bad_1.0.0.0_x64__examplepublisher'; Type = 'Store'; Feature = $null; StoreId = '9N EXAMPLE; calc' } }
@@ -1048,6 +1068,15 @@ Describe "sw features --restore run" {
             Get-FileText (Get-RemovedFilePath) | Should -Be $before
             Test-Path -LiteralPath $script:LogFile | Should -BeFalse
         }
+    }
+
+    It "Names the target or command of every selected row on the y/N screen, and nothing of the others" {
+        $null = Write-RemovedFile
+        $null = Invoke-Restore -Select 0, 3
+        $script:ConfirmScreen | Should -Match '(Contoso\.Example_2\.5\.0\.0_x64__examplepublisher|winget install --id 9NEXAMPLE001)'
+        $script:ConfirmScreen | Should -Match '(Contoso-Legacy|Enable-WindowsOptionalFeature -Online -FeatureName Contoso-Legacy)'
+        $script:ConfirmScreen | Should -Not -Match 'Contoso-Second'
+        $script:ConfirmScreen | Should -Not -Match 'Contoso\.Other_'
     }
 
     It "Enables a feature with -Online and -NoRestart, once, for the selected record only" {
@@ -1201,7 +1230,7 @@ Describe "sw features --restore run" {
 # Lead decision on festlegung 6: an app that is already there is restored by definition.
 # "Already installed" = Get-AppxPackage -Name <Target up to the first "_"> returns exactly one package.
 # Then: no winget call, RESTORED with "already installed" in the detail, record removed.
-# winget exit code -1978335189 (0x8A15002B, package already installed) counts the same way.
+# winget exit codes -1978335189 (0x8A15002B) and -1978335135 (0x8A150061) count the same way.
 Describe "sw features --restore for apps that are already installed" {
     BeforeEach { Initialize-FeatureEnvironment }
     AfterEach { Restore-FeatureEnvironment }
@@ -1263,9 +1292,11 @@ Describe "sw features --restore for apps that are already installed" {
         @(Get-LogRecords)[0] | Should -Match 'RESTORED appx:'
     }
 
-    It "Counts winget's already-installed exit code (-1978335189) as RESTORED already installed and removes the record" {
+    It "Counts winget's already-installed exit code <Code> as RESTORED already installed and removes the record" -ForEach @(
+        @{ Code = -1978335189 }, @{ Code = -1978335135 }
+    ) {
         $null = Write-RemovedFile
-        $script:WingetExitCode = -1978335189
+        $script:WingetExitCode = $Code
         $null = Invoke-Restore -Select 0
         $records = @(Get-LogRecords)
         $records.Count | Should -Be 1
@@ -1280,6 +1311,204 @@ Describe "sw features --restore for apps that are already installed" {
         $null = Invoke-Restore -Select 0
         @(Get-LogRecords)[0] | Should -Match 'FAILED appx:.*exit code -1978335188'
         @(Get-RemovedIds) | Should -Contain 'app.example'
+    }
+}
+
+# ================================================================================================
+# Lead decision after review F-02c: the list in the file never decides alone what is switched on or installed.
+Describe "sw features --restore is bound to the catalog" {
+    BeforeEach { Initialize-FeatureEnvironment }
+    AfterEach { Restore-FeatureEnvironment }
+
+    It "Does not offer a forged feature record: catalog id, foreign target SMB1Protocol; the good record is still restored" {
+        $forged = New-RemovedRecord 'feature.legacy' 'OptionalFeature' 'SMB1Protocol' 'Legacy Feature'
+        $good = New-RemovedRecord 'feature.second' 'OptionalFeature' 'Contoso-Second' 'Second Feature'
+        $null = Write-RemovedFile -Records @($forged, $good)
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        $script:FirstScreen | Should -Not -Match 'Legacy Feature'
+        $script:FirstScreen | Should -Match 'Second Feature'
+        @($script:Calls) | Should -Be @('Enable-WindowsOptionalFeature Contoso-Second online=True norestart=True')
+        $result.Text | Should -Not -Match 'SMB1Protocol'
+        $result.Text | Should -Match 'features-removed\.json'
+        $result.Text | Should -Match '(?i)not offered'
+        @(Get-RemovedIds) | Should -Be @('feature.legacy')
+    }
+
+    It "Does not offer a forged record whose id is not in the catalog, with a harmless title, and runs nothing" {
+        $forged = New-RemovedRecord 'feature.powershell2' 'OptionalFeature' 'SMB1Protocol' 'Windows PowerShell 2.0'
+        $null = Write-RemovedFile -Records @($forged)
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys @((Get-KeyEscape))
+        Should -Invoke Read-FeaturesMenuKey -Times 0
+        Should -Invoke Enable-WindowsOptionalFeature -Times 0
+        $script:Calls.Count | Should -Be 0
+        $result.Exit | Should -Be 0
+        $result.Text | Should -Match 'features-removed\.json'
+        @(Get-RemovedIds) | Should -Be @('feature.powershell2')
+    }
+
+    It "Does not offer a record of the wrong kind for its catalog id: <Name>" -ForEach @(
+        @{ Name = 'app kind on a feature id'; Id = 'feature.legacy'; Kind = 'App'; Target = 'Contoso.Example_2.5.0.0_x64__examplepublisher' }
+        @{ Name = 'feature kind on an app id'; Id = 'app.example'; Kind = 'OptionalFeature'; Target = 'Contoso-Legacy' }
+    ) {
+        $null = Write-RemovedFile -Records @((New-RemovedRecord $Id $Kind $Target 'Mixed Up Entry' $script:StoreIdExample))
+        $null = Invoke-Features -Params @{ Restore = $true } -Keys @((Get-KeyEscape))
+        Should -Invoke Read-FeaturesMenuKey -Times 0
+        $script:Calls.Count | Should -Be 0
+    }
+
+    It "Compares the target of a feature case sensitively with the catalog names" {
+        $null = Write-RemovedFile -Records @((New-RemovedRecord 'feature.legacy' 'OptionalFeature' 'contoso-legacy' 'Legacy Feature'))
+        $null = Invoke-Features -Params @{ Restore = $true } -Keys @((Get-KeyEscape))
+        Should -Invoke Read-FeaturesMenuKey -Times 0
+        $script:Calls.Count | Should -Be 0
+    }
+
+    It "Offers and enables a feature whose target is any one of the match names of its catalog entry" {
+        $entry = $script:Catalog | Where-Object { $_.Id -eq 'feature.legacy' }
+        $entry.Match = @('Contoso-Legacy', 'Contoso-Legacy-Alt')
+        $null = Write-RemovedFile -Records @((New-RemovedRecord 'feature.legacy' 'OptionalFeature' 'Contoso-Legacy-Alt' 'Legacy Feature'))
+        $null = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        @($script:Calls) | Should -Be @('Enable-WindowsOptionalFeature Contoso-Legacy-Alt online=True norestart=True')
+    }
+
+    It "Skips a feature, with no Enable call, when its catalog entry is gone after the menu; the record stays" {
+        $null = Write-RemovedFile
+        $script:OnPrompt = { $script:Catalog = @($script:Catalog | Where-Object { $_.Id -ne 'feature.legacy' }) }
+        $null = Invoke-Restore -Select 3
+        $script:Calls.Count | Should -Be 0
+        @(Get-LogRecords)[0] | Should -Match 'SKIPPED feature:Contoso-Legacy \((?!-\)).+\)$'
+        @(Get-RemovedIds) | Should -Contain 'feature.legacy'
+    }
+
+    It "Runs an app with a gone catalog entry as a Store hint only: no winget, SKIPPED, record stays" {
+        $null = Write-RemovedFile
+        $script:Catalog = @()
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 3)
+        Should -Invoke Invoke-FeaturesWinget -Times 0
+        $result.Text | Should -Match 'Microsoft Store'
+        $result.Text | Should -Match 'Example App'
+        @(Get-LogRecords)[0] | Should -Match 'SKIPPED appx:Contoso\.Example_.* \((?=.*Microsoft Store)(?=.*Example App).*\)$'
+        @(Get-RemovedIds) | Should -Contain 'app.example'
+    }
+
+    It "Ignores a foreign store id in the file: winget runs with the id of the current catalog entry only" {
+        $foreign = New-RemovedRecord 'app.example' 'App' (Get-FullName 'Contoso.Example') 'Example App' '9NFOREIGN001'
+        $null = Write-RemovedFile -Records @($foreign)
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        @($script:Calls) | Should -Be @($script:WingetInstallExample)
+        ($script:Calls -join ' ') | Should -Not -Match '9NFOREIGN001'
+        ((@(Get-LogRecords)) -join ' ') | Should -Not -Match '9NFOREIGN001'
+        $result.Text | Should -Not -Match '9NFOREIGN001'
+        @(Get-RemovedIds) | Should -Be @()
+    }
+
+    It "Does not run winget with the store id of the file when the catalog entry has none: Store hint, record stays" {
+        $foreign = New-RemovedRecord 'app.other' 'App' (Get-FullName 'Contoso.Other') 'Other App' '9NFOREIGN001'
+        $null = Write-RemovedFile -Records @($foreign)
+        $result = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        Should -Invoke Invoke-FeaturesWinget -Times 0
+        $result.Text | Should -Not -Match '9NFOREIGN001'
+        @(Get-LogRecords)[0] | Should -Match 'SKIPPED appx:Contoso\.Other_.* \((?=.*Microsoft Store)(?=.*Other App).*\)$'
+        @(Get-RemovedIds) | Should -Be @('app.other')
+    }
+
+    It "Takes the store id from the catalog even when the file has none" {
+        ($script:Catalog | Where-Object { $_.Id -eq 'app.other' }).Restore.StoreId = '9NEXAMPLE002'
+        $null = Write-RemovedFile -Records @((New-RemovedRecord 'app.other' 'App' (Get-FullName 'Contoso.Other') 'Other App'))
+        $null = Invoke-Features -Params @{ Restore = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        @($script:Calls) | Should -Be @('winget install --id 9NEXAMPLE002 --source msstore --accept-package-agreements --accept-source-agreements')
+    }
+
+    It "Previews the catalog's store id, not the one in the file" {
+        $foreign = New-RemovedRecord 'app.example' 'App' (Get-FullName 'Contoso.Example') 'Example App' '9NFOREIGN001'
+        $null = Write-RemovedFile -Records @($foreign)
+        $result = Invoke-Features -Params @{ Restore = $true; DryRun = $true } -Keys (New-SelectionKeys -Select 0 -Rows 1)
+        $preview = Get-PreviewText $result
+        $preview | Should -Match ([regex]::Escape($script:WingetInstallExample))
+        $preview | Should -Not -Match '9NFOREIGN001'
+    }
+}
+
+# ================================================================================================
+Describe "sw features safe names" {
+    It "Rejects <Name>" -ForEach @(
+        @{ Name = 'a trailing newline'; Value = "SMB1Protocol`n" }
+        @{ Name = 'a trailing carriage return and newline'; Value = "SMB1Protocol`r`n" }
+        @{ Name = 'a leading dash'; Value = '-Online' }
+        @{ Name = 'a space'; Value = 'Contoso Legacy' }
+        @{ Name = 'a semicolon'; Value = 'Contoso;calc' }
+        @{ Name = 'an empty text'; Value = '' }
+        @{ Name = 'a number'; Value = 42 }
+    ) {
+        (Test-SweeprFeatureSafeName $Value) | Should -BeFalse
+    }
+
+    It "Accepts <Value>" -ForEach @(
+        @{ Value = 'SMB1Protocol' }, @{ Value = 'Contoso.Example_2.5.0.0_x64__examplepublisher' }, @{ Value = '9NEXAMPLE001' }
+    ) {
+        (Test-SweeprFeatureSafeName $Value) | Should -BeTrue
+    }
+}
+
+# ================================================================================================
+Describe "sw features catalog store ids" {
+    It "Holds exactly the confirmed store ids and no other: <Id>" -ForEach @(
+        @{ Id = 'app.weather'; StoreId = '9WZDNCRFJ3Q2' }
+        @{ Id = 'app.phone-link'; StoreId = '9NMPJ99VJBWV' }
+        @{ Id = 'app.xbox-identity'; StoreId = '9WZDNCRD1HKW' }
+    ) {
+        $entry = @(Get-SweeprFeatureCatalog | Where-Object { $_.Id -eq $Id })
+        $entry.Count | Should -Be 1
+        $entry[0].Restore.Type | Should -BeExactly 'Store'
+        $entry[0].Restore.StoreId | Should -BeExactly $StoreId
+    }
+
+    It "Has no store id for any other app" {
+        $others = @(Get-SweeprFeatureCatalog | Where-Object { $_.Kind -eq 'App' -and $_.Id -notin @('app.weather', 'app.phone-link', 'app.xbox-identity') })
+        $others.Count | Should -BeGreaterThan 10
+        foreach ($entry in $others) { [string]$entry.Restore.StoreId | Should -BeNullOrEmpty }
+    }
+
+    It "Restores every optional feature of the catalog with Enable and its own name" {
+        $features = @(Get-SweeprFeatureCatalog | Where-Object { $_.Kind -eq 'OptionalFeature' })
+        $features.Count | Should -BeGreaterThan 0
+        foreach ($entry in $features) {
+            $entry.Restore.Type | Should -BeExactly 'Enable'
+            @($entry.Match) | Should -Contain $entry.Restore.Feature
+        }
+    }
+}
+
+# ================================================================================================
+Describe "sw features writes the restore list atomically" {
+    BeforeEach { Initialize-FeatureEnvironment }
+    AfterEach { Restore-FeatureEnvironment }
+
+    It "Keeps the old list and removes nothing when the temporary file beside the list cannot be written (the save goes through it)" {
+        Set-AllInstalled
+        $before = Write-RemovedFile -Records @((New-RemovedRecord 'app.old' 'App' (Get-FullName 'Contoso.Old') 'Old App'))
+        New-Item -ItemType Directory -Path ((Get-RemovedFilePath) + '.tmp') -Force | Out-Null
+        $null = Invoke-Features -Keys (New-SelectionKeys -Select 0 -Rows 5)
+        $script:Calls.Count | Should -Be 0
+        Get-FileText (Get-RemovedFilePath) | Should -Be $before
+        @(Get-LogRecords)[0] | Should -Match 'FAILED appx:.*features-removed\.json'
+    }
+
+    It "Leaves no .tmp file behind after a save, and a stale .tmp does not matter" {
+        Set-AllInstalled
+        [System.IO.File]::WriteAllText(((Get-RemovedFilePath) + '.tmp'), '### stale')
+        $null = Invoke-Features -Keys (New-SelectionKeys -Select 0, 1 -Rows 5)
+        @(Get-RemovedIds) | Should -Be @('app.example', 'app.other')
+        Test-Path -LiteralPath ((Get-RemovedFilePath) + '.tmp') | Should -BeFalse
+    }
+
+    It "Keeps the list as it was, and says so, when the record of a restored entry cannot be taken out (.tmp blocked)" {
+        $before = Write-RemovedFile
+        New-Item -ItemType Directory -Path ((Get-RemovedFilePath) + '.tmp') -Force | Out-Null
+        $result = Invoke-Restore -Select 3
+        @($script:Calls) | Should -Be @('Enable-WindowsOptionalFeature Contoso-Legacy online=True norestart=True')
+        Get-FileText (Get-RemovedFilePath) | Should -Be $before
+        $result.Text | Should -Match 'features-removed\.json'
     }
 }
 
