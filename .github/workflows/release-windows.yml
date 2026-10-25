@@ -181,7 +181,14 @@ jobs:
           path: release/sweepr-${{ steps.version.outputs.VERSION }}-x64.zip
           if-no-files-found: error
           retention-days: 1
-      
+
+      - name: Upload portable ZIP artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sweepr-${{ steps.version.outputs.VERSION }}-x64-portable-zip
+          path: release/sweepr-${{ steps.version.outputs.VERSION }}-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload checksums
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -207,6 +214,7 @@ jobs:
         run: |
           $files = @(
             "release/sweepr-${{ steps.version.outputs.VERSION }}-x64.zip",
+            "release/sweepr-${{ steps.version.outputs.VERSION }}-x64-portable.zip",
             "release/analyze-windows-x64.exe",
             "release/status-windows-x64.exe",
             "release/SHA256SUMS.txt"
