@@ -165,7 +165,6 @@ function Show-MainHelp {
     Write-HelpRow "sw analyze" "Explore disk usage"
     Write-HelpRow "sw status" "Monitor system health"
     Write-HelpRow "sw purge" "Remove old project artifacts"
-    Write-HelpRow "sw inspect <app>" "Look inside an app with REA (read-only)"
     Write-HelpRow "sw history" "Review cleanup activity"
     Write-HelpRow "sw update" "Update to latest version"
     Write-HelpRow "sw remove" "Remove Sweepr from system"
@@ -182,8 +181,6 @@ function Show-MainHelp {
     Write-HelpRow "sw purge --paths" "Configure scan directories"
     Write-HelpRow "sw history --json" "Export cleanup history"
     Write-HelpRow "sw analyze D:\" "Analyze another drive"
-    Write-HelpRow "sw inspect Slack --deep" "Runtime, signer, DLLs and .NET metadata"
-    Write-HelpRow "sw inspect --setup" "Register REA with MCP clients"
     Write-Host ""
     Write-Host "${blue}OPTIONS${nc}"
     Write-HelpRow "--debug" "Show detailed operation logs"
@@ -310,7 +307,7 @@ function Invoke-SweeprCommand {
     }
 
     # A previous native command must not make a help-only invocation fail.
-    if ($CommandName -in @("analyze", "status", "history", "inspect", "features")) { $global:LASTEXITCODE = 0 }
+    if ($CommandName -in @("analyze", "status", "history", "features")) { $global:LASTEXITCODE = 0 }
 
     # Execute the command script with arguments using splatting
     # This properly handles switch parameters passed as strings
@@ -386,7 +383,7 @@ function Invoke-SweeprCommand {
     finally {
         if ($debugSession) { Complete-SweeprDebugSession }
     }
-    if ($CommandName -in @("analyze", "status", "history", "inspect", "features")) {
+    if ($CommandName -in @("analyze", "status", "history", "features")) {
         $script:SweeprExitCode = $LASTEXITCODE
     }
 }
@@ -477,7 +474,7 @@ function Main {
         $updateContext = Start-SweeprUpdateCheck -RootDir $script:SWEEPR_ROOT -Version $script:SWEEPR_VER -Method (Get-SweeprInstallMethod -RootDir $script:SWEEPR_ROOT)
     }
     if ($effectiveCommand) {
-        $validCommands = @("clean", "uninstall", "analyze", "status", "optimize", "purge", "inspect", "history", "features", "update", "remove")
+        $validCommands = @("clean", "uninstall", "analyze", "status", "optimize", "purge", "history", "features", "update", "remove")
 
         if ($effectiveCommand -in $validCommands) {
             Invoke-SweeprCommand -CommandName $effectiveCommand -Arguments $effectiveArguments
