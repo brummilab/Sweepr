@@ -57,7 +57,10 @@ BeforeAll {
         $dataDir = Join-Path $TestDrive 'fresh-data'
         [void][IO.Directory]::CreateDirectory($dataDir)
         $checks = ($Functions | ForEach-Object { "if (Get-Command $_ -CommandType Function -ErrorAction SilentlyContinue) { 'FOUND $_' } else { 'MISSING $_' }" }) -join '; '
-        $command = "`$ErrorActionPreference = 'Stop'; . '" + $File.Replace("'", "''") + "'; $checks"
+        # Windows PowerShell 5.1 writes progress records (e.g. "Preparing modules for first use.")
+        # to a redirected stderr as CLIXML. Progress is not an error, so silence it; real errors
+        # still reach stderr and fail the check.
+        $command = "`$ProgressPreference = 'SilentlyContinue'; `$ErrorActionPreference = 'Stop'; . '" + $File.Replace("'", "''") + "'; $checks"
         $start = New-Object System.Diagnostics.ProcessStartInfo
         $start.FileName = (Get-Process -Id $PID).Path
         $start.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
@@ -114,7 +117,8 @@ Describe 'Get-SweeprPurgePreview' {
     Context 'Result shape' {
         It 'Describes a project with its artifacts, sizes in bytes and language' {
             $result = Get-SweeprPurgePreview -SearchPaths @($script:Base)
-            $project = Find-Hit $result $script:App
+            # @() keeps the array: a single hit unrolls to one object, which has no Count under strict mode in PS 5.1.
+            $project = @(Find-Hit $result $script:App)
             $project.Count | Should -Be 1
             $project[0].Name | Should -Be 'app'
             $project[0].Marker | Should -Be 'package.json'
