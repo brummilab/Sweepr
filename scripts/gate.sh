@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Gate: must be green before anything is merged into main .
 #   ./scripts/gate.sh            Go checks, PowerShell parse, Pester
-# On Windows (Git Bash) Pester runs every test file. Elsewhere it runs only the
-# files that do not need Windows (registry, powershell.exe, Appx, junctions);
-# the Windows CI legs in .github/workflows/test.yml run the full suite.
+# On Windows (Git Bash) every Pester test must pass. Elsewhere the full suite
+# runs too, and the failures must be the known Windows-only ones listed in
+# tests/linux-known-failures.txt (registry, powershell.exe, Appx, junctions).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -869,6 +869,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\Install.Tests.ps1"
         "tests\InstallComponents.Tests.ps1"
         "tests\InstallLifecycle.Tests.ps1"
+        "tests\linux-known-failures.txt"
         "tests\LiteralPath.Tests.ps1"
         "tests\Optimize.Tests.ps1"
         "tests\Protection.Tests.ps1"
