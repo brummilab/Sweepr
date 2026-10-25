@@ -219,14 +219,26 @@ catch {
     # install. The fake installer exits with $InstallerExit. A function wins over an executable, so the real
     # quick-install.ps1 runs unchanged on any platform.
     function Invoke-QuickInstall {
-        param([string]$Target, [int]$InstallerExit, [switch]$PreExisting)
+        param(
+            [string]$Target,
+            [int]$InstallerExit,
+            [switch]$PreExisting,
+            # What is passed as -InstallDir (default: $Target); a relative path to test path handling.
+            [string]$TargetArgument,
+            # PowerShell run in the child before quick-install starts (e.g. to change directories).
+            [string]$Prelude = "",
+            # PowerShell run inside the fake installer, before it exits; $cloneDir is the -InstallDir it received.
+            [string]$InstallerAction = ""
+        )
 
+        if (-not $TargetArgument) { $TargetArgument = $Target }
         if ($PreExisting) {
             New-Item -ItemType Directory -Path (Join-Path $Target ".git") -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $Target "install.ps1") -Value "# fake installer"
         }
         $quick = Join-Path $script:WindowsDir "quick-install.ps1"
         Invoke-ChildScript -Environment @{ HTTPS_PROXY = "http://proxy.example:3128" } -Body @"
+    $Prelude
     function git {
         `$global:LASTEXITCODE = 0
         if (`$args -contains 'clone') {
@@ -234,8 +246,12 @@ catch {
             Set-Content -LiteralPath (Join-Path `$args[-1] 'install.ps1') -Value '# fake installer'
         }
     }
-    function powershell.exe { `$global:LASTEXITCODE = $InstallerExit }
-    & '$quick' -InstallDir '$Target'
+    function powershell.exe {
+        `$cloneDir = `$args[[array]::IndexOf(`$args, '-InstallDir') + 1]
+        $InstallerAction
+        `$global:LASTEXITCODE = $InstallerExit
+    }
+    & '$quick' -InstallDir '$TargetArgument'
 "@
     }
 }
@@ -792,6 +808,76 @@ Describe "quick-install.ps1 after the installer was cancelled" {
         $result.Output | Should -Match "Installation cancelled"
         $result.Output | Should -Not -Match "Installation failed"
         Test-Path -LiteralPath (Join-Path $target "install.ps1") | Should -BeTrue
+        $result.Output | Should -Match ([regex]::Escape($target))
+    }
+
+    It "Resolves a relative -InstallDir against the current location and leaves a same-named folder elsewhere alone" {
+        $processDir = Join-Path $TestDrive "qi-rel-process"
+        $locationDir = Join-Path $TestDrive "qi-rel-location"
+        New-Item -ItemType Directory -Path (Join-Path $processDir "rel") -Force | Out-Null
+        New-Item -ItemType Directory -Path $locationDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $processDir "rel/keep.txt") -Value "precious"
+        # The process directory and the PowerShell location differ, as after Set-Location in a profile or console.
+        $prelude = "[Environment]::CurrentDirectory = '$processDir'; Set-Location -LiteralPath '$locationDir'"
+        $result = Invoke-QuickInstall -Target (Join-Path $locationDir "rel") -TargetArgument "rel" -Prelude $prelude -InstallerExit $script:CancelExitCode
+        $result.Output | Should -Match "Installation cancelled"
+        Test-Path -LiteralPath (Join-Path $processDir "rel/keep.txt") | Should -BeTrue
+        (Get-Content -LiteralPath (Join-Path $processDir "rel/keep.txt") -Raw).Trim() | Should -Be "precious"
+        Test-Path -LiteralPath (Join-Path $locationDir "rel") | Should -BeFalse
+        $result.Output | Should -Match "removed again"
+    }
+
+    It "Removes a fresh clone that holds a link and leaves the link target untouched" {
+        $outside = Join-Path $TestDrive "qi-link-outside"
+        New-Item -ItemType Directory -Path $outside -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $outside "guard.txt") -Value "guard"
+        $target = Join-Path $TestDrive "qi-link-clone"
+        $action = @'
+try { New-Item -ItemType SymbolicLink -Path (Join-Path $cloneDir 'link') -Target 'OUTSIDE' -ErrorAction Stop | Out-Null }
+catch { Write-Output 'LINK-FAILED' }
+'@.Replace("OUTSIDE", $outside)
+        $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode -InstallerAction $action
+        if ($result.Output -match "LINK-FAILED") { Set-ItResult -Skipped -Because "links cannot be created here"; return }
+        $result.Output | Should -Match "Installation cancelled"
+        Test-Path -LiteralPath (Join-Path $outside "guard.txt") | Should -BeTrue
+        Test-Path -LiteralPath $target | Should -BeFalse
+    }
+
+    It "Keeps a fresh folder without <Missing> and names it" -ForEach @(
+        @{ Missing = "install.ps1"; Action = 'Remove-Item -LiteralPath (Join-Path $cloneDir ''install.ps1'') -Force' },
+        @{ Missing = ".git"; Action = 'Remove-Item -LiteralPath (Join-Path $cloneDir ''.git'') -Recurse -Force' }
+    ) {
+        $target = Join-Path $TestDrive "qi-notours-$($Missing -replace '\W', '')"
+        $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode -InstallerAction $Action
+        $result.Output | Should -Match "Installation cancelled"
+        $result.Output | Should -Not -Match "removed again"
+        Test-Path -LiteralPath $target | Should -BeTrue
+        $result.Output | Should -Match ([regex]::Escape($target))
+    }
+
+    It "Does not claim the folder was removed when removing it failed" -Skip:([IO.Path]::DirectorySeparatorChar -ne '\' -and [Environment]::UserName -eq 'root') {
+        # Windows: an open handle blocks the delete. Elsewhere: a read-only folder with content (not as root).
+        $action = @'
+if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+    $global:LockHolder = [System.IO.File]::Open((Join-Path $cloneDir 'locked.txt'), 'Create', 'ReadWrite', 'None')
+}
+else {
+    $sealed = Join-Path $cloneDir 'sealed'
+    New-Item -ItemType Directory -Path $sealed | Out-Null
+    Set-Content -LiteralPath (Join-Path $sealed 'f.txt') -Value 'x'
+    & chmod 555 $sealed
+}
+'@
+        $target = Join-Path $TestDrive "qi-partial"
+        try {
+            $result = Invoke-QuickInstall -Target $target -InstallerExit $script:CancelExitCode -InstallerAction $action
+        }
+        finally {
+            if ([IO.Path]::DirectorySeparatorChar -ne '\') { & chmod -R u+w $target 2>$null }
+        }
+        $result.Output | Should -Match "Installation cancelled"
+        $result.Output | Should -Not -Match "removed again"
+        $result.Output | Should -Match "could not be removed"
         $result.Output | Should -Match ([regex]::Escape($target))
     }
 
