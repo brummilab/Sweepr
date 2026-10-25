@@ -172,7 +172,6 @@ function Get-SweeprFeatureCatalog {
         (New-SweeprFeatureApp 'app.people' 'Microsoft.People' 'People' 'Contacts app.')
         (New-SweeprFeatureApp 'app.feedback-hub' 'Microsoft.WindowsFeedbackHub' 'Feedback Hub' 'App for sending feedback and bug reports to Microsoft.')
         (New-SweeprFeatureApp 'app.maps' 'Microsoft.WindowsMaps' 'Maps' 'Maps and navigation app.')
-        (New-SweeprFeatureApp 'app.groove-music' 'Microsoft.ZuneMusic' 'Groove Music' 'Music player app.')
         (New-SweeprFeatureApp 'app.movies-tv' 'Microsoft.ZuneVideo' 'Movies & TV' 'Video player and store app.')
         (New-SweeprFeatureApp 'app.skype' 'Microsoft.SkypeApp' 'Skype' 'Skype messaging app (consumer version).')
         (New-SweeprFeatureApp 'app.3d-builder' 'Microsoft.3DBuilder' '3D Builder' '3D model editor and printing app.')
@@ -187,11 +186,11 @@ function Get-SweeprFeatureCatalog {
         (New-SweeprFeatureApp 'app.xbox-tcui' 'Microsoft.Xbox.TCUI' 'Xbox TCUI' 'Xbox sign-in and social dialogs used by games.' $xboxWarning)
         (New-SweeprFeatureApp 'app.xbox-identity' 'Microsoft.XboxIdentityProvider' 'Xbox Identity Provider' 'Signs you in to Xbox services for games and apps.' $xboxWarning)
         (New-SweeprFeatureApp 'app.xbox-speech' 'Microsoft.XboxSpeechToTextOverlay' 'Xbox Speech To Text Overlay' 'Speech-to-text overlay for Xbox game chat.' $xboxWarning)
-        (New-SweeprFeatureOptional 'feature.powershell2' 'MicrosoftWindowsPowerShellV2' 'Windows PowerShell 2.0' 'Legacy PowerShell 2.0 engine, an old downgrade-attack path. Windows PowerShell 5.1 is not affected.')
-        (New-SweeprFeatureOptional 'feature.powershell2-root' 'MicrosoftWindowsPowerShellV2Root' 'Windows PowerShell 2.0 (root)' 'Parent feature of the legacy PowerShell 2.0 engine. Windows PowerShell 5.1 is not affected.')
+        (New-SweeprFeatureOptional 'feature.powershell2' 'MicrosoftWindowsPowerShellV2' 'Windows PowerShell 2.0' 'The legacy PowerShell 2.0 engine itself, an old downgrade-attack path. Windows PowerShell 5.1 is not affected.')
+        (New-SweeprFeatureOptional 'feature.powershell2-root' 'MicrosoftWindowsPowerShellV2Root' 'Windows PowerShell 2.0 (root)' 'Parent (root) feature of the PowerShell 2.0 engine; turning it off also turns off the engine. Windows PowerShell 5.1 is not affected.')
         (New-SweeprFeatureOptional 'feature.work-folders' 'WorkFolders-Client' 'Work Folders client' 'Client for syncing work files from a company Work Folders server.')
-        (New-SweeprFeatureOptional 'feature.xps-services' 'Printing-XPSServices-Features' 'XPS Services' 'Support for printing to and viewing XPS documents.')
-        (New-SweeprFeatureOptional 'feature.internet-explorer' 'Internet-Explorer-Optional-amd64' 'Internet Explorer 11' 'Legacy Internet Explorer 11 application.')
+        (New-SweeprFeatureOptional 'feature.xps-services' 'Printing-XPSServices-Features' 'XPS Services' 'Microsoft XPS Document Writer for printing to XPS files; the XPS viewer is not affected.')
+        (New-SweeprFeatureOptional 'feature.internet-explorer' 'Internet-Explorer-Optional-amd64' 'Internet Explorer 11' 'Legacy Internet Explorer 11 application.' 'Internet Explorer mode in Microsoft Edge depends on it and stops working.')
         (New-SweeprFeatureOptional 'feature.media-player' 'WindowsMediaPlayer' 'Windows Media Player (legacy)' 'Legacy Windows Media Player application.')
     )
 }
@@ -214,7 +213,6 @@ function Get-SweeprFeatureInventory {
     $Catalog = @($Catalog)
 
     $items = [System.Collections.Generic.List[object]]::new()
-    $featureRows = [System.Collections.Generic.List[object]]::new()
     $featuresNeedAdmin = $false
     $provisionedRead = $false
     $provisioned = @()
@@ -280,42 +278,42 @@ function Get-SweeprFeatureInventory {
     }
 
     if ($featureEntries.Count -gt 0) {
-        if (-not (Test-IsAdmin)) {
+        $isAdmin = $false
+        try { $isAdmin = [bool](Test-IsAdmin) } catch { $isAdmin = $false }
+        if (-not $isAdmin) {
             $featuresNeedAdmin = $true
         } else {
-            foreach ($entry in $featureEntries) {
-                foreach ($matchName in @(Get-SweeprFeatureProperty $entry 'Match')) {
-                    $name = [string]$matchName
-                    if (Test-SweeprFeatureProtected -Name $name) { continue }
-                    $feature = $null
-                    try {
-                        $feature = Get-WindowsOptionalFeature -Online -FeatureName $name -ErrorAction Stop
-                    } catch {
-                        $featuresNeedAdmin = $true
+            # One plain listing: a per-name query throws for names this Windows does not know
+            # (removed or other-architecture features), which would hide every other feature.
+            $enabled = $null
+            try {
+                $enabled = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | Where-Object { $_ })
+            } catch {
+                $featuresNeedAdmin = $true
+            }
+            if (-not $featuresNeedAdmin) {
+                foreach ($entry in $featureEntries) {
+                    foreach ($matchName in @(Get-SweeprFeatureProperty $entry 'Match')) {
+                        $name = [string]$matchName
+                        if (Test-SweeprFeatureProtected -Name $name) { continue }
+                        # Unknown names are left out silently.
+                        $hits = @($enabled | Where-Object { [string](Get-SweeprFeatureProperty $_ 'FeatureName') -eq $name })
+                        if ($hits.Count -ne 1) { continue }
+                        if ([string](Get-SweeprFeatureProperty $hits[0] 'State') -ne 'Enabled') { continue }
+
+                        $items.Add([pscustomobject]@{
+                            Id              = [string](Get-SweeprFeatureProperty $entry 'Id')
+                            Kind            = 'OptionalFeature'
+                            Title           = [string](Get-SweeprFeatureProperty $entry 'Title')
+                            Description     = [string](Get-SweeprFeatureProperty $entry 'Description')
+                            Warning         = Get-SweeprFeatureProperty $entry 'Warning'
+                            Target          = $name
+                            Provisioned     = $false
+                            ProvisionedName = $null
+                        })
                         break
                     }
-                    $feature = @($feature | Where-Object { $_ })
-                    if ($feature.Count -ne 1) { continue }
-                    if ([string](Get-SweeprFeatureProperty $feature[0] 'FeatureName') -ne $name) { continue }
-                    if ([string](Get-SweeprFeatureProperty $feature[0] 'State') -ne 'Enabled') { continue }
-
-                    $featureRows.Add([pscustomobject]@{
-                        Id              = [string](Get-SweeprFeatureProperty $entry 'Id')
-                        Kind            = 'OptionalFeature'
-                        Title           = [string](Get-SweeprFeatureProperty $entry 'Title')
-                        Description     = [string](Get-SweeprFeatureProperty $entry 'Description')
-                        Warning         = Get-SweeprFeatureProperty $entry 'Warning'
-                        Target          = $name
-                        Provisioned     = $false
-                        ProvisionedName = $null
-                    })
-                    break
                 }
-                if ($featuresNeedAdmin) { break }
-            }
-            # A failed query means the feature state is unknown: offer none of them.
-            if (-not $featuresNeedAdmin) {
-                foreach ($row in $featureRows) { $items.Add($row) }
             }
         }
     }
