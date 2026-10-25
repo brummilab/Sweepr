@@ -59,6 +59,14 @@ $script:SourceDir = if ($MyInvocation.MyCommand.Path) {
 } else {
     $PSScriptRoot
 }
+# The v1.30.0 updater passes its source folder positionally after
+# "-InstallDir"; with -Components declared, that path binds to -Components.
+# It is not a component list, and that old updater must never see the menu.
+$script:LegacyInvocation = $InstallDir -ceq "-InstallDir"
+if ($script:LegacyInvocation) {
+    $Components = $null
+    $NoPrompt = [switch]$true
+}
 $resolvedInvocation = Resolve-InstallInvocation `
     -SourceDir $script:SourceDir `
     -RequestedInstallDir $InstallDir `
