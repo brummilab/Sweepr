@@ -291,6 +291,7 @@ Describe 'Native File launcher routing' {
         $entryAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'sweepr.ps1'), [ref]$null, [ref]$null)
         $main = $entryAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Main' }, $true)
         . ([scriptblock]::Create(($main.Extent.Text -replace '^function Main', 'function Invoke-RootRouting')))
+        function Initialize-SweeprDataDir {}
         function Initialize-Sweepr {}
         function Show-Version {}
         function Show-MainHelp {}
@@ -303,6 +304,7 @@ Describe 'Native File launcher routing' {
         $script:SweeprExitCode = 0
         $script:ShowHelp = $false
         $script:Version = $false
+        Mock Initialize-SweeprDataDir {}
         Mock Initialize-Sweepr {}
         Mock Show-Version {}
         Mock Show-MainHelp {}

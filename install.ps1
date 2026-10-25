@@ -863,6 +863,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\InstallLifecycle.Tests.ps1"
         "tests\Optimize.Tests.ps1"
         "tests\Protection.Tests.ps1"
+        "tests\Portable.Tests.ps1"
         "tests\PurgeBoundary.Tests.ps1"
         "tests\Recycle.Tests.ps1"
         "tests\Release.Tests.ps1"
