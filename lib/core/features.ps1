@@ -374,7 +374,8 @@ function Test-SweeprFeatureSafeName {
     param($Value)
 
     if ($Value -isnot [string]) { return $false }
-    return ($Value -match '^[A-Za-z0-9][A-Za-z0-9._~-]*$')
+    # \z, not $: a trailing newline must not pass.
+    return ($Value -cmatch '^[A-Za-z0-9][A-Za-z0-9._~-]*\z')
 }
 
 # The list lives in the active data folder (profile, portable or override).
@@ -575,14 +576,66 @@ function Get-SweeprFeatureWingetArguments {
     return @('install', '--id', $StoreId, '--source', 'msstore', '--accept-package-agreements', '--accept-source-agreements')
 }
 
+function Get-SweeprFeatureCatalogEntryForRecord {
+    <#
+    .SYNOPSIS
+        The current catalog entry a saved record is bound to, or $null.
+    .DESCRIPTION
+        The restore list is user-writable, so what it asks for must also be allowed today.
+        An entry needs the same Id and Kind. An optional feature also needs its Target
+        (case sensitive) among the entry's Match names; an app needs the package name
+        from its Target (the part before the first underscore) there.
+    #>
+    param([Parameter(Mandatory)]$Record, [object[]]$Catalog)
+
+    $id = [string](Get-SweeprFeatureProperty $Record 'Id')
+    $kind = [string](Get-SweeprFeatureProperty $Record 'Kind')
+    $target = [string](Get-SweeprFeatureProperty $Record 'Target')
+    $entries = @($Catalog | Where-Object {
+            [string](Get-SweeprFeatureProperty $_ 'Id') -ceq $id -and [string](Get-SweeprFeatureProperty $_ 'Kind') -ceq $kind
+        })
+    if ($entries.Count -ne 1) { return $null }
+
+    $name = if ($kind -eq 'App') { $target.Split('_')[0] } else { $target }
+    $known = @(@(Get-SweeprFeatureProperty $entries[0] 'Match') | Where-Object { [string]$_ -ceq $name })
+    if ($known.Count -eq 0) { return $null }
+    return $entries[0]
+}
+
+# True when the catalog knows the Id of a record under another Kind: such a record is forged or stale and is never offered.
+function Test-SweeprFeatureRecordKindClash {
+    param([Parameter(Mandatory)]$Record, [object[]]$Catalog)
+
+    $id = [string](Get-SweeprFeatureProperty $Record 'Id')
+    $kind = [string](Get-SweeprFeatureProperty $Record 'Kind')
+    $clash = @($Catalog | Where-Object {
+            [string](Get-SweeprFeatureProperty $_ 'Id') -ceq $id -and [string](Get-SweeprFeatureProperty $_ 'Kind') -cne $kind
+        })
+    return ($clash.Count -gt 0)
+}
+
+function Get-SweeprFeatureCatalogStoreId {
+    <#
+    .SYNOPSIS
+        The Store id of a catalog entry when it is well formed, otherwise $null. The id in the saved file is never used.
+    #>
+    param($CatalogEntry)
+
+    if ($null -eq $CatalogEntry) { return $null }
+    $storeId = Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $CatalogEntry 'Restore') 'StoreId'
+    if (Test-SweeprFeatureSafeName $storeId) { return $storeId }
+    return $null
+}
+
 function Get-SweeprFeatureRestoreCommand {
     <#
     .SYNOPSIS
         Exact command text to restore a record, for the preview and the log; never executed here.
     .OUTPUTS
-        The text, or $null for an app without a Store id (only a Store hint is possible).
+        The text, or $null for an app without a Store id in the current catalog entry
+        (only a Store hint is possible).
     #>
-    param([Parameter(Mandatory)]$Record)
+    param([Parameter(Mandatory)]$Record, $CatalogEntry)
 
     $kind = [string](Get-SweeprFeatureProperty $Record 'Kind')
     $target = [string](Get-SweeprFeatureProperty $Record 'Target')
@@ -593,7 +646,7 @@ function Get-SweeprFeatureRestoreCommand {
     }
     if ($kind -ne 'App') { throw "Unknown feature kind: $kind" }
 
-    $storeId = [string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $Record 'Restore') 'StoreId')
-    if ([string]::IsNullOrWhiteSpace($storeId)) { return $null }
+    $storeId = Get-SweeprFeatureCatalogStoreId -CatalogEntry $CatalogEntry
+    if (-not $storeId) { return $null }
     return ('winget ' + ((Get-SweeprFeatureWingetArguments -StoreId $storeId) -join ' '))
 }

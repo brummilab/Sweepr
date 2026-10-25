@@ -483,6 +483,13 @@ function Test-FeaturesAppInstalled {
     catch { return $false }
 }
 
+# The catalog entry a saved row is bound to, read fresh. $null when there is none (or it is not unique).
+function Get-FeaturesCatalogEntry {
+    param($Record)
+
+    return (Get-SweeprFeatureCatalogEntryForRecord -Record $Record -Catalog @(Get-SweeprFeatureCatalog))
+}
+
 function Get-FeaturesStoreHint {
     param([string]$Title, [string]$Reason)
 
@@ -501,8 +508,9 @@ function Get-FeaturesRestoreRows {
         $removedAt = ([string](Get-SweeprFeatureProperty $record 'RemovedAt')) -replace '[^0-9A-Za-z:.\-+ ]', ''
         $when = if ($removedAt) { "Removed $removedAt. " } else { "" }
         if ($kind -eq 'App') {
-            $storeId = [string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $record 'Restore') 'StoreId')
-            $how = if ($storeId) { "Reinstalls the app from the Microsoft Store with winget." } else { "No Store id is saved: Sweepr can only point you to the Microsoft Store." }
+            # Only the current catalog decides whether winget can be used; the id in the file is ignored.
+            $storeId = Get-SweeprFeatureCatalogStoreId -CatalogEntry (Get-FeaturesCatalogEntry -Record $record)
+            $how = if ($storeId) { "Reinstalls the app from the Microsoft Store with winget." } else { "No Store id is known: Sweepr can only point you to the Microsoft Store." }
         }
         else {
             $how = "Turns the Windows feature back on (administrator, may need a restart)."
@@ -524,10 +532,10 @@ function Get-FeaturesRestoreRows {
 function Get-FeaturesRestorePreviewText {
     param($Row, [bool]$WingetAvailable)
 
-    $command = Get-SweeprFeatureRestoreCommand -Record $Row.Record
+    $command = Get-SweeprFeatureRestoreCommand -Record $Row.Record -CatalogEntry (Get-FeaturesCatalogEntry -Record $Row.Record)
     if ($Row.Kind -ne 'App') { return $command }
     if (Test-FeaturesAppInstalled -Target $Row.Target) { return "Already installed: only the saved record would be removed" }
-    if (-not $command) { return (Get-FeaturesStoreHint -Title $Row.Title -Reason "No Store id is saved") }
+    if (-not $command) { return (Get-FeaturesStoreHint -Title $Row.Title -Reason "No Store id is known") }
     if (-not $WingetAvailable) { return (Get-FeaturesStoreHint -Title $Row.Title -Reason "winget is not available") }
     return $command
 }
@@ -559,7 +567,12 @@ function Invoke-FeaturesRestoreRun {
 
         $command = $null
         $failure = $null
-        try { $command = Get-SweeprFeatureRestoreCommand -Record $row.Record }
+        $catalogEntry = $null
+        try {
+            # The catalog is read again for every row: what runs must be allowed now, not only when the list was written.
+            $catalogEntry = Get-FeaturesCatalogEntry -Record $row.Record
+            $command = Get-SweeprFeatureRestoreCommand -Record $row.Record -CatalogEntry $catalogEntry
+        }
         catch { $failure = $_.Exception.Message }
         if ($failure) {
             Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail $failure
@@ -575,7 +588,7 @@ function Invoke-FeaturesRestoreRun {
                 continue
             }
             $hint = $null
-            if (-not $command) { $hint = Get-FeaturesStoreHint -Title $row.Title -Reason "No Store id is saved" }
+            if (-not $command) { $hint = Get-FeaturesStoreHint -Title $row.Title -Reason "No Store id is known" }
             elseif (-not $WingetAvailable) { $hint = Get-FeaturesStoreHint -Title $row.Title -Reason "winget is not available" }
             if ($hint) {
                 Write-SweeprOperation -Action "SKIPPED" -Path $logPath -Detail $hint
@@ -585,14 +598,14 @@ function Invoke-FeaturesRestoreRun {
 
             $exitCode = $null
             try {
-                $arguments = Get-SweeprFeatureWingetArguments -StoreId ([string](Get-SweeprFeatureProperty (Get-SweeprFeatureProperty $row.Record 'Restore') 'StoreId'))
+                $arguments = Get-SweeprFeatureWingetArguments -StoreId (Get-SweeprFeatureCatalogStoreId -CatalogEntry $catalogEntry)
                 $exitCode = [int](@(Invoke-FeaturesWinget -Arguments $arguments))[-1]
             }
             catch {
                 $failure = Get-FeaturesErrorText $_
             }
-            # 0x8A15002B: winget reports the package as already installed.
-            if (-not $failure -and $exitCode -eq -1978335189) {
+            # 0x8A15002B (no applicable update) and 0x8A150061 (package already installed): the app is there.
+            if (-not $failure -and ($exitCode -eq -1978335189 -or $exitCode -eq -1978335135)) {
                 Write-SweeprOperation -Action "RESTORED" -Path $logPath -Detail "already installed (winget exit code $exitCode); saved record removed"
                 Write-Host "already installed" -ForegroundColor Green
                 Complete-FeaturesRestoredRecord -Row $row
@@ -610,7 +623,13 @@ function Invoke-FeaturesRestoreRun {
             continue
         }
 
-        # Optional feature: the rights are checked again right before the change.
+        # Optional feature: catalog and rights are checked again right before the change.
+        if (-not $catalogEntry) {
+            $reason = "no longer in the list of removable entries"
+            Write-SweeprOperation -Action "SKIPPED" -Path $logPath -Detail $reason
+            Write-Host "skipped ($reason)" -ForegroundColor Yellow
+            continue
+        }
         $isAdmin = $false
         try { $isAdmin = [bool](Test-IsAdmin) } catch { $isAdmin = $false }
         if (-not $isAdmin) {
@@ -681,7 +700,13 @@ function Invoke-FeaturesRestoreFlow {
     Write-Host ""
     Write-Host "The following will be restored:" -ForegroundColor Yellow
     Write-Host ""
-    foreach ($row in $selected) { Write-Host "  $($row.Title)" }
+    foreach ($row in $selected) {
+        Write-Host "  $($row.Title) ($($row.Target))"
+        $text = $null
+        try { $text = Get-FeaturesRestorePreviewText -Row $row -WingetAvailable $wingetAvailable }
+        catch { $text = "cannot be restored: $($_.Exception.Message)" }
+        Write-Host "      $text"
+    }
     Write-Host ""
     $confirm = Read-Host "Continue? (y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
@@ -732,24 +757,32 @@ function Invoke-FeaturesRestoreCommand {
 
     # Invalid records stay in the file untouched; they are just never offered.
     $valid = @($records | Where-Object { Test-SweeprFeatureRemovedRecord -Record $_ })
-    $invalidCount = $records.Count - $valid.Count
 
     $isAdmin = $false
     try { $isAdmin = [bool](Test-IsAdmin) } catch { $isAdmin = $false }
-    $offered = @($valid | Where-Object { (Get-SweeprFeatureProperty $_ 'Kind') -eq 'App' -or $isAdmin })
+    # The file is user-writable: a record is only offered when the current catalog allows it too.
+    $catalog = @(Get-SweeprFeatureCatalog)
+    $bound = @()
+    foreach ($record in $valid) {
+        if (Test-SweeprFeatureRecordKindClash -Record $record -Catalog $catalog) { continue }
+        if ((Get-SweeprFeatureProperty $record 'Kind') -eq 'OptionalFeature' -and -not (Get-SweeprFeatureCatalogEntryForRecord -Record $record -Catalog $catalog)) { continue }
+        $bound += $record
+    }
+    $invalidCount = $records.Count - $bound.Count
+    $offered = @($bound | Where-Object { (Get-SweeprFeatureProperty $_ 'Kind') -eq 'App' -or $isAdmin })
     $notice = ""
-    if ($offered.Count -lt $valid.Count) { $notice = Get-FeaturesNeedAdminText }
+    if ($offered.Count -lt $bound.Count) { $notice = Get-FeaturesNeedAdminText }
 
     if ($offered.Count -eq 0) {
         if ($notice) { Write-FeaturesNeedAdminHint }
-        else { Write-Info "Nothing to restore: no saved entry in features-removed.json is valid." }
+        else { Write-Info "Nothing to restore: no saved entry in features-removed.json can be offered." }
     }
     else {
         Invoke-FeaturesRestoreFlow -Rows (Get-FeaturesRestoreRows -Records $offered) -Notice $notice -Preview $preview
     }
 
     if ($invalidCount -gt 0) {
-        Write-Host "$invalidCount saved entries in features-removed.json are not valid and were not offered; the file was left as it is." -ForegroundColor Yellow
+        Write-Host "$invalidCount saved entries in features-removed.json are not valid or not in the current list of restorable entries and were not offered; the file was left as it is." -ForegroundColor Yellow
     }
 }
 
