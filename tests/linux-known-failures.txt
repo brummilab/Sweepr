@@ -1,0 +1,291 @@
+# Tests that fail on Linux/macOS because they need real Windows (registry, powershell.exe,
+# Appx, junctions, ...). scripts/gate-pester.ps1 -Scope portable fails on any failing test
+# that is not listed here, and reports listed tests that now pass so this list can shrink.
+# One Pester ExpandedPath per line, sorted; a boolean -ForEach value is written without '$'.
+# Regenerate after intentional changes by running the suite on Linux and comparing.
+Analyze Command.Help Display.Should mention keybindings in help
+Analyze Command.Help Display.Should show help without error
+Analyze debug routing.Accepts the shared debug option and starts a session before Analyze help
+Application cache boundaries.Allows only new Teams WebView disk-cache leaves within Packages
+Application cache boundaries.Cleans Sublime Local and existing Roaming caches only while the owner is idle
+Application cache boundaries.Cleans every Chromium profile for Brave and preserves offline data
+Application cache boundaries.Cleans every Chromium profile for Chrome and preserves offline data
+Application cache boundaries.Cleans every Chromium profile for Edge and preserves offline data
+Application cache boundaries.Cleans every Chromium profile for Vivaldi and preserves offline data
+Application cache boundaries.Cleans exact application caches for Cursor and keeps authored state
+Application cache boundaries.Cleans exact application caches for Notion and keeps authored state
+Application cache boundaries.Cleans exact application caches for Windsurf and keeps authored state
+Application cache boundaries.Cleans exact application caches for obsidian and keeps authored state
+Application cache boundaries.Discards all discovered profiles when one profile is unreadable
+Application cache boundaries.Discards an oversized profile enumeration instead of cleaning a partial list
+Application cache boundaries.Honors an explicit Packages whitelist even for Teams cache leaves
+Application cache boundaries.Keeps Adobe Team Projects state beside rebuildable media caches
+Application cache boundaries.Keeps Poetry virtualenvs while cleaning its two disposable children
+Application cache boundaries.Keeps a report that receives an attachment after sizing
+Application cache boundaries.Keeps an old report directory with a recently written attachment
+Application cache boundaries.Keeps caches when the owner runs or its process probe fails for false
+Application cache boundaries.Keeps caches when the owner runs or its process probe fails for true
+Application cache boundaries.Keeps locked new Teams caches and cleans them after the lock closes
+Application cache boundaries.Keeps offline CacheStorage beside an eligible Slack disk cache
+Application cache boundaries.Keeps recent error reports and dumps in preview and real cleanup
+Application cache boundaries.Never follows a linked browser profile and still cleans a real profile
+Application cache boundaries.Preserves all files in dry-run and lists only disposable cache paths
+Application cache boundaries.Preserves protected stores even when passed to the shared sink directly
+Application cache boundaries.Protects Team Projects state at the shared clean sink including parent sweeps
+Application cache boundaries.Rechecks the owner after sizing in dry-run false
+Application cache boundaries.Rechecks the owner after sizing in dry-run true
+Application cache boundaries.Records a last-moment busy owner as skipped with no reclaimed files
+Application cache boundaries.Uses Firefox local caches and keeps its roaming profile stores
+Background loading lifecycle.animates while the calling thread waits and stops before returning
+Background loading lifecycle.writes Unicode frames directly to a console buffer regardless of its legacy code page
+Base Module.Color Definitions.Should expose the full icon table in Windows PowerShell
+Base Module.Get-FreeSpace.Should accept drive parameter
+Base Module.Get-FreeSpace.Should return free space string
+Base Module.Get-WindowsVersion.Should return version info
+Base Module.Test-IsAdmin.Should return a boolean
+Bounded developer cache scans.Does not walk the Maven repository the default whitelist protects
+Bounded developer cache scans.Keeps the Stack candidate set while bounding the scan
+Bounded local Windows Update inspection.Queries the local catalog and counts a single important result
+Bounded owner process execution.Bounds a slow owner and terminates its sleeping child
+Bounded owner process execution.Captures an actual read-only owner response with a spaced executable path
+Bounded vendor uninstaller wait.Cancels the waiting pipeline without killing fixture processes
+Bounded vendor uninstaller wait.Keeps waiting for a child after the parent exits
+Bounded vendor uninstaller wait.Returns the real exit code after normal completion
+Bounded vendor uninstaller wait.Times out without killing the vendor parent or child
+Cache Cleanup Module.Browser Cache Functions.Should run browser cache cleanup without error
+Clean Command.Dry Run Mode.Completes a real dry run without deleting its candidate
+Clean Command.Help Display.Should mention dry-run in help
+Clean Command.Help Display.Should show help without error
+Clean leaves user data alone.Lists the cache rows it keeps
+Cleanup accounting.Counts each crash dump and error report once
+Cleanup accounting.Counts what a dry run would remove
+Cleanup accounting.Lists every path a dry run would remove in the preview file
+Cleanup physical boundaries.Keeps a replacement directory installed during sizing
+Cleanup physical boundaries.Protects children of a literal directory whitelist without covering a prefix sibling
+Cleanup physical boundaries.Reads a literal bracket-containing whitelist filename
+Cleanup physical boundaries.Reads the whitelist once for a whole tree, not once per child
+Cleanup physical boundaries.Still removes an ordinary cache directory
+Complete install owner probes.Allows an empty complete inventory
+Complete install owner probes.Includes hidden registered components without applying the menu filter
+Complete install owner probes.Reports Store enumeration failures as incomplete
+Complete install owner probes.Reports registry read failures as incomplete
+Conservative cleanup targets.Keeps Spotify offline stores during automatic cleanup
+Conservative cleanup targets.Keeps Teams blob_storage while still cleaning its exact cache leaves
+Conservative cleanup targets.Keeps Teams tmp while still cleaning its exact cache leaves
+Copied installation ownership.Refuses a linked destination ancestor without modifying its target
+Debug through installed launcher call shapes.Creates a debug session through Command
+Debug through installed launcher call shapes.Creates a debug session through File
+File Operations Module.Format-ByteSize.Should format bytes correctly
+File Operations Module.Format-ByteSize.Should handle large numbers
+File Operations Module.Get-PathSize.Should return 0 for non-existent path
+File Operations Module.Get-PathSize.Should return size for directory
+File Operations Module.Get-PathSize.Should return size for file
+File Operations Module.Operation log.Keeps one record per line whatever the name holds
+File Operations Module.Operation log.Moves a log over its size limit aside before the next session
+File Operations Module.Operation log.Never deletes a folder recursively when it gained entries after the walk
+File Operations Module.Operation log.Records a removal that failed
+File Operations Module.Operation log.Records each removed item under one session marker
+File Operations Module.Operation log.Records how far a partial folder removal got
+File Operations Module.Operation log.Records why a folder was refused before anything was removed
+File Operations Module.Operation log.Removes an empty read-only folder
+File Operations Module.Operation log.Retries a line while another run holds the log
+File Operations Module.Operation log.Says on the debug stream when a line could not be written
+File Operations Module.Operation log.Writes nothing for a dry run or with SWEEPR_NO_OPLOG=1
+File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through <_>
+File Operations Module.Remove-SafeItem.Should not partially remove a directory tree when a protected child is present
+File Operations Module.Remove-SafeItem.Should not remove protected paths
+File Operations Module.Remove-SafeItem.Should reject dry-run previews when a directory tree contains a protected child
+File Operations Module.Remove-SafeItem.Should remove empty directories successfully
+File Operations Module.Remove-SafeItem.Should remove file successfully
+File Operations Module.Remove-SafeItem.Should respect DryRun mode
+File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk instead of walking it again (dry run: <DryRun>)
+File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: <DryRun>)
+File Operations Module.Remove-SafeItem.Still refuses a whitelisted child with the single whitelist read
+File Operations Module.Test-ProtectedPath.Should keep a planned path under an unprotected parent safe
+File Operations Module.Test-ProtectedPath.Should not protect temp directories
+File Operations Module.Test-ProtectedPath.Should protect Windows Defender paths
+File Operations Module.Test-ProtectedPath.Should protect Windows directory
+File Operations Module.Test-ProtectedPath.Should protect a final path when the list stores a short-name spelling
+File Operations Module.Test-ProtectedPath.Should protect a path reached through a junction into a protected tree
+File Operations Module.Test-ProtectedPath.Should protect a trailing-dot alias of a protected tree
+File Operations Module.Test-ProtectedPath.Should protect the 8.3 short-name spelling of a protected tree
+File Operations Module.Test-ProtectedPath.Should protect the user profile root exactly
+File Operations Module.Test-ProtectedPath.Should resolve an existing short-name alias to its final path
+File Operations Module.Test-SafePath.Should return false for empty paths
+File Operations Module.Test-SafePath.Should return false for protected paths
+File Operations Module.Test-SafePath.Should return false for the user profile root
+File Operations Module.Test-SafePath.Should return true for safe paths
+Game media scope.Keeps generic captures while still selecting old game captures
+Generated cmd launchers.Preserves apostrophes, exclamation marks, spaces, metacharacters and long flags
+Generated cmd launchers.Returns the script exit code when removal deletes its running batch file
+Generic game content in install folders.Keeps ordinary installs and a single Steam game eligible
+Generic game content in install folders.Rechecks content in the existing final leftover ownership guard
+Install folder eligibility.Accepts an app's own folder, quoted or with a trailing slash
+Install folder eligibility.Accepts one game's folder inside a Steam library
+Junctions and symbolic links.Removes a folder holding a junction without touching the junction's target
+Junctions and symbolic links.Removes only the link when the path itself is a junction
+Leftover install folder ownership.Allows an independent prefix sibling and ignores only the selected preview key
+Leftover install folder ownership.Previews a leftover when the only blocking key is a duplicate merged into the selected app
+Leftover install folder ownership.Rechecks ownership in the final removal guard
+Leftover install folder ownership.Retains game content that appears at the final removal boundary
+Linked protected segments.Refuses a child of a protected segment that is a junction elsewhere
+Logging Module.Debug session log.Writes a command script's own lines when the router already set SWEEPR_DEBUG
+Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through Command
+Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through File
+Machine-readable output through installed launcher call shapes.Passes --interval with its value to the status tool through Command
+Machine-readable output through installed launcher call shapes.Passes --interval with its value to the status tool through File
+Machine-readable output through installed launcher call shapes.Passes --json and the path to the analyzer through Command
+Machine-readable output through installed launcher call shapes.Passes --json and the path to the analyzer through File
+Machine-readable output through installed launcher call shapes.Prints the cached uninstall inventory as JSON through Command
+Machine-readable output through installed launcher call shapes.Prints the cached uninstall inventory as JSON through Command with --debug
+Machine-readable output through installed launcher call shapes.Prints the cached uninstall inventory as JSON through File
+Machine-readable output through installed launcher call shapes.Prints the cached uninstall inventory as JSON through File with --debug
+Main Entry Point.sweepr.ps1.Renders the full menu before waiting for input
+Main Entry Point.sweepr.ps1.Should list available commands in help
+Main Entry Point.sweepr.ps1.Should show help without error
+Main Entry Point.sweepr.ps1.Should show version without error
+Native optimization outcomes.Counts a successful native ARP operation
+Native optimization outcomes.Does not count a failing native ARP operation as applied
+Optimize Command.Help Display.Should mention optimization options in help
+Optimize Command.Help Display.Should show help without error
+Owner cache accounting.Does not assume an unmeasurable post-cleanup tree is empty
+Owner cache accounting.Does not report bytes for an unchanged cache
+Owner cache accounting.Exports the owner root without claiming the whole store will be pruned
+Owner cache accounting.Keeps owner-only activity out of the already-clean summary
+Owner cache accounting.Measures only the space removed by a successful partial prune
+Owner cache cleanup whitelist.Reads the whitelist once for the boundary recheck, not once per cache entry
+Owner cache cleanup whitelist.Runs an owner for a known unprotected ordinary cache
+Owner process timeout.Says when it stops an owner process tree that ran past its timeout
+Package manager update without Git.Prints the winget command before requiring Git
+Protected system cleanup does not disturb services.Never stops, starts or restarts FontCache or Windows Update during system cleanup
+Purge Command.Help Display.Should list artifact types in help
+Purge Command.Help Display.Should show help without error
+Purge project boundaries.checks Git again immediately before removal after sizing
+Purge project boundaries.does not discover dependency packages as independent projects
+Purge project boundaries.does not inherit Git index or pathspec overrides
+Purge project boundaries.finds untracked artifacts under literal bracket project paths
+Purge project boundaries.keeps authored and unrelated generic folders in a Node project
+Purge project boundaries.keeps authored bin in an unversioned Go project
+Purge project boundaries.keeps candidates when Git inspection fails
+Purge project boundaries.keeps candidates when the content walk is incomplete
+Purge project boundaries.keeps nested repositories
+Purge project boundaries.keeps real ecosystem artifacts eligible
+Purge project boundaries.keeps tracked content without relying on wildcard path failure
+Purge project boundaries.matches tracked artifacts under literal bracket project names
+Purge project boundaries.reads Git root paths as UTF8 for Unicode projects
+Purge project labels.keeps other paths, including a profile prefix sibling, in full
+Purge project labels.labels same-named projects by their path
+Purge project labels.names each project by its path while cleaning
+Purge project labels.shows paths under the profile from ~
+Quiet inventory scan.Scans the same inventory without host output
+Read-only system health queries.Collects health metrics in the current PowerShell host without query mocks
+Recoverable uninstall leftovers.Keeps a replaced root after sizing
+Recoverable uninstall leftovers.Keeps leftovers and reports no cleaned items when recycling fails
+Recoverable uninstall leftovers.Previews without calling the shell or permanent deletion
+Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: false)
+Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: true)
+Recoverable uninstall leftovers.Routes an accepted directory only to the recycle operation
+Registered Proton Pass uninstall compatibility.Uses the exact registered normal command for the known broken quiet command
+Release source equivalence.Accepts the released source even when unrelated files differ
+Remove Command.Help Display.Should mention uninstall behavior
+Remove Command.Help Display.Should show help without error
+Scanning installed apps.Does not reuse the v5 inventory with lost install identities and Game Bar
+Scanning installed apps.Hides system components, updates and child entries
+Scanning installed apps.Keeps a large size that the install folder cannot disprove
+Scanning installed apps.Keeps a non-ASCII app name through the cache
+Scanning installed apps.Keeps two copies with one name in different install folders
+Scanning installed apps.Keeps two distinct registered Steam library roots without measuring or removing either
+Scanning installed apps.Leaves out Store packages Windows depends on
+Scanning installed apps.Leaves out a sparse package a desktop app registers, like WinMerge's context menu
+Scanning installed apps.Measures an outlier estimate even when personal content prevents leftover removal
+Scanning installed apps.Merges entries with one name, version and publisher
+Scanning installed apps.Preserves distinct registered identities when <ProtectedCount> installs contain saves
+Scanning installed apps.Reads the per-user 32-bit Uninstall key too
+Scanning installed apps.Retains <Kind> registration identity without recursive measurement or leftover removal
+Scanning installed apps.Shows a RustDesk-like outlier size as measured, once, beside its duplicate key
+Start menu shortcut removal.Removes a 1.30.0 Sweepr.lnk that starts this install
+Start menu shortcut removal.Removes this install's shortcut and keeps another app's
+Status Command.Help Display.Should mention system metrics in help
+Status Command.Help Display.Should show help without error
+Store package eligibility at the removal boundary.Does not preview a Store package when current inventory is unreadable
+Store package eligibility at the removal boundary.Preserves discovery policy for an unreadable manifest on an ordinary Store package
+Store package eligibility at the removal boundary.Previews an eligible ordinary Store package without writing
+Store package eligibility at the removal boundary.Rechecks an explicit sparse manifest even when the cached full identity still matches
+Store package eligibility at the removal boundary.Refuses current Game Bar metadata even with an old friendly name, preview=<Preview>
+Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is <State>
+Store package eligibility at the removal boundary.Still removes an exactly matched ordinary Store app
+System Cleanup Module.Admin Requirements.Should check for admin when needed
+Test runner exit status.passes when the native Go checks pass
+Test runner exit status.passes when two Go installs are on PATH
+Tree walk snapshots.Binds every item to the same chain a fresh snapshot of its path would
+Tree walk snapshots.Binds the root once and each child from its parent instead of reopening every ancestor
+Tree walk snapshots.Fails the recheck when a directory is replaced after the walk
+Tree walk snapshots.Lists a junction as a link and does not walk into it
+Uninstall Command.Help Display.Should show help without error
+Uninstall dry run leftovers.Previews an app's own folder
+Uninstall entry removal check.Treats a key emptied of its name and uninstall command as removed
+Uninstall entry removal check.Treats a key that still names an app as installed
+Uninstall entry removal check.Treats a missing key as removed
+Uninstall rendered regression.publishes a measured Store size without ancestor deletion access
+Uninstalling registry apps.Adds /S only to an uninstaller carrying the NSIS marker
+Uninstalling registry apps.Adds the Inno Setup switches only to an Inno uninstaller
+Uninstalling registry apps.Keeps the install folder when the uninstall entry is still there
+Uninstalling registry apps.Never removes a profile or system folder named as the install location
+Uninstalling registry apps.Prefers the vendor's QuietUninstallString
+Uninstalling registry apps.Records a still-installed app with the same detail
+Uninstalling registry apps.Records an app with no runnable uninstaller
+Uninstalling registry apps.Records the install folder, registry key and command with each outcome
+Uninstalling registry apps.Recycles the install folder once the uninstall entry is gone
+Uninstalling registry apps.Removes MSI products with msiexec /passive
+Uninstalling registry apps.Runs an unrecognised uninstaller exactly once, as registered
+Uninstalling registry apps.Starts nothing when the registered uninstaller does not exist
+Uninstalling registry apps.Stops the batch on an uninstaller timeout even after registration disappears
+Update Command.Help Display.Should explain the source channel
+Update Command.Help Display.Should show help without error
+Update Command.Installation Refresh.Should pass the source directory to the installer by name
+Update Command.Installation Refresh.Should recover the legacy updater PATH intent without creating a shortcut
+Update Command.Installation Refresh.Should refresh the source directory on the first update from v1.30.0
+User Cleanup Module.Clear-UserTempFiles.Should run without error in dry-run mode
+Whitelist canonical pattern associations.Keeps mixed junction wildcard and literal rules associated in every position
+Whitelist canonical pattern associations.Retains a final wildcard at the removal sink after an expanded junction
+Whitelisted junction roots.Keeps a child of a whitelisted junction by original and final spelling
+install.ps1 -Uninstall.Keeps a linked install directory and the files outside it
+install.ps1 -Uninstall.Keeps config behind a junction at .config
+install.ps1 -Uninstall.Keeps config behind a junction at sweepr
+install.ps1 -Uninstall.Knows every top-level entry and docs file the repository ships
+install.ps1 -Uninstall.Records the cache removal in the operation log
+sw --help and --version.Reports the version, platform and install method
+sw --help and --version.Returns failure for an unknown command from the installed File entrypoint
+sw --help and --version.Shows the logo with the website and the command layout
+sw history command.Prints sessions and operations as text
+sw history command.Refuses a limit out of range with exit code 2
+sw history command.Refuses a missing limit with exit code 2
+sw history command.Refuses a stray argument with exit code 2
+sw history command.Takes the limit as one word
+sw history command.Takes the limit as two words
+sw optimize steps.Allows a laptop only with complete online non-discharging power evidence
+sw optimize steps.An unrelated unhealthy disk does not block the healthy system disk
+sw optimize steps.Checks target disk health before optimization and keeps a failing target untouched
+sw optimize steps.Counts only the steps it lists in an elevated dry run
+sw optimize steps.Keeps disk optimization off battery and unknown power: <State>
+sw optimize steps.Never resets Winsock or rebuilds search, icon, font or Store caches when elevated
+sw optimize steps.No longer defines the removed repair functions
+sw optimize steps.Still checks the target disk when physical inventory fails: <Health>
+sw optimize steps.Unknown disk health does not invent a critical failure
+sw optimize steps.Uses the singular noun when a non-admin dry run has one step
+sw purge accounting.Counts each removed artifact's size once
+sw remove.Asks with the install path and removes on y
+sw remove.Removes nothing when the answer is not y
+sw remove.Sends a Scoop install to its package manager instead of removing files
+sw remove.Sends a winget install to its package manager instead of removing files
+sw uninstall --dry-run.Describes the MSI product code it would remove
+sw uninstall --dry-run.Runs no uninstaller for MSI, EXE or Store apps
+sw uninstall --list.Escapes non-ASCII names so the console code page cannot change them
+sw uninstall --list.Keeps a single app inside a JSON array
+sw uninstall --list.Lists before dry-run setup even when combined with --dry-run
+sw uninstall --list.Never runs an uninstaller, prompts or writes the log
+sw uninstall --list.Passes --rescan to the inventory as the menu does
+sw uninstall --list.Prints an aligned table on a console and nothing to the pipeline
+sw uninstall --list.Prints an empty array for an empty inventory
+sw uninstall --list.Prints the inventory as a JSON array when output is redirected
+sweepr.ps1 command router.Preserves native TUI exit codes and resets stale results for help
