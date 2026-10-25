@@ -60,21 +60,33 @@ foreach ($file in Get-ChildItem -Path ./tests -Filter *.Tests.ps1 -File) {
 }
 if ($dupes -gt 0) { Write-Host "Duplicate setup blocks: $dupes"; exit 1 }
 
-# Pin the Pester version like .github/workflows/test.yml: prefer 6.2.0, fall back to 5.7.1.
+# Pin the Pester version exactly like the "Install Pester" step of .github/workflows/test.yml:
+# use 6.2.0; if it is not installed, try to install it; only if that fails fall back to 5.7.1.
+# SWEEPR_GATE_PESTER=5.7.1 (or 6.2.0) forces one version, e.g. to check the gate with both.
 $preferred = '6.2.0'
 $fallback = '5.7.1'
-$pesterVersion = $null
-foreach ($v in @($preferred, $fallback)) {
-    if (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version.ToString() -eq $v }) { $pesterVersion = $v; break }
+function Test-PesterInstalled([string]$Version) {
+    [bool](Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version.ToString() -eq $Version })
 }
-if (-not $pesterVersion) {
+$pesterVersion = $null
+if ($env:SWEEPR_GATE_PESTER) {
+    if ($env:SWEEPR_GATE_PESTER -notin @($preferred, $fallback)) { Write-Host "SWEEPR_GATE_PESTER must be $preferred or $fallback."; exit 1 }
+    if (-not (Test-PesterInstalled $env:SWEEPR_GATE_PESTER)) {
+        Install-Module -Name Pester -RequiredVersion $env:SWEEPR_GATE_PESTER -Force -SkipPublisherCheck -Scope CurrentUser
+    }
+    $pesterVersion = $env:SWEEPR_GATE_PESTER
+}
+elseif (Test-PesterInstalled $preferred) { $pesterVersion = $preferred }
+else {
     try {
         Install-Module -Name Pester -RequiredVersion $preferred -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
         $pesterVersion = $preferred
     }
     catch {
         Write-Host "Pester $preferred is unavailable; falling back to $fallback."
-        Install-Module -Name Pester -RequiredVersion $fallback -Force -SkipPublisherCheck -Scope CurrentUser
+        if (-not (Test-PesterInstalled $fallback)) {
+            Install-Module -Name Pester -RequiredVersion $fallback -Force -SkipPublisherCheck -Scope CurrentUser
+        }
         $pesterVersion = $fallback
     }
 }
@@ -101,7 +113,28 @@ $knownPath = './tests/linux-known-failures.txt'
 # Pester 6 renders a boolean -ForEach value as '$true', Pester 5 as 'True'; compare without the '$'.
 function ConvertTo-TestKey([string]$Path) { $Path.Trim() -replace '\$(?=(true|false)\b)', '' }
 $known = @(Get-Content -LiteralPath $knownPath | Where-Object { $_.Trim() -and -not $_.StartsWith('#') } | ForEach-Object { ConvertTo-TestKey $_ })
-$failed = @($result.Failed | ForEach-Object { ConvertTo-TestKey $_.ExpandedPath } | Sort-Object -Unique)
+# A test that fails in BeforeEach/BeforeAll never gets its name expanded, so several -TestCases/-ForEach
+# cases would share one key like "...when <State>". Expand the placeholders from the case data ourselves,
+# so every case gets its own key (<_> is the value of a scalar -ForEach item).
+function Get-FailedTestKey($Test) {
+    $path = [string]$Test.ExpandedPath
+    if ($path -notmatch '<[^<>]+>') { return ConvertTo-TestKey $path }
+    $data = $Test.Data
+    if ($data -is [System.Collections.IDictionary]) {
+        foreach ($k in @($data.Keys)) { $path = $path.Replace("<$k>", [string]$data[$k]) }
+    }
+    elseif ($null -ne $data) {
+        $path = $path.Replace('<_>', [string]$data)
+    }
+    ConvertTo-TestKey $path
+}
+$failed = @($result.Failed | ForEach-Object { Get-FailedTestKey $_ } | Sort-Object -Unique)
+$unexpanded = @($failed | Where-Object { $_ -match '<[^<>]+>' })
+if ($unexpanded.Count -gt 0) {
+    Write-Host "Failed test(s) with unresolved name placeholders (cannot be listed uniquely): $($unexpanded.Count)"
+    $unexpanded | ForEach-Object { Write-Host "  $_" }
+    exit 1
+}
 $loadErrors = @($result.Containers | Where-Object { $_.Result -eq 'Failed' -and @($_.Blocks).Count -eq 0 })
 $new = @($failed | Where-Object { $_ -notin $known })
 $fixed = @($known | Where-Object { $_ -notin $failed })
