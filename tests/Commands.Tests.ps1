@@ -199,7 +199,7 @@ switch -Regex ($commandLine) {
     '^remote get-url origin$' { "https://github.com/brummilab/sweepr.git"; break }
     '^branch --show-current$' { "main"; break }
     '^rev-parse --short HEAD$' { "abc123"; break }
-    '^pull --ff-only --tags origin windows$' { Set-Content -LiteralPath ($env:SWEEPR_INSTALL_CAPTURE + '.git') -Value $commandLine; break }
+    '^pull --ff-only --tags origin main$' { Set-Content -LiteralPath ($env:SWEEPR_INSTALL_CAPTURE + '.git') -Value $commandLine; break }
     default {
         Write-Error "Unexpected git command: $commandLine"
         $global:LASTEXITCODE = 1
@@ -217,7 +217,7 @@ switch -Regex ($commandLine) {
 
                 $capturePath | Should -Exist
                 Get-Content $capturePath -Raw | Should -Be $fixtureRoot
-                Get-Content -LiteralPath ($capturePath + ".git") | Should -Be "pull --ff-only --tags origin windows"
+                Get-Content -LiteralPath ($capturePath + ".git") | Should -Be "pull --ff-only --tags origin main"
             }
             finally {
                 $env:PATH = $originalPath
