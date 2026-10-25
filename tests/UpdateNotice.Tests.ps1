@@ -47,11 +47,35 @@ Describe 'Automatic update notices' {
         @{ Method = 'Source'; Action = 'run sw update' },
         @{ Method = 'winget'; Action = 'run winget upgrade brummilab.Sweepr' },
         @{ Method = 'Scoop'; Action = 'run scoop update sweepr' },
-        @{ Method = 'Copy'; Action = 'download https://github.com/brummilab/sweepr/releases/tag/V1.10.0-windows' },
-        @{ Method = 'Portable'; Action = 'download https://github.com/brummilab/sweepr/releases/tag/V1.10.0-windows' }
+        @{ Method = 'Copy'; Action = 'download https://github.com/brummilab/sweepr/releases/tag/V1.10.0-windows' }
     ) {
         $script:Context.Method = $Method
         Get-SweeprUpdateNotice -Context $script:Context | Should -Be "Update 1.10.0 available, $Action"
+    }
+
+    # F-01b / Design Rev 2, section 9: a portable copy gets its own download hint
+    # that names the portable asset; the plain Copy hint must not.
+    It 'Gives Portable its own download hint with the portable asset name' {
+        $script:Context.Method = 'Portable'
+        $notice = Get-SweeprUpdateNotice -Context $script:Context
+        $notice | Should -Match '^Update 1\.10\.0 available, '
+        $notice | Should -Match 'download '
+        $notice | Should -Match 'https://github\.com/brummilab/sweepr/releases'
+        $notice | Should -Match ([regex]::Escape('sweepr-1.10.0-x64-portable.zip'))
+    }
+
+    It 'Does not mention the portable asset in the notice for a plain Copy' {
+        $script:Context.Method = 'Copy'
+        Get-SweeprUpdateNotice -Context $script:Context | Should -Not -Match 'portable'
+    }
+
+    It 'Builds the portable asset name from the advertised version only' {
+        $script:Context.Method = 'Portable'
+        $script:State.Latest = '2.0.7'
+        Write-SweeprUpdateState -Path $script:CacheFile -State $script:State
+        $notice = Get-SweeprUpdateNotice -Context $script:Context
+        $notice | Should -Match ([regex]::Escape('sweepr-2.0.7-x64-portable.zip'))
+        $notice | Should -Not -Match '1\.10\.0'
     }
 
     It 'Never advertises an equal, older, prerelease or invalid version <Latest>' -ForEach @(

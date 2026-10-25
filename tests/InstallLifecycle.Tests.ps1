@@ -368,3 +368,106 @@ Describe 'Review regressions: first native launch' {
         Should -Invoke Restore-PrebuiltTuiBinary -Times 1 -Exactly
     }
 }
+
+# F-01b (Design Rev 2a): with SWEEPR_DATA_DIR set (and no portable marker) the
+# uninstaller removes the installation as before, never the override folder,
+# and does not touch the profile data folders either: Sweepr kept nothing there.
+Describe 'Uninstall in override mode' {
+    BeforeAll {
+        $script:OvSavedLocal = $env:LOCALAPPDATA
+        $script:OvSavedProfile = $env:USERPROFILE
+        $script:OvSavedData = $env:SWEEPR_DATA_DIR
+        function script:Get-OverrideTree {
+            param([string]$Path)
+            $base = (Get-Item -LiteralPath $Path).FullName.TrimEnd('\')
+            $lines = foreach ($item in @(Get-ChildItem -LiteralPath $Path -Recurse -Force)) {
+                $rel = $item.FullName.Substring($base.Length)
+                if ($item.PSIsContainer) { "D $rel" } else { "F $rel :: " + [IO.File]::ReadAllText($item.FullName) }
+            }
+            return (@($lines | Sort-Object) -join "`n")
+        }
+    }
+
+    AfterAll {
+        $env:LOCALAPPDATA = $script:OvSavedLocal
+        $env:USERPROFILE = $script:OvSavedProfile
+        $env:SWEEPR_DATA_DIR = $script:OvSavedData
+    }
+
+    BeforeEach {
+        $case = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $env:LOCALAPPDATA = Join-Path $case 'local'
+        $script:OvProfile = Join-Path $case 'profile'
+        $script:OvRoot = Join-Path $case 'app'
+        $script:OvData = Join-Path $case 'elsewhere'
+        foreach ($dir in 'lib\core', 'bin', '.git') { New-Item -ItemType Directory -Path (Join-Path $script:OvRoot $dir) -Force | Out-Null }
+        Set-Content -LiteralPath (Join-Path $script:OvRoot 'sweepr.ps1') -Value '#'
+        Set-Content -LiteralPath (Join-Path $script:OvRoot 'lib\core\base.ps1') -Value '#'
+        foreach ($dir in 'config', 'cache') { New-Item -ItemType Directory -Path (Join-Path $script:OvData $dir) -Force | Out-Null }
+        Set-Content -LiteralPath (Join-Path $script:OvData 'config\whitelist.txt') -Value 'mine'
+        Set-Content -LiteralPath (Join-Path $script:OvData 'config\operations.log') -Value 'REMOVED example'
+        Set-Content -LiteralPath (Join-Path $script:OvData 'cache\app_scan_cache_v6.json') -Value '{}'
+        New-Item -ItemType Directory -Path (Join-Path $script:OvProfile '.config\sweepr'), (Join-Path $script:OvProfile '.cache\sweepr') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:OvProfile '.config\sweepr\whitelist.txt') -Value 'profile data'
+        Set-Content -LiteralPath (Join-Path $script:OvProfile '.cache\sweepr\x.bin') -Value 'profile cache'
+        $env:USERPROFILE = $script:OvProfile
+        $env:SWEEPR_DATA_DIR = $script:OvData
+        $script:InstallDirGiven = $true
+        $script:Said = @()
+        Mock Remove-FromUserPath { $true }
+        Mock Remove-StartMenuShortcut { $true }
+        Mock Read-Host { 'y' }
+        Mock Write-Host { $script:Said += "$Object" }
+        Mock Write-Info { $script:Said += "$Message" }
+        Mock Write-Success { $script:Said += "$Message" }
+        Mock Write-SweeprWarning { $script:Said += "$Message" }
+        Mock Write-SweeprError { $script:Said += "$Message" }
+    }
+
+    It 'Removes the installation but never the override folder' {
+        $dataBefore = Get-OverrideTree -Path $script:OvData
+        $InstallDir = $script:OvRoot
+        Uninstall-Sweepr | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:OvRoot 'sweepr.ps1') | Should -BeFalse
+        Test-Path -LiteralPath $script:OvData -PathType Container | Should -BeTrue
+        Get-OverrideTree -Path $script:OvData | Should -BeExactly $dataBefore
+    }
+
+    It 'Leaves the profile data folders alone and does not ask about them' {
+        $profileBefore = Get-OverrideTree -Path $script:OvProfile
+        $InstallDir = $script:OvRoot
+        Uninstall-Sweepr | Should -BeTrue
+        Get-OverrideTree -Path $script:OvProfile | Should -BeExactly $profileBefore
+        Should -Invoke Read-Host -Times 0 -Exactly
+    }
+
+    It 'Names the override folder in a hint' {
+        $InstallDir = $script:OvRoot
+        Uninstall-Sweepr | Should -BeTrue
+        ($script:Said -join "`n") | Should -BeLike "*Your Sweepr data stays in $($script:OvData)*delete it yourself*"
+    }
+}
+
+# F-01b: the portable check in sw update comes before any Git or installer
+# requirement, so it also works on a machine without Git on PATH.
+Describe 'Portable update without Git' {
+    It 'Prints the portable message with an empty PATH' {
+        $root = Join-Path $TestDrive 'portable-app'
+        New-Item -ItemType Directory -Path (Join-Path $root 'bin'), (Join-Path $root 'lib'), (Join-Path $root 'data') -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'bin\update.ps1') -Destination (Join-Path $root 'bin\update.ps1')
+        Copy-Item -LiteralPath (Join-Path $script:RepoRoot 'lib\core') -Destination (Join-Path $root 'lib\core') -Recurse
+        Set-Content -LiteralPath (Join-Path $root 'sweepr.portable') -Value ''
+        Set-Content -LiteralPath (Join-Path $root 'install.ps1') -Value '# fixture'
+        $saved = $env:PATH
+        try {
+            $env:PATH = ''
+            $output = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'bin\update.ps1') 2>&1
+            $code = $LASTEXITCODE
+        }
+        finally { $env:PATH = $saved }
+        $code | Should -Be 1
+        ($output -join "`n") | Should -Match 'x64-portable\.zip'
+        ($output -join "`n") | Should -Not -Match 'Git is not installed'
+        Test-Path -LiteralPath (Join-Path $root 'data') -PathType Container | Should -BeTrue
+    }
+}
