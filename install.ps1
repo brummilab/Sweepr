@@ -698,6 +698,8 @@ function Get-SweeprInstallNestedFiles {
         "scripts\build-msi.ps1"
         "scripts\build-release.ps1"
         "scripts\build.ps1"
+        "scripts\gate-pester.ps1"
+        "scripts\gate.sh"
         "scripts\e2e_windows.py"
         "scripts\sweepr-installer.wxs"
         "scripts\new-release-zip.ps1"

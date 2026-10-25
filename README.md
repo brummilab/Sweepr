@@ -153,7 +153,17 @@ go build -o bin\status.exe .\cmd\status
 .\sweepr.ps1 clean --dry-run
 ```
 
-Jeder Push und jeder Pull-Request auf `main` startet die GitHub-Actions-Workflows **Validation** (Pester unter PowerShell 5.1 und 7, Go-Tests, Windows-Builds) und **Check** auf `windows-latest`.
+Jeder Push und jeder Pull-Request auf `main` startet die GitHub-Actions-Workflows **Validation** (Pester unter PowerShell 5.1 und 7, Go-Tests, Windows-Builds) und **Check** auf `windows-latest`, dazu das Gate unter Linux.
+
+### Gate
+
+Vor jedem Merge muss das Gate grün sein:
+
+```bash
+./scripts/gate.sh                  # gofmt, go vet/test, Windows-Build, PowerShell-Syntax, Pester
+```
+
+Unter Windows (Git Bash) laufen dabei alle Pester-Tests, sonst die plattformneutralen.
 
 Projektübersicht und Änderungsprotokoll: [Projektinhalt.md](Projektinhalt.md).
 
