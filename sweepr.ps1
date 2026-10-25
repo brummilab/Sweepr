@@ -134,11 +134,12 @@ function Get-SweeprInstallDescription {
 function Get-SweeprInstallMethod {
     param([string]$RootDir)
 
+    if (Test-SweeprPortable -RootDir $RootDir) { return "Portable" }
     $path = $RootDir.TrimEnd('\') + '\'
     if ($path -like "*\Microsoft\WinGet\Packages\brummilab.Sweepr_*") { return "winget" }
     if ($path -like "*\scoop\apps\sweepr\*") { return "Scoop" }
     if (Test-Path -LiteralPath (Join-Path $RootDir ".git")) { return "Source" }
-    return "Portable"
+    return "Copy"
 }
 
 # ============================================================================
@@ -392,9 +393,28 @@ function Invoke-SweeprCommand {
 # Main
 # ============================================================================
 
+# Where Sweepr keeps its own files is decided once in base.ps1 (Config). Here the
+# decision is handed to child processes and checked before any command runs.
+function Initialize-SweeprDataDir {
+    $paths = Resolve-SweeprDataPaths -RootDir $script:SWEEPR_ROOT
+    if ($paths.Mode -eq 'Portable') {
+        # Command scripts and the Go tools read this variable at start-up.
+        $env:SWEEPR_DATA_DIR = Join-Path $script:SWEEPR_ROOT 'data'
+    }
+    elseif ($paths.Mode -eq 'Override') {
+        # Children get the absolute, trimmed form so every tool lands in the same folder.
+        $env:SWEEPR_DATA_DIR = Split-Path -Parent $paths.ConfigPath
+    }
+    if ($paths.Mode -ne 'Profile') {
+        Assert-SweeprDataWritable -Path $paths.ConfigPath
+        Assert-SweeprDataWritable -Path $paths.CachePath
+    }
+}
+
 function Main {
     # Initialize
     Initialize-Sweepr
+    Initialize-SweeprDataDir
 
     # Native -File and the executable launcher bind switches differently.
     # Normalize both forms before routing, keeping command options on the child.
@@ -493,7 +513,12 @@ try {
 }
 catch {
     Write-Host ""
-    Write-SweeprError "An error occurred: $_"
+    if ($_.Exception.Message -like 'Sweepr data folder is not writable:*') {
+        Write-SweeprError $_.Exception.Message
+    }
+    else {
+        Write-SweeprError "An error occurred: $_"
+    }
     Write-Host ""
     exit 1
 }

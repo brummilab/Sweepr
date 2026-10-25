@@ -53,7 +53,7 @@ $script:SweeprCleanPathGuard = $true
 # Configuration
 # ============================================================================
 
-$script:ExportListFile = "$env:USERPROFILE\.config\sweepr\clean-list.txt"
+$script:ExportListFile = Join-Path $script:Config.ConfigPath 'clean-list.txt'
 
 # ============================================================================
 # Help

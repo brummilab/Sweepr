@@ -36,7 +36,7 @@ $libDir = Join-Path (Split-Path -Parent $scriptDir) "lib"
 # Configuration
 # ============================================================================
 
-$script:CacheDir = "$env:USERPROFILE\.cache\sweepr"
+$script:CacheDir = $script:Config.CachePath
 # v3: Store display sizing does not require deletion authority over ancestors.
 # v4: written as UTF-8. v3 used the ANSI code page, which turned non-ASCII
 # app names into question marks, so a v3 file is not read as UTF-8.
