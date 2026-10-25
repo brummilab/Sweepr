@@ -231,3 +231,74 @@ Describe 'Own data paths use -LiteralPath in the source' {
         }
     }
 }
+
+Describe 'clean whitelist in a data folder with brackets (F-01j)' {
+    BeforeAll {
+        Import-ScriptFunction -RelativePath 'bin\clean.ps1' -Name 'Edit-Whitelist'
+        function script:Write-Info { param($Message) }
+        function script:Write-Success { param($Message) }
+    }
+
+    BeforeEach {
+        $script:Case = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:ConfigDir = Join-Path $script:Case 'Apps [x]/config'
+        $script:LookalikeDir = Join-Path $script:Case 'Apps x/config'
+        $script:WhitelistFile = Join-Path $script:ConfigDir 'whitelist.txt'
+        $script:Config = @{ WhitelistFile = $script:WhitelistFile }
+        Mock Start-Process {}
+    }
+
+    AfterEach {
+        if ($null -ne $script:SavedConfig) { $script:Config = $script:SavedConfig }
+    }
+
+    It 'Creates the config folder and whitelist.txt when the data folder has brackets' {
+        Edit-Whitelist
+        Test-Path -LiteralPath $script:ConfigDir -PathType Container | Should -BeTrue
+        Test-Path -LiteralPath $script:WhitelistFile -PathType Leaf | Should -BeTrue
+        (Get-Content -LiteralPath $script:WhitelistFile -Raw) | Should -Match 'Sweepr Whitelist'
+    }
+
+    It 'Creates whitelist.txt even when a look-alike folder has one' {
+        New-Item -ItemType Directory -Path $script:LookalikeDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Value 'other'
+        Edit-Whitelist
+        Test-Path -LiteralPath $script:WhitelistFile -PathType Leaf | Should -BeTrue
+        (Get-Content -LiteralPath $script:WhitelistFile -Raw) | Should -Match 'Sweepr Whitelist'
+    }
+
+    It 'Does not overwrite the look-alike whitelist.txt' {
+        New-Item -ItemType Directory -Path $script:ConfigDir, $script:LookalikeDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Value 'other'
+        Edit-Whitelist
+        (Get-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Raw).Trim() | Should -BeExactly 'other'
+    }
+
+    It 'Creates the config folder even when a look-alike config folder exists' {
+        New-Item -ItemType Directory -Path $script:LookalikeDir -Force | Out-Null
+        Edit-Whitelist
+        Test-Path -LiteralPath $script:ConfigDir -PathType Container | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $script:LookalikeDir -Force).Count | Should -Be 0
+    }
+
+    It 'Keeps an existing whitelist.txt untouched' {
+        New-Item -ItemType Directory -Path $script:ConfigDir -Force | Out-Null
+        Set-Content -LiteralPath $script:WhitelistFile -Value 'keep me'
+        Edit-Whitelist
+        (Get-Content -LiteralPath $script:WhitelistFile -Raw).Trim() | Should -BeExactly 'keep me'
+    }
+
+    It 'Opens the real whitelist path in the editor' {
+        Edit-Whitelist
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq $script:WhitelistFile }
+    }
+
+    It 'Uses -LiteralPath for every path access in Edit-Whitelist' {
+        $function = Get-FunctionAst -Ast (Get-Ast 'bin\clean.ps1') -Name 'Edit-Whitelist'
+        $uses = @(Get-CommandUse -Node $function -Name 'Test-Path', 'Set-Content', 'Get-Content')
+        $uses.Count | Should -BeGreaterThan 0
+        foreach ($use in $uses) {
+            $use.Literal | Should -BeTrue -Because "bin/clean.ps1:$($use.Line) in Edit-Whitelist: $($use.Text)"
+        }
+    }
+}
