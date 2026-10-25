@@ -29,7 +29,7 @@ Import-Module Pester -MinimumVersion 5.0.0
 # Test files that pass without Windows.
 $portable = @(
     'DryRunEnvironment.Tests.ps1', 'GitProxy.Tests.ps1', 'Inspect.Tests.ps1',
-    'InstallComponents.Tests.ps1', 'Portable.Tests.ps1', 'Release.Tests.ps1', 'UpdateNotice.Tests.ps1'
+    'InstallComponents.Tests.ps1', 'LiteralPath.Tests.ps1', 'Portable.Tests.ps1', 'Release.Tests.ps1', 'UpdateNotice.Tests.ps1'
 )
 $paths = if ($Scope -eq 'all') { @('./tests') } else { @($portable | ForEach-Object { Join-Path './tests' $_ }) }
 
