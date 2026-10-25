@@ -23,6 +23,11 @@ if (-not $InstallDir) {
     }
 }
 
+# Resolve once, against the PowerShell location (not the process directory,
+# which Set-Location does not move), so the existence check, git, the
+# installer and a later removal all mean the same folder.
+$InstallDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InstallDir)
+
 # Colors
 $ESC = [char]27
 $Colors = @{
@@ -51,7 +56,7 @@ function Write-ErrorMsg {
 function Test-SourceInstall {
     param([string]$Path)
 
-    return (Test-Path (Join-Path $Path ".git"))
+    return (Test-Path -LiteralPath (Join-Path $Path ".git"))
 }
 
 $script:SweeprGitProxyArguments = $null
@@ -156,10 +161,43 @@ function Get-PowerShellCommand {
     throw "PowerShell executable not found"
 }
 
-# Removes a folder this very run cloned, after the installer was cancelled and
-# so installed nothing. Deliberately narrow: only the exact clone target, only
-# when it did not exist before, never a drive root or the profile folder, and
-# by literal path.
+# Removes one entry of a fresh clone without ever following a link: a
+# junction or symbolic link is unlinked as a link (Windows PowerShell 5.1
+# would otherwise delete the target's content), folders are walked here and
+# deleted non-recursively, so an entry added since the listing fails the
+# removal instead of being deleted unseen. Same approach as
+# Remove-SweeprConfigEntry in install.ps1.
+function Remove-CloneEntry {
+    param([System.IO.FileSystemInfo]$Item)
+
+    if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        if ($Item.Attributes -band [System.IO.FileAttributes]::Directory) {
+            [System.IO.Directory]::Delete($Item.FullName, $false)
+        }
+        else {
+            [System.IO.File]::Delete($Item.FullName)
+        }
+        return
+    }
+    if ($Item.Attributes -band [System.IO.FileAttributes]::Directory) {
+        foreach ($child in @(Get-ChildItem -LiteralPath $Item.FullName -Force -ErrorAction Stop)) {
+            Remove-CloneEntry -Item $child
+        }
+        if ($Item.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+            $Item.Attributes = $Item.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+        }
+        [System.IO.Directory]::Delete($Item.FullName, $false)
+        return
+    }
+    # Git marks object files read-only.
+    Remove-Item -LiteralPath $Item.FullName -Force -ErrorAction Stop
+}
+
+# Removes the folder this very run cloned, after the installer was cancelled
+# and so installed nothing. Deliberately narrow: the exact absolute clone
+# target, never a drive root or the profile folder, and only a folder that
+# looks like our clone (.git and install.ps1). Returns "removed", "partial"
+# (some entries are gone, the folder is not) or "kept" (nothing was touched).
 function Remove-FreshClone {
     param([string]$Path)
 
@@ -167,14 +205,23 @@ function Remove-FreshClone {
         $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
         $root = [System.IO.Path]::GetPathRoot($full)
         $profilePath = [Environment]::GetFolderPath("UserProfile")
-        if (-not $full -or $full -eq $root.TrimEnd('\', '/')) { return $false }
-        if ($profilePath -and $full -eq $profilePath.TrimEnd('\', '/')) { return $false }
-        if (-not (Test-Path -LiteralPath $full -PathType Container)) { return $false }
-        Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop
-        return $true
+        if (-not $full -or ($root -and $full -eq $root.TrimEnd('\', '/'))) { return "kept" }
+        if ($profilePath -and $full -eq $profilePath.TrimEnd('\', '/')) { return "kept" }
+        $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+        if (-not ($item -is [System.IO.DirectoryInfo]) -or ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { return "kept" }
+        if (-not (Test-Path -LiteralPath (Join-Path $full ".git")) -or
+            -not (Test-Path -LiteralPath (Join-Path $full "install.ps1") -PathType Leaf)) { return "kept" }
     }
     catch {
-        return $false
+        return "kept"
+    }
+
+    try {
+        Remove-CloneEntry -Item $item
+        return "removed"
+    }
+    catch {
+        return "partial"
     }
 }
 
@@ -197,7 +244,7 @@ try {
 
     Write-Success "Git found"
 
-    if (Test-Path $InstallDir) {
+    if (Test-Path -LiteralPath $InstallDir) {
         if (Test-SourceInstall -Path $InstallDir) {
             Write-Step "Existing source install found, refreshing..."
 
@@ -238,7 +285,7 @@ try {
             exit 1
         }
 
-        if (-not (Test-Path (Join-Path $InstallDir "install.ps1"))) {
+        if (-not (Test-Path -LiteralPath (Join-Path $InstallDir "install.ps1"))) {
             Write-ErrorMsg "Failed to clone source installer"
             exit 1
         }
@@ -257,8 +304,12 @@ try {
         # has installed nothing, so this is not a failure.
         Write-Host ""
         Write-Host "  $($Colors.Yellow)Installation cancelled.$($Colors.NC) Nothing was installed."
-        if ($script:ClonedThisRun -and (Remove-FreshClone -Path $InstallDir)) {
+        $removal = if ($script:ClonedThisRun) { Remove-FreshClone -Path $InstallDir } else { "kept" }
+        if ($removal -eq "removed") {
             Write-Host "    The downloaded source folder was removed again."
+        }
+        elseif ($removal -eq "partial") {
+            Write-Host "    The downloaded source folder could not be removed completely: $InstallDir"
         }
         else {
             Write-Host "    Source folder kept: $InstallDir"

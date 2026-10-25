@@ -48,13 +48,13 @@ function Resolve-InstallInvocation {
 
     # v1.30.0 passed @("-InstallDir", $sourceDir, optional "-AddToPath")
     # through array splatting, so every element bound positionally: the text
-    # "-InstallDir" became the value of InstallDir. Where the source folder
-    # ends up depends on the PowerShell version (Windows PowerShell 5.1 binds
-    # it to the AddToPath switch, pwsh 7 to -Components), so neither switch
-    # value says what the old updater meant. Decode only that exact legacy
-    # shape for the first update that pulls this installer while the old
-    # updater is still running: install the folder the script lives in and
-    # keep PATH only if that folder is already on the user PATH, the same
+    # "-InstallDir" became the value of InstallDir. With -Components declared,
+    # the source folder then binds positionally to -Components (seen on pwsh 7
+    # and in the Windows CI for Windows PowerShell 5.1), so the switch values
+    # say nothing reliable about what the old updater meant. Decode only that
+    # exact legacy shape for the first update that pulls this installer while
+    # the old updater is still running: install the folder the script lives in
+    # and keep PATH only if that folder is already on the user PATH, the same
     # check bin/update.ps1 makes.
     if ($RequestedInstallDir -ceq "-InstallDir") {
         return [PSCustomObject]@{
@@ -77,7 +77,7 @@ $script:SourceDir = if ($MyInvocation.MyCommand.Path) {
     $PSScriptRoot
 }
 # The v1.30.0 updater passes its source folder positionally after
-# "-InstallDir"; under pwsh 7 that path binds to -Components. It is not a
+# "-InstallDir"; with -Components declared, that path binds to -Components. It is not a
 # component list, and that old updater must never see the menu.
 $script:LegacyInvocation = $InstallDir -ceq "-InstallDir"
 if ($script:LegacyInvocation) {
