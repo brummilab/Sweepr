@@ -110,7 +110,7 @@ function Show-Banner {
     Write-Host "$green/ ___| __      __  ___   ___  _ __   _ __ $nc"
     Write-Host "$green\___ \ \ \ /\ / / / _ \ / _ \| '_ \ | '__|$nc"
     Write-Host "$green ___) | \ V  V / |  __/|  __/| |_) || |   $nc  ${blue}https://github.com/brummilab/sweepr$nc"
-    Write-Host "$green|____/   \_/\_/   \___| \___|| .__/ |_|   $nc  ${green}Deep clean, inspect and optimize your PC.$nc"
+    Write-Host "$green|____/   \_/\_/   \___| \___|| .__/ |_|   $nc  ${green}Deep clean and optimize your PC.$nc"
     Write-Host "$green                             |_|          $nc"
     Write-Host ""
 }

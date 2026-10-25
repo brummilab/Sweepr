@@ -399,3 +399,67 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Test-Path -LiteralPath (Join-Path $profile ".config\sweepr\sweepr_debug_session.log") | Should -BeTrue
     }
 }
+
+# F-04 (E31): REA and `sw inspect` are gone. The command is unknown, the help does not
+# mention it, and no tracked file outside tests/ refers to REA any more.
+Describe "REA and sw inspect are removed" {
+    BeforeAll {
+        $script:RepoRoot = Split-Path -Parent $PSScriptRoot
+        $script:HostExe = (Get-Process -Id $PID).Path
+        function Invoke-SweeprChild {
+            param([string[]]$Arguments)
+            $profile = Join-Path $TestDrive ("rea-removed-" + [guid]::NewGuid().ToString("N"))
+            New-Item -ItemType Directory -Path $profile -Force | Out-Null
+            $savedProfile = $env:USERPROFILE
+            $savedData = $env:SWEEPR_DATA_DIR
+            try {
+                $env:USERPROFILE = $profile
+                $env:SWEEPR_DATA_DIR = Join-Path $profile "data"
+                $text = & { $ErrorActionPreference = "Continue"; & $script:HostExe -NoProfile -NonInteractive -File (Join-Path $script:RepoRoot "sweepr.ps1") @Arguments 2>&1 | Out-String }
+                [pscustomobject]@{ Text = $text; ExitCode = $LASTEXITCODE }
+            }
+            finally {
+                $env:USERPROFILE = $savedProfile
+                $env:SWEEPR_DATA_DIR = $savedData
+            }
+        }
+    }
+
+    It "Treats sw inspect as an unknown command with exit code 2" {
+        $result = Invoke-SweeprChild -Arguments @("inspect")
+        $result.ExitCode | Should -Be 2
+        $result.Text | Should -Match "Unknown command: inspect"
+    }
+
+    It "Does not list inspect among the available commands" {
+        $result = Invoke-SweeprChild -Arguments @("not-a-command")
+        $result.ExitCode | Should -Be 2
+        $result.Text | Should -Match "Available commands: "
+        $result.Text | Should -Not -Match "inspect"
+    }
+
+    It "Does not mention inspect or REA in the help" {
+        $result = Invoke-SweeprChild -Arguments @("--help")
+        $result.ExitCode | Should -Be 0
+        $result.Text | Should -Match "COMMANDS"
+        $result.Text | Should -Not -Match "(?i)inspect"
+        $result.Text | Should -Not -Match "\bREA\b"
+    }
+
+    It "Does not ship <Path>" -ForEach @(
+        @{ Path = "bin/inspect.ps1" },
+        @{ Path = "lib/core/rea.ps1" },
+        @{ Path = "tests/Inspect.Tests.ps1" }
+    ) {
+        Test-Path -LiteralPath (Join-Path $script:RepoRoot $Path) | Should -BeFalse
+    }
+
+    It "Has no tracked file outside tests/ that refers to REA" {
+        if (-not (Get-Command git -ErrorAction SilentlyContinue) -or -not (Test-Path -LiteralPath (Join-Path $script:RepoRoot ".git"))) {
+            Set-ItResult -Skipped -Because "needs a Git checkout"
+            return
+        }
+        $hits = @(& git -C $script:RepoRoot grep -I -l -F -e "rea-agents" -e "SWEEPR_REA_COMMAND" -e "lib/core/rea.ps1" -e "lib\core\rea.ps1" -e "bin/inspect.ps1" -e "bin\inspect.ps1" -- . ":(exclude)tests")
+        $hits | Should -BeNullOrEmpty
+    }
+}

@@ -3,7 +3,7 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo-wordmark-dark.svg">
     <img src="docs/img/logo-wordmark-light.svg" alt="Sweepr" width="480">
   </picture>
-  <p><b>Windows-PC aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen – und Apps mit REA untersuchen. Freies Open-Source-CLI.</b></p>
+  <p><b>Windows-PC aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen. Freies Open-Source-CLI.</b></p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL_v3-blue.svg?style=flat-square" alt="License"></a>
 </div>
 
@@ -16,7 +16,6 @@
 - **Live-Monitoring** (`sw status`): CPU, RAM, Disk, Netzwerk, Prozesse in Echtzeit
 - **Projekt-Purge** (`sw purge`): alte Build-Artefakte (`node_modules`, `bin/obj`, …) entfernen
 - **Windows entschlacken** (`sw features`): vorinstallierte Microsoft-Apps und optionale Windows-Features aus einer geprüften Liste entfernen bzw. abschalten
-- **App-Inspektion mit REA** (`sw inspect`): nur lesend in eine installierte App schauen – Laufzeit (Electron, .NET, Unity, Godot, Unreal), Code-Signatur, importierte DLLs, .NET-Metadaten
 
 ## Schnellstart
 
@@ -120,7 +119,6 @@ sw optimize                  # Caches & Dienste auffrischen
 sw analyze                   # Disk-Explorer
 sw status                    # Live-Systemmonitor
 sw purge                     # Projekt-Build-Artefakte entfernen
-sw inspect <App>             # App mit REA untersuchen (nur lesend)
 sw features                  # Vorinstallierte Apps / Windows-Features entfernen
 
 sw update                    # Quell-Installation aktualisieren (git pull vom main-Branch)
@@ -149,51 +147,6 @@ sw analyze D:\               # Anderes Laufwerk analysieren
 sw uninstall --list          # Installierte Apps auflisten (JSON, wenn umgeleitet)
 sw analyze --json D:\        # Disk-Report als JSON
 ```
-
-## App-Inspektion mit REA (`sw inspect`)
-
-[REA](https://github.com/morluto/rea) ist ein lokales Reverse-Engineering-Toolkit (CLI + MCP-Server). Sweepr nutzt davon die **statischen, nur lesenden** Analysen, um vor einer Deinstallation oder bei einer unbekannten Software schnell zu sehen, womit man es zu tun hat.
-
-**Voraussetzung:** Node.js 22 oder neuer. Entweder REA global installieren (`npm install --global rea-agents`) oder nichts tun – Sweepr startet REA dann automatisch über `npx -y rea-agents@latest` (der erste Lauf lädt REA herunter).
-
-```powershell
-sw inspect Slack                          # App über ihren Namen in der Registry finden
-sw inspect "C:\Program Files\App"         # Installationsordner direkt angeben
-sw inspect .\tool.exe                     # Einzelne Datei (Signatur)
-sw inspect Slack --deep                   # + importierte DLLs und .NET-Metadaten
-sw inspect Slack --json                   # Zusammenfassung als JSON
-sw inspect --setup                        # REA als MCP-Server bei MCP-Clients registrieren
-```
-
-Beispielausgabe:
-
-```text
-App
-  Path:        C:\Program Files\App
-  Executable:  C:\Program Files\App\App.exe
-  Arch:        amd64
-  Runtime:     electron (inferred), dotnet (derived)
-  Signature:   Microsoft Corporation (issuer: Microsoft Code Signing PCA 2024)
-  .NET:        dotnet-framework, NuGet 7.9.0.83, .NETFramework,Version=v4.7.2
-  Imports:     1 DLLs
-               mscoree.dll
-
-  Go deeper with REA:
-    rea analyze-javascript-application "C:\Program Files\App\resources\app.asar"
-```
-
-Was dabei passiert:
-
-| Schritt | REA-Befehl | Ergebnis |
-| --- | --- | --- |
-| Ordner untersuchen | `rea inspect-desktop-application` | Laufzeit-Kandidaten (Electron, .NET, Unity, Godot, Unreal, GameMaker) und vorgeschlagene nächste Analysen |
-| Signatur lesen | `rea inspect-pe-certificates` | Signierer und Aussteller des Authenticode-Zertifikats der Haupt-EXE |
-| `--deep`: Importe | `rea inspect-pe-imports` | Liste der importierten DLLs |
-| `--deep` oder .NET erkannt | `rea inspect-managed-artifact` | .NET-Laufzeit, Assembly-Name/-Version, Ziel-Framework |
-
-Grenzen: REA liest nur Header und Metadaten, startet die App nicht und **prüft Signaturen nicht kryptografisch** (dafür `Get-AuthenticodeSignature` verwenden). Eine fehlende eingebettete Signatur heißt nicht zwingend „unsigniert“ (Katalog-Signaturen). `sw inspect` löscht oder ändert nie etwas.
-
-Einen eigenen REA-Pfad kann man mit der Umgebungsvariable `SWEEPR_REA_COMMAND` setzen.
 
 ## Windows entschlacken (`sw features`)
 
