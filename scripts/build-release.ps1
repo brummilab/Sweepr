@@ -50,7 +50,7 @@ function Show-BuildHelp {
     Write-Host "Usage: .\build-release.ps1 [-Version <version>] [-SkipTests]"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Version <ver>  Specify version (default: auto-detect from sweepr.ps1)"
+    Write-Host "  -Version <ver>  Specify version (default: read from VERSION)"
     Write-Host "  -SkipTests      Skip running tests before building"
     Write-Host "  -ShowHelp       Show this help message"
     Write-Host ""

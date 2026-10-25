@@ -8,7 +8,7 @@ on:
   workflow_dispatch:  # Allow manual trigger
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0)'
+        description: 'Version to build (e.g., 0.1.0); a manual run builds artifacts but creates no release'
         required: true
         type: string
 
@@ -61,7 +61,7 @@ jobs:
             Write-Error "Could not detect version"
             exit 1
           }
-          # 1.31.0 is a stable release; 1.31.0-beta.1 stays a prerelease.
+          # 0.1.0 is a stable release; 0.1.0-beta.1 stays a prerelease.
           $prerelease = if ($version -match '-') { "true" } else { "false" }
           Write-Host "Version: $version (prerelease: $prerelease)"
           "VERSION=$version" >> $env:GITHUB_OUTPUT
@@ -226,6 +226,6 @@ jobs:
 
             Already installed? Run `sw update`.
 
-            The files below are what package managers and `sw` download. Every script and executable is code-signed, and `SHA256SUMS.txt` lists their checksums.
+            The files below are what package managers and `sw` download. `SHA256SUMS.txt` lists their checksums; `sw` refuses a downloaded tool that does not match. Releases are not code-signed unless these notes say otherwise.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

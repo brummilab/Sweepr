@@ -14,8 +14,8 @@ Every manager installs the signed `sweepr-<version>-x64.zip` from the GitHub rel
 After the signed release is published:
 
 ```powershell
-gh release download V1.31.0-windows --repo brummilab/sweepr --pattern SHA256SUMS.txt --dir release
-.\scripts\render-packaging.ps1 -Version 1.31.0 -SumsFile release\SHA256SUMS.txt
+gh release download V0.1.0-windows --repo brummilab/sweepr --pattern SHA256SUMS.txt --dir release
+.\scripts\render-packaging.ps1 -Version 0.1.0 -SumsFile release\SHA256SUMS.txt
 ```
 
 The manifests land in `release\packaging\`.

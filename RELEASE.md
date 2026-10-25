@@ -6,8 +6,8 @@ A release goes through three steps: CI builds the assets into a draft release, t
 
 | Tag | Result |
 |---|---|
-| `V1.0.0-windows` | Stable release |
-| `V1.0.0-beta.1-windows` | Prerelease (any `-` left after removing `-windows`) |
+| `V0.1.0-windows` | Stable release |
+| `V0.2.0-beta.1-windows` | Prerelease (any `-` left after removing `-windows`) |
 
 `sw update` and the update notice read published `V<version>-windows` releases of `brummilab/sweepr`.
 
@@ -28,8 +28,8 @@ A release goes through three steps: CI builds the assets into a draft release, t
 ## 2. Tag
 
 ```powershell
-git tag V1.0.0-windows
-git push origin V1.0.0-windows
+git tag V0.1.0-windows
+git push origin V0.1.0-windows
 ```
 
 `.github/workflows/release-windows.yml` runs the tests, runs `scripts/build-release.ps1`, and creates a **draft** release with the unsigned assets.
@@ -39,7 +39,7 @@ git push origin V1.0.0-windows
 On a Windows machine with the code-signing certificate available:
 
 ```powershell
-gh release download V1.0.0-windows --repo brummilab/sweepr --dir C:\sweepr-release
+gh release download V0.1.0-windows --repo brummilab/sweepr --dir C:\sweepr-release
 $env:SWEEPR_SIGN_PARAMS = "/fd sha256 /tr <timestamp-url> /td sha256 /sha1 <thumbprint>"
 .\scripts\sign-release.ps1 -Path C:\sweepr-release
 ```
@@ -51,8 +51,8 @@ Without a code-signing certificate, the draft can be published unsigned; the che
 ## 4. Publish
 
 ```powershell
-gh release upload V1.0.0-windows C:\sweepr-release\* --repo brummilab/sweepr --clobber
-gh release edit V1.0.0-windows --repo brummilab/sweepr --title "V1.0.0-windows" --draft=false
+gh release upload V0.1.0-windows C:\sweepr-release\* --repo brummilab/sweepr --clobber
+gh release edit V0.1.0-windows --repo brummilab/sweepr --title "V0.1.0-windows" --draft=false
 ```
 
 Then check that a downloaded asset matches `SHA256SUMS.txt` and, for a signed release, that `Get-AuthenticodeSignature` reports `Valid` for `sw.exe`.
