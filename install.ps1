@@ -860,6 +860,7 @@ function Get-SweeprInstallNestedFiles {
         "lib\core\health.ps1"
         "lib\core\history.ps1"
         "lib\core\log.ps1"
+        "lib\core\report.ps1"
         "lib\core\tui_binaries.ps1"
         "lib\core\ui.ps1"
         "lib\core\update_check.ps1"
