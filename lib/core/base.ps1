@@ -641,6 +641,23 @@ function Test-ProtectedPath {
 # save UTF-8 without BOM, so the decoding is explicit: a UTF-8 or UTF-16 BOM is
 # honoured and stripped, everything else is UTF-8 (a strict decode first; bytes that
 # are not valid UTF-8 fall back to the system ANSI code page, the old behaviour).
+# Reads the whole file with shared access. File.ReadAllBytes opens with FileShare.Read
+# and fails while an editor holds the file open for writing; Get-Content never did.
+function Read-SweeprListBytes {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read, ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))
+    try {
+        $buffer = New-Object System.IO.MemoryStream
+        $stream.CopyTo($buffer)
+        return , $buffer.ToArray()
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 function ConvertFrom-SweeprListBytes {
     param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
 
@@ -649,6 +666,15 @@ function ConvertFrom-SweeprListBytes {
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
         $encoding = New-Object System.Text.UTF8Encoding($false, $true)
         $start = 3
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE -and $bytes[2] -eq 0 -and $bytes[3] -eq 0) {
+        # UTF-32 LE starts like UTF-16 LE; test it first.
+        $encoding = New-Object System.Text.UTF32Encoding($false, $false, $true)
+        $start = 4
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 0xFE -and $bytes[3] -eq 0xFF) {
+        $encoding = New-Object System.Text.UTF32Encoding($true, $false, $true)
+        $start = 4
     }
     elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
         $encoding = New-Object System.Text.UnicodeEncoding($false, $false)
@@ -667,7 +693,8 @@ function ConvertFrom-SweeprListBytes {
     catch [System.Text.DecoderFallbackException] {
         $text = [System.Text.Encoding]::Default.GetString($bytes, $start, $bytes.Length - $start)
     }
-    return @($text -split "`r?`n")
+    # Same line breaks as Get-Content: CRLF, a lone CR and a lone LF.
+    return @($text -split "`r`n|`r|`n")
 }
 
 # Normalizes one line of a user list to the path it means, or returns $null for a
@@ -677,8 +704,12 @@ function ConvertFrom-SweeprListBytes {
 # literal, so it matches no real path. A value must never mean more than written:
 # an entry whose %VAR% expanded away leaves a relative or root-relative remainder,
 # which would match a different place than the user named, so it is dropped.
+# With -IncludeRaw (the whitelist) an entry whose %VAR% expansion changed or dropped
+# it also yields its unexpanded spelling: a real folder may be named "%NAME%", and
+# the old reader protected that literal name. The raw form is only an extra pattern;
+# a relative one matches no absolute candidate.
 function ConvertFrom-SweeprListEntry {
-    param([AllowNull()][string]$Line)
+    param([AllowNull()][string]$Line, [switch]$IncludeRaw)
 
     if ($null -eq $Line) { return $null }
     $entry = $Line.Trim()
@@ -708,8 +739,12 @@ function ConvertFrom-SweeprListEntry {
         if ($expanded -ne $entry) {
             $expanded = $expanded.Trim()
             # Only a drive-rooted or UNC result is a path the user can have meant.
-            if ($expanded -notmatch '^([A-Za-z]:\\|\\\\[^\\])') { return $null }
-            $entry = $expanded
+            if ($expanded -notmatch '^([A-Za-z]:\\|\\\\[^\\])') {
+                if ($IncludeRaw) { return $entry }
+                return $null
+            }
+            if ($IncludeRaw) { return @($expanded, $entry) }
+            return $expanded
         }
     }
     return $entry
@@ -741,13 +776,15 @@ function Get-WhitelistState {
     try {
         $null = Get-Item -LiteralPath $script:Config.WhitelistFile -ErrorAction Stop
         try {
-            # Explicit UTF-8 read (BOM aware, see ConvertFrom-SweeprListBytes); a read
+            # Explicit UTF-8 read (BOM aware, see ConvertFrom-SweeprListBytes) through
+            # Read-SweeprListBytes (shared access, not a plain ReadAllBytes); a read
             # error is caught below and retains every target.
-            $userBytes = [System.IO.File]::ReadAllBytes($script:Config.WhitelistFile)
+            $userBytes = Read-SweeprListBytes -Path $script:Config.WhitelistFile
             $userPatterns = @(ConvertFrom-SweeprListBytes -Bytes $userBytes)
             foreach ($line in $userPatterns) {
-                $pattern = ConvertFrom-SweeprListEntry -Line $line
-                if ($pattern) { $patterns.Add($pattern) }
+                foreach ($pattern in @(ConvertFrom-SweeprListEntry -Line $line -IncludeRaw)) {
+                    if ($pattern) { $patterns.Add($pattern) }
+                }
             }
         }
         catch {
