@@ -22,6 +22,7 @@ BeforeAll {
     $script:SavedWhitelistFile = $script:Config.WhitelistFile
     $script:SavedLocalAppData = $env:LOCALAPPDATA
     $script:SavedUserProfile = $env:USERPROFILE
+    $script:SavedAppData = $env:APPDATA
     $script:SavedConfigPath = $script:Config.ConfigPath
     $script:SavedCachePath = $script:Config.CachePath
 
@@ -44,12 +45,14 @@ BeforeAll {
 
     # Bytes of a text file in one of the encodings an editor may produce.
     function script:Write-EncodedFile {
-        param([string]$Path, [string[]]$Lines, [ValidateSet('utf8', 'utf8bom', 'utf16le')][string]$Kind)
+        param([string]$Path, [string[]]$Lines, [ValidateSet('utf8', 'utf8bom', 'utf16le', 'utf32le', 'utf32be')][string]$Kind)
         $text = ($Lines -join "`r`n") + "`r`n"
         switch ($Kind) {
             'utf8' { $encoding = New-Object System.Text.UTF8Encoding($false); $bom = @() }
             'utf8bom' { $encoding = New-Object System.Text.UTF8Encoding($true); $bom = $encoding.GetPreamble() }
             'utf16le' { $encoding = New-Object System.Text.UnicodeEncoding($false, $true); $bom = $encoding.GetPreamble() }
+            'utf32le' { $encoding = New-Object System.Text.UTF32Encoding($false, $true); $bom = $encoding.GetPreamble() }
+            'utf32be' { $encoding = New-Object System.Text.UTF32Encoding($true, $true); $bom = $encoding.GetPreamble() }
         }
         [System.IO.File]::WriteAllBytes($Path, [byte[]](@($bom) + @($encoding.GetBytes($text))))
     }
@@ -116,6 +119,7 @@ AfterAll {
     $script:Config.CachePath = $script:SavedCachePath
     $env:LOCALAPPDATA = $script:SavedLocalAppData
     $env:USERPROFILE = $script:SavedUserProfile
+    $env:APPDATA = $script:SavedAppData
 }
 
 Describe 'Whitelist file is read as UTF-8 (H1)' {
@@ -306,16 +310,14 @@ Describe 'Whitelist entry spellings (H2)' {
         Test-Whitelisted -Path '\\server\share\Foo\x' | Should -BeFalse
     }
 
-    It 'Keeps a variable that expands to nothing from protecting the drive or the profile' {
-        $env:SWEEPR_TEST_EMPTY = ''
-        try {
-            Set-Content -LiteralPath $script:Config.WhitelistFile -Value @('%SWEEPR_TEST_EMPTY%')
-            Test-Whitelisted -Path 'C:\Users\Example\Documents\x' | Should -BeFalse
-            Test-Whitelisted -Path '\\server\share\x' | Should -BeFalse
-        }
-        finally {
-            Remove-Item Env:\SWEEPR_TEST_EMPTY -ErrorAction SilentlyContinue
-        }
+    It 'Keeps a bare variable entry without a value from protecting the drive or the profile' {
+        # An empty value cannot be set ($env:X = '' removes the variable), so this is the
+        # undefined case: the entry stays literal and must not become an empty pattern.
+        Remove-Item Env:\SWEEPR_TEST_EMPTY -ErrorAction SilentlyContinue
+        Set-Content -LiteralPath $script:Config.WhitelistFile -Value @('%SWEEPR_TEST_EMPTY%', '%SWEEPR_TEST_EMPTY%\')
+        Test-Whitelisted -Path 'C:\Users\Example\Documents\x' | Should -BeFalse
+        Test-Whitelisted -Path '\\server\share\x' | Should -BeFalse
+        Test-Whitelisted -Path 'C:\x' | Should -BeFalse
     }
 
     It 'Ignores an empty quoted entry instead of turning it into an empty pattern' {
@@ -393,5 +395,77 @@ Describe 'purge_paths.txt entries (H1/H2 for the purge search paths)' {
     It 'Ignores an empty quoted entry' {
         Set-Content -LiteralPath $script:ConfigFile -Value @('""', "''")
         @(Get-SearchPaths).Count | Should -Be 0
+    }
+}
+
+Describe 'Whitelist regressions against the previous reader (B-02 review)' {
+    BeforeEach {
+        $script:Case = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:Case | Out-Null
+        $script:Config.WhitelistFile = Join-Path $script:Case 'whitelist.txt'
+        $script:Config.ConfigPath = 'C:\Scratch\Example\data'
+        $script:Config.CachePath = 'C:\Scratch\Example\cache'
+        $env:APPDATA = 'C:\Users\Example\AppData\Roaming'
+        $env:SWEEPR_TEST_DEFINED = 'Value'
+    }
+
+    AfterEach {
+        $script:Config.WhitelistFile = $script:SavedWhitelistFile
+        $script:Config.ConfigPath = $script:SavedConfigPath
+        $script:Config.CachePath = $script:SavedCachePath
+        $env:APPDATA = $script:SavedAppData
+        Remove-Item Env:\SWEEPR_TEST_DEFINED -ErrorAction SilentlyContinue
+    }
+
+    It 'Protects every entry of a file with bare CR line endings' {
+        $text = "# comment`rC:\Keep\A`rC:\Keep\B`r"
+        [System.IO.File]::WriteAllBytes($script:Config.WhitelistFile, (New-Object System.Text.UTF8Encoding($false)).GetBytes($text))
+        Test-Whitelisted -Path 'C:\Keep\A\x' | Should -BeTrue
+        Test-Whitelisted -Path 'C:\Keep\B\x' | Should -BeTrue
+        Test-Whitelisted -Path 'C:\Keep\C\x' | Should -BeFalse
+    }
+
+    It 'Protects a real folder name containing a defined %VAR% in its literal and expanded spelling (<Entry>)' -ForEach @(
+        @{ Entry = 'C:\Users\Example\%APPDATA%\npm-cache'; Literal = 'C:\Users\Example\%APPDATA%\npm-cache\x'; Expanded = 'C:\Users\Example\C:\Users\Example\AppData\Roaming\npm-cache\x'; Other = 'C:\Users\Example\Other\x' }
+        @{ Entry = 'C:\Data\%SWEEPR_TEST_DEFINED%'; Literal = 'C:\Data\%SWEEPR_TEST_DEFINED%\x'; Expanded = 'C:\Data\Value\x'; Other = 'C:\Data\Other\x' }
+        @{ Entry = '"C:\Data\%SWEEPR_TEST_DEFINED%"'; Literal = 'C:\Data\%SWEEPR_TEST_DEFINED%\x'; Expanded = 'C:\Data\Value\x'; Other = 'C:\Data\Other\x' }
+        @{ Entry = 'C:/Data/%SWEEPR_TEST_DEFINED%'; Literal = 'C:\Data\%SWEEPR_TEST_DEFINED%\x'; Expanded = 'C:\Data\Value\x'; Other = 'C:\Data\Other\x' }
+    ) {
+        Set-Content -LiteralPath $script:Config.WhitelistFile -Value @($Entry)
+        Test-Whitelisted -Path $Literal | Should -BeTrue
+        Test-Whitelisted -Path $Expanded | Should -BeTrue
+        Test-Whitelisted -Path $Other | Should -BeFalse
+    }
+
+    It 'Does not widen protection for a defined %VAR% in a relative entry' {
+        Set-Content -LiteralPath $script:Config.WhitelistFile -Value @('%SWEEPR_TEST_DEFINED%\Foo')
+        Test-Whitelisted -Path 'C:\Foo\x' | Should -BeFalse
+        Test-Whitelisted -Path 'C:\Users\Example\Foo\x' | Should -BeFalse
+        Test-Whitelisted -Path 'C:\' | Should -BeFalse
+    }
+
+    It 'Reads a file with a <Kind> byte order mark' -ForEach @(
+        @{ Kind = 'utf32le' }
+        @{ Kind = 'utf32be' }
+    ) {
+        Write-EncodedFile -Path $script:Config.WhitelistFile -Kind $Kind -Lines @('C:\Daten\Übersicht', 'C:\Plain\Keep')
+        Test-Whitelisted -Path 'C:\Daten\Übersicht\x' | Should -BeTrue
+        Test-Whitelisted -Path 'C:\Plain\Keep\x' | Should -BeTrue
+        Test-Whitelisted -Path 'C:\Plain\Other\x' | Should -BeFalse
+    }
+
+    # On Windows the default read share of File.ReadAllBytes would refuse this file; on Linux
+    # the share modes are advisory, so there it passes either way.
+    It 'Still reads a file that another process holds open for writing' {
+        Write-EncodedFile -Path $script:Config.WhitelistFile -Kind 'utf8' -Lines @('C:\Held\Keep')
+        $writer = New-Object System.IO.FileStream($script:Config.WhitelistFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+        try {
+            Test-Whitelisted -Path 'C:\Held\Keep\x' | Should -BeTrue
+            # Protected because the entry matches, not because the file counted as unreadable.
+            Test-Whitelisted -Path 'C:\Held\Other\x' | Should -BeFalse
+        }
+        finally {
+            $writer.Dispose()
+        }
     }
 }
