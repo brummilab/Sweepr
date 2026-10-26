@@ -75,9 +75,10 @@ Describe 'Cleanup physical boundaries' {
     It 'Keeps a deletion target when an existing whitelist cannot be read' {
         $cache = Join-Path $script:Root 'retained.txt'
         Set-Content -LiteralPath $cache -Value 'keep'
-        Set-Content -LiteralPath $script:Config.WhitelistFile -Value $cache
-        Mock Get-Content { Write-Error 'Access denied' } -ParameterFilter {
-            $LiteralPath -eq $script:Config.WhitelistFile -or $Path -eq $script:Config.WhitelistFile
+        # The file names nothing, so only the read error can keep the target.
+        Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# present but unreadable'
+        Mock Read-SweeprListBytes { throw 'Access denied' } -ParameterFilter {
+            $Path -eq $script:Config.WhitelistFile
         }
         Remove-SafeItem -Path $cache | Should -BeFalse
         Test-Path -LiteralPath $cache | Should -BeTrue
