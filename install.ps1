@@ -966,6 +966,7 @@ function Get-SweeprInstallNestedFiles {
         "scripts\sign-release.ps1"
         "scripts\test.ps1"
         "scripts\write-checksums.ps1"
+        "tests\CheckBootstrap.Tests.ps1"
         "tests\CheckCleanPreview.Tests.ps1"
         "tests\CheckCommand.Tests.ps1"
         "tests\CheckHealth.Tests.ps1"
