@@ -828,7 +828,7 @@ function Get-SweeprInstallEntries {
     return @(
         ".editorconfig", ".git", ".gitattributes", ".github", ".gitignore", ".golangci.yml", ".shellcheckrc",
         "CONTRIBUTING.md", "LICENSE", "Makefile", "NOTICE.md", "Projektinhalt.md",
-        "README.md", "RELEASE.md", "SECURITY.md", "VERSION",
+        "README.md", "RELEASE.md", "SECURITY.md", "VERSION", "check.ps1",
         "bin", "cmd", "go.mod", "go.sum", "install.ps1", "lib", "sw.cmd", "sw.exe", "sweepr.cmd", "sweepr.ps1",
         "packaging", "quick-install.ps1", "scripts", "tests"
     )
