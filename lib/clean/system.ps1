@@ -177,10 +177,12 @@ function Clear-MemoryDumps {
         Clean Windows memory dumps
     #>
 
+    # %LOCALAPPDATA%\CrashDumps is not listed here: Clear-ErrorReports owns it and
+    # removes only .dmp files older than seven days. Every `sw clean` runs the user
+    # section before this one, so emptying the folder here would drop fresh dumps.
     $dumpPaths = @(
         "$env:WINDIR\MEMORY.DMP"
         "$env:WINDIR\Minidump"
-        "$env:LOCALAPPDATA\CrashDumps"
     )
 
     foreach ($path in $dumpPaths) {
@@ -189,7 +191,7 @@ function Clear-MemoryDumps {
             $null = Remove-SafeItem -Path $path -Description "Memory dump"
         }
         elseif (Test-Path $path -PathType Container) {
-            # Directory (Minidump, CrashDumps)
+            # Directory (Minidump)
             Clear-DirectoryContents -Path $path -Description "$(Split-Path -Leaf $path)"
         }
     }

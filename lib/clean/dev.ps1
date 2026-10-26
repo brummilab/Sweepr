@@ -564,10 +564,10 @@ function Clear-EditorCaches {
         "$env:APPDATA\Code\GPUCache"
         "$env:LOCALAPPDATA\Microsoft\vscode-cpptools"
     )
+    # Owner guard: a running (or unknown) editor keeps its caches. cpptools is
+    # loaded by VS Code, so it shares the Code owner.
     foreach ($path in $vscodeCachePaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "VS Code cache"
-        }
+        Clear-SweeprAppCache -Path $path -Description "VS Code cache" -Processes @('Code')
     }
     
     # VS Code Insiders
@@ -581,9 +581,7 @@ function Clear-EditorCaches {
         "$env:APPDATA\Code - Insiders\GPUCache"
     )
     foreach ($path in $vscodeInsidersCachePaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "VS Code Insiders cache"
-        }
+        Clear-SweeprAppCache -Path $path -Description "VS Code Insiders cache" -Processes @('Code - Insiders')
     }
     
     # Zed editor cache
@@ -592,9 +590,7 @@ function Clear-EditorCaches {
         "$env:APPDATA\Zed\cache"
     )
     foreach ($path in $zedCachePaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Zed cache"
-        }
+        Clear-SweeprAppCache -Path $path -Description "Zed cache" -Processes @('zed')
     }
     
     # Sublime Text cache
