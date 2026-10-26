@@ -1,4 +1,4 @@
-# Sweepr - the whitelist and purge_paths.txt are read robustly (B-02, bugs-core H1/H2)
+﻿# Sweepr - the whitelist and purge_paths.txt are read robustly (B-02, bugs-core H1/H2)
 # H1: Windows PowerShell 5.1 reads a file without BOM through the ANSI code page. Notepad and
 #     VS Code save UTF-8 without BOM, so an entry with an umlaut matched nothing and protected
 #     nothing. The files must be read explicitly as UTF-8 (BOM tolerant, UTF-16 BOM too) and

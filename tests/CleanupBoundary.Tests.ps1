@@ -107,8 +107,8 @@ Describe 'Cleanup physical boundaries' {
         1..12 | ForEach-Object { Set-Content -LiteralPath (Join-Path $tree "f$_.txt") -Value 'x' }
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
         $script:WhitelistReads = 0
-        Mock Get-Content { $script:WhitelistReads++; @('# no exclusions') } -ParameterFilter {
-            $LiteralPath -eq $script:Config.WhitelistFile
+        Mock Read-SweeprListBytes { $script:WhitelistReads++; , [Text.Encoding]::UTF8.GetBytes('# no exclusions') } -ParameterFilter {
+            $Path -eq $script:Config.WhitelistFile
         }
         (Get-SafeDirectoryTreeItems -Path $tree).Success | Should -BeTrue
         $script:WhitelistReads | Should -Be 1
@@ -118,8 +118,8 @@ Describe 'Cleanup physical boundaries' {
         New-Item -ItemType Directory -Path $tree | Out-Null
         Set-Content -LiteralPath (Join-Path $tree 'a.txt') -Value 'x'
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# present but unreadable'
-        Mock Get-Content { Write-Error 'Access denied' } -ParameterFilter {
-            $LiteralPath -eq $script:Config.WhitelistFile
+        Mock Read-SweeprListBytes { throw 'Access denied' } -ParameterFilter {
+            $Path -eq $script:Config.WhitelistFile
         }
         (Get-SafeDirectoryTreeItems -Path $tree).Success | Should -BeFalse
     }
