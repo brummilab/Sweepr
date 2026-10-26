@@ -96,7 +96,7 @@ function Start-SweeprUpdateCheck {
         # A short-lived hidden worker survives a quick menu exit; the foreground
         # never waits for networking. Every argument is a quoted literal.
         $module = Join-Path $RootDir 'lib\core\update_check.ps1'
-        $quoted = @($module, $path, $key, $Method) | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }
+        $quoted = @($module, $path, $key, $Method) | ForEach-Object { ConvertTo-SweeprPsLiteral $_ }
         $command = "`$ErrorActionPreference='Stop'; `$ProgressPreference='SilentlyContinue'; . $($quoted[0]); Invoke-SweeprUpdateLookup -Path $($quoted[1]) -Key $($quoted[2]) -Method $($quoted[3])"
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         $start = New-Object Diagnostics.ProcessStartInfo

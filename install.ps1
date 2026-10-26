@@ -1031,7 +1031,7 @@ function Uninstall-Sweepr {
         }
         catch {
             Write-SweeprError "Cannot remove sw.exe while it is inaccessible or a Sweepr command runs through it, this one included: $nativeLauncher"
-            $removeScript = (Join-Path $installPath 'sweepr.ps1').Replace("'", "''")
+            $removeScript = (Join-Path $installPath 'sweepr.ps1') -replace "['\u2018\u2019\u201A\u201B]", '$0$0'
             Write-Info "Close other Sweepr sessions, then run in PowerShell: & '$removeScript' remove"
             return $false
         }
