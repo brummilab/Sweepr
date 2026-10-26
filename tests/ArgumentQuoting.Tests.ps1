@@ -58,12 +58,19 @@ $lines = foreach ($a in $args) { ($a.ToCharArray() | ForEach-Object { '{0:X4}' -
     function Invoke-RecordedEncodedCommand {
         param([string]$Arguments, [string]$WorkDir)
         $encoded = ($Arguments -split ' ')[-1]
+        # The child inherits the environment; Windows PowerShell 5.1 does not start
+        # without a valid SystemRoot, which some tests point elsewhere on purpose.
+        $testSystemRoot = $env:SystemRoot
+        $env:SystemRoot = $script:SavedSystemRoot
         Push-Location -LiteralPath $WorkDir
         try {
             $output = & $script:HostPath -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1
             return @($output | ForEach-Object { "$_" })
         }
-        finally { Pop-Location }
+        finally {
+            Pop-Location
+            $env:SystemRoot = $testSystemRoot
+        }
     }
 
     $script:SavedPath = $env:PATH
