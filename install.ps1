@@ -26,16 +26,87 @@ $script:InstallDirGiven = $PSBoundParameters.ContainsKey("InstallDir")
 # Configuration
 # ============================================================================
 
-# Same check as bin/update.ps1: is this exact folder an entry of the user PATH?
+# Raw user PATH: %VAR% entries stay text (GetEnvironmentVariable would expand them and
+# a write-back would freeze them). A missing value reads as '' / ExpandString, the kind
+# Windows itself uses for PATH.
+function Get-SweeprUserPathRaw {
+    # The registry exists on Windows only (tests and tooling also run this on other systems).
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        return [PSCustomObject]@{ Value = ""; Kind = "ExpandString" }
+    }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment")
+    if (-not $key) {
+        return [PSCustomObject]@{ Value = ""; Kind = "ExpandString" }
+    }
+    try {
+        $value = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $kind = "ExpandString"
+        if ($null -ne $key.GetValue("Path", $null)) {
+            $kind = [string]$key.GetValueKind("Path")
+        }
+        return [PSCustomObject]@{ Value = [string]$value; Kind = $kind }
+    }
+    finally {
+        $key.Close()
+    }
+}
+
+# Writes the user PATH with the given registry kind and tells running programs about it,
+# which is what [Environment]::SetEnvironmentVariable did before.
+function Set-SweeprUserPathRaw {
+    param([string]$Value, [string]$Kind)
+
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+    if (-not $key) {
+        throw "Cannot open HKCU\Environment for writing"
+    }
+    try {
+        $key.SetValue("Path", $Value, [Microsoft.Win32.RegistryValueKind]$Kind)
+    }
+    finally {
+        $key.Close()
+    }
+
+    # Best effort: the value is saved even if the broadcast fails.
+    try {
+        if (-not ("SweeprNativeMethods" -as [type])) {
+            Add-Type -Namespace "" -Name "SweeprNativeMethods" -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
+"@
+        }
+        $result = [UIntPtr]::Zero
+        $null = [SweeprNativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result)
+    }
+    catch {
+        Write-Verbose "WM_SETTINGCHANGE broadcast failed: $_"
+    }
+}
+
+# Two PATH entries are the same folder when they are equal after expanding %VAR%,
+# dropping a trailing backslash and ignoring case.
+function Test-SweeprPathEntryMatch {
+    param([string]$Entry, [string]$Directory)
+
+    $left = [Environment]::ExpandEnvironmentVariables($Entry.Trim()).TrimEnd('\')
+    $right = [Environment]::ExpandEnvironmentVariables($Directory.Trim()).TrimEnd('\')
+    if (-not $left -or -not $right) { return $false }
+    return [string]::Equals($left, $right, [StringComparison]::OrdinalIgnoreCase)
+}
+
+# Same check as bin/update.ps1: is this folder an entry of the user PATH?
 function Test-InstallDirOnUserPath {
     param([string]$Path)
 
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if (-not $currentPath) {
+    $raw = Get-SweeprUserPathRaw
+    if (-not $raw.Value) {
         return $false
     }
 
-    return $currentPath -split ";" | Where-Object { $_ -eq $Path }
+    foreach ($entry in ($raw.Value -split ";")) {
+        if (Test-SweeprPathEntryMatch -Entry $entry -Directory $Path) { return $true }
+    }
+    return $false
 }
 
 function Resolve-InstallInvocation {
@@ -314,17 +385,20 @@ function Test-IsAdmin {
 function Add-ToUserPath {
     param([string]$Directory)
 
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $raw = Get-SweeprUserPathRaw
+    $entries = @($raw.Value -split ";" | Where-Object { $_ -ne "" })
 
-    if ($currentPath -split ";" | Where-Object { $_ -eq $Directory }) {
-        Write-Info "Already in PATH: $Directory"
-        return $true
+    foreach ($entry in $entries) {
+        if (Test-SweeprPathEntryMatch -Entry $entry -Directory $Directory) {
+            Write-Info "Already in PATH: $Directory"
+            return $true
+        }
     }
 
-    $newPath = if ($currentPath) { "$currentPath;$Directory" } else { $Directory }
+    $newPath = if ($raw.Value) { "$($raw.Value.TrimEnd(';'));$Directory" } else { $Directory }
 
     try {
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Set-SweeprUserPathRaw -Value $newPath -Kind $raw.Kind
         Write-Success "Added to PATH: $Directory"
 
         # Update current session
@@ -340,17 +414,26 @@ function Add-ToUserPath {
 function Remove-FromUserPath {
     param([string]$Directory)
 
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    $raw = Get-SweeprUserPathRaw
 
-    if (-not $currentPath) {
+    if (-not $raw.Value) {
         return $true
     }
 
-    $paths = $currentPath -split ";" | Where-Object { $_ -ne $Directory -and $_ -ne "" }
-    $newPath = $paths -join ";"
+    # Foreign entries keep their exact text; nothing is written when nothing matches.
+    $kept = @()
+    $found = $false
+    foreach ($entry in ($raw.Value -split ";")) {
+        if ($entry -eq "") { continue }
+        if (Test-SweeprPathEntryMatch -Entry $entry -Directory $Directory) { $found = $true; continue }
+        $kept += $entry
+    }
+    if (-not $found) {
+        return $true
+    }
 
     try {
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Set-SweeprUserPathRaw -Value ($kept -join ";") -Kind $raw.Kind
         Write-Success "Removed from PATH: $Directory"
         return $true
     }
@@ -908,6 +991,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\Install.Tests.ps1"
         "tests\InstallComponents.Tests.ps1"
         "tests\InstallLifecycle.Tests.ps1"
+        "tests\InstallPath.Tests.ps1"
         "tests\linux-known-failures.txt"
         "tests\LiteralPath.Tests.ps1"
         "tests\Optimize.Tests.ps1"
@@ -948,7 +1032,9 @@ function Remove-SweeprNestedFiles {
         $path = Join-Path $InstallPath $folder
         if ((Test-Path -LiteralPath $path -PathType Container) -and
             @(Get-ChildItem -LiteralPath $path -Force).Count -eq 0) {
-            Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+            # Non-recursive: a folder that gained an entry since the check stays as it is.
+            try { [System.IO.Directory]::Delete($path, $false) }
+            catch [System.IO.IOException] { }
         }
     }
 }
@@ -1084,7 +1170,7 @@ function Uninstall-Sweepr {
 
     if ($kept.Count -eq 0) {
         try {
-            Remove-Item -LiteralPath $installPath -Force -ErrorAction Stop
+            [System.IO.Directory]::Delete($installPath, $false)
             Write-Success "Removed directory: $installPath"
         }
         catch {
@@ -1146,7 +1232,7 @@ function Uninstall-Sweepr {
                         Remove-SweeprConfigEntry -Item $item
                     }
                     if ($kept.Count -eq 0) {
-                        Remove-Item -LiteralPath $configDir -Force -ErrorAction Stop
+                        [System.IO.Directory]::Delete($configDir, $false)
                         Write-Success "Removed config: $configDir"
                     }
                     else {
