@@ -101,15 +101,23 @@ BeforeAll {
         }
     }
 
-    # True when the node reads the file explicitly as UTF-8: Get-Content -Encoding UTF8
-    # everywhere, or a .NET reader with a UTF-8 encoding.
+    # True when the node (syntax tree, comments and strings do not count) reads the bytes of
+    # the file (Read-SweeprListBytes or [IO.File]::ReadAll*) AND decodes them through
+    # ConvertFrom-SweeprListBytes (BOM aware, UTF-8 by default).
     function script:Test-ExplicitUtf8Read {
         param($Node)
-        $uses = @(Get-ContentUse -Node $Node)
-        if ($uses.Count -gt 0) {
-            return (@($uses | Where-Object { -not $_.HasEncoding }).Count -eq 0) -and ($Node.Extent.Text -match 'UTF-?8')
-        }
-        return ($Node.Extent.Text -match 'ReadAll(Lines|Text|Bytes)|StreamReader|OpenText') -and ($Node.Extent.Text -match 'UTF-?8|UTF8Encoding')
+        $reads = $Node.FindAll({
+                param($n)
+                ($n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Read-SweeprListBytes') -or
+                ($n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+                $n.Member.Extent.Text -in @('ReadAllBytes', 'ReadAllLines', 'ReadAllText') -and
+                $n.Expression.Extent.Text -match 'IO\.File\]$')
+            }, $true)
+        $decodes = $Node.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'ConvertFrom-SweeprListBytes'
+            }, $true)
+        return (@($reads).Count -gt 0) -and (@($decodes).Count -gt 0)
     }
 }
 
