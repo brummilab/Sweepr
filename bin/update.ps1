@@ -180,15 +180,51 @@ function Write-GitFailure {
     }
 }
 
+# Raw user PATH (%VAR% stays text); same reader as install.ps1.
+function Get-SweeprUserPathRaw {
+    # The registry exists on Windows only (tests and tooling also run this on other systems).
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+        return [PSCustomObject]@{ Value = ""; Kind = "ExpandString" }
+    }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment")
+    if (-not $key) {
+        return [PSCustomObject]@{ Value = ""; Kind = "ExpandString" }
+    }
+    try {
+        $value = $key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $kind = "ExpandString"
+        if ($null -ne $key.GetValue("Path", $null)) {
+            $kind = [string]$key.GetValueKind("Path")
+        }
+        return [PSCustomObject]@{ Value = [string]$value; Kind = $kind }
+    }
+    finally {
+        $key.Close()
+    }
+}
+
+# Entries match as folders: %VAR% expanded, trailing backslash dropped, case ignored.
+function Test-SweeprPathEntryMatch {
+    param([string]$Entry, [string]$Directory)
+
+    $left = [Environment]::ExpandEnvironmentVariables($Entry.Trim()).TrimEnd('\')
+    $right = [Environment]::ExpandEnvironmentVariables($Directory.Trim()).TrimEnd('\')
+    if (-not $left -or -not $right) { return $false }
+    return [string]::Equals($left, $right, [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-InstallDirOnUserPath {
     param([string]$Path)
 
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if (-not $currentPath) {
+    $raw = Get-SweeprUserPathRaw
+    if (-not $raw.Value) {
         return $false
     }
 
-    return $currentPath -split ";" | Where-Object { $_ -eq $Path }
+    foreach ($entry in ($raw.Value -split ";")) {
+        if (Test-SweeprPathEntryMatch -Entry $entry -Directory $Path) { return $true }
+    }
+    return $false
 }
 
 if ($ShowHelp) {
