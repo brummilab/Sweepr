@@ -109,6 +109,16 @@ Erkannt wird der Portable-Modus an der Datei `sweepr.portable` neben `sweepr.ps1
 
 Die Bereinigungsziele von `sw clean` & Co. sind unabhängig davon weiterhin die Ordner des Windows-Profils; portabel sind nur Sweeprs eigene Daten.
 
+## PC einmal prüfen (`sw check`)
+
+Einen fremden PC nur ansehen, ohne etwas zu installieren oder zu ändern:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; iwr -useb https://raw.githubusercontent.com/brummilab/Sweepr/main/check.ps1 | iex
+```
+
+`check.ps1` lädt das neueste portable Release in einen eigenen Ordner unter `%TEMP%`, prüft es gegen `SHA256SUMS.txt` (bei Abweichung läuft nichts), startet darin `sw check --report` (nur lesend, nichts wird gelöscht) und entfernt den Ordner danach wieder. Übrig bleibt nur der HTML-Bericht in `%TEMP%`. Im Constrained Language Mode oder wenn eine Gruppenrichtlinie die Ausführungsrichtlinie auf `Restricted` oder `AllSigned` setzt, bricht es vor dem Download mit einer Meldung ab. Braucht Sweepr 0.2 oder neuer.
+
 ## Befehle
 
 ```powershell

@@ -421,12 +421,21 @@ Describe "check.ps1 run" {
 
     It "Stops with a message before any download when the <Scope> execution policy is <Policy>" -ForEach @(
         @{ Scope = 'MachinePolicy'; Policy = 'Restricted' },
-        @{ Scope = 'UserPolicy'; Policy = 'Restricted' }
+        @{ Scope = 'UserPolicy'; Policy = 'Restricted' },
+        @{ Scope = 'MachinePolicy'; Policy = 'AllSigned' }
     ) {
         $run = Invoke-CheckBootstrap -ReleaseDir $script:ReleaseOk -Policies @{ $Scope = $Policy }
         $run.Text | Should -Match '(?i)execution\s*policy'
         @($run.Downloads).Count | Should -Be 0
         $run.Record | Should -BeNullOrEmpty
+        $run.Leftovers | Should -BeNullOrEmpty
+    }
+
+    It "Is not stopped by a RemoteSigned group policy" {
+        $run = Invoke-CheckBootstrap -ReleaseDir $script:ReleaseOk -Policies @{ MachinePolicy = 'RemoteSigned'; UserPolicy = 'RemoteSigned' }
+        $run.Text | Should -Not -Match '(?i)execution\s*policy'
+        @($run.Downloads).Count | Should -Be 2
+        $run.Record | Should -Not -BeNullOrEmpty
         $run.Leftovers | Should -BeNullOrEmpty
     }
 }
