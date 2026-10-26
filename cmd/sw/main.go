@@ -82,5 +82,17 @@ func commandLine(script string, args []string) string {
 }
 
 func quote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+	// PowerShell ends a '...' literal at U+2018, U+2019, U+201A and U+201B as well
+	// as at the ASCII apostrophe, so each of them has to be doubled.
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range value {
+		b.WriteRune(r)
+		switch r {
+		case '\'', '\u2018', '\u2019', '\u201A', '\u201B':
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
 }

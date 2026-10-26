@@ -813,6 +813,7 @@ function Get-SweeprInstallNestedFiles {
         "cmd\analyze\windows_test.go"
         "cmd\sw\main.go"
         "cmd\sw\main_test.go"
+        "cmd\sw\quote_test.go"
         "cmd\status\battery_windows_test.go"
         "cmd\status\collection.go"
         "cmd\status\diagnosis.go"
@@ -890,6 +891,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\CleanupBoundary.Tests.ps1"
         "tests\CleanupTargets.Tests.ps1"
         "tests\AppCacheSafety.Tests.ps1"
+        "tests\ArgumentQuoting.Tests.ps1"
         "tests\Commands.Tests.ps1"
         "tests\Core.Tests.ps1"
         "tests\DataDirProtection.Tests.ps1"
@@ -1031,7 +1033,7 @@ function Uninstall-Sweepr {
         }
         catch {
             Write-SweeprError "Cannot remove sw.exe while it is inaccessible or a Sweepr command runs through it, this one included: $nativeLauncher"
-            $removeScript = (Join-Path $installPath 'sweepr.ps1').Replace("'", "''")
+            $removeScript = (Join-Path $installPath 'sweepr.ps1') -replace "['\u2018\u2019\u201A\u201B]", '$0$0'
             Write-Info "Close other Sweepr sessions, then run in PowerShell: & '$removeScript' remove"
             return $false
         }

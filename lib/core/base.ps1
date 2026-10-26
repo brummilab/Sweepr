@@ -10,6 +10,21 @@ if ((Get-Variable -Name 'SWEEPR_BASE_LOADED' -Scope Script -ErrorAction Silently
 $script:SWEEPR_BASE_LOADED = $true
 
 # ============================================================================
+# PowerShell literal quoting
+# ============================================================================
+# Wraps a value in a single-quoted PowerShell literal for code that is handed to a
+# child process (-EncodedCommand). PowerShell reads U+2018, U+2019, U+201A and U+201B
+# as single quotes too, so each of the five is doubled; otherwise a path or argument
+# holding one would end the literal early and could run injected commands.
+function ConvertTo-SweeprPsLiteral {
+    param([AllowNull()][string]$Value)
+    if ($null -eq $Value) { $Value = '' }
+    $quotes = [string]::new([char[]]@([char]0x27, [char]0x2018, [char]0x2019, [char]0x201A, [char]0x201B))
+    $text = [regex]::Replace($Value, "[$quotes]", '$0$0')
+    return [string][char]0x27 + $text + [char]0x27
+}
+
+# ============================================================================
 # Color Definitions (ANSI escape codes for modern terminals)
 # ============================================================================
 function Get-SweeprDefaultColors {

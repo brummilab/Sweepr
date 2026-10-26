@@ -34,8 +34,7 @@ function Invoke-SweeprOwnerProcess {
     $Outcome.Reason = ""
     $command = Get-Command $Name -CommandType Application,ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $command) { $Outcome.Reason = "$Name not found"; return $null }
-    $quote = { param($value) "'" + $value.Replace("'", "''") + "'" }
-    $words = @(& $quote $command.Source) + @($Arguments | ForEach-Object { & $quote $_ })
+    $words = @(ConvertTo-SweeprPsLiteral $command.Source) + @($Arguments | ForEach-Object { ConvertTo-SweeprPsLiteral $_ })
     $code = '$ErrorActionPreference = ''Stop''; [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; & ' + ($words -join ' ') + '; if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }'
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
     $process = New-Object Diagnostics.Process
