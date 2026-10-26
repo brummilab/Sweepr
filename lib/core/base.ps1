@@ -634,15 +634,19 @@ function Test-ProtectedPath {
     return (Test-SweeprProtectedPathForm -NormalizedPath $resolvedPath)
 }
 
-# Decodes the bytes of a user list file (whitelist, purge_paths) to text lines.
-# Callers read the file with [System.IO.File]::ReadAllBytes so the decoding is never
-# left to the platform default. Windows PowerShell
-# 5.1 decodes a file without BOM through the ANSI code page, and Notepad and VS Code
-# save UTF-8 without BOM, so the decoding is explicit: a UTF-8 or UTF-16 BOM is
-# honoured and stripped, everything else is UTF-8 (a strict decode first; bytes that
-# are not valid UTF-8 fall back to the system ANSI code page, the old behaviour).
-# Reads the whole file with shared access. File.ReadAllBytes opens with FileShare.Read
-# and fails while an editor holds the file open for writing; Get-Content never did.
+# User list files (whitelist, purge_paths) are read in two steps so the decoding is
+# never left to the platform default: Read-SweeprListBytes reads the raw bytes,
+# ConvertFrom-SweeprListBytes decodes them to lines.
+#
+# Read-SweeprListBytes opens the file through a FileStream with
+# FileShare.ReadWrite|Delete. File.ReadAllBytes would refuse a file an editor holds
+# open for writing; Get-Content never did.
+#
+# ConvertFrom-SweeprListBytes: Windows PowerShell 5.1 decodes a file without BOM
+# through the ANSI code page, and Notepad and VS Code save UTF-8 without BOM. A
+# UTF-8, UTF-16 (LE/BE) or UTF-32 (LE/BE) BOM is honoured and stripped; without a
+# BOM the text is UTF-8 (strict decode). Bytes that are not valid UTF-8 fall back
+# to the system ANSI code page (under PowerShell 7 that is UTF-8 as well).
 function Read-SweeprListBytes {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -777,7 +781,7 @@ function Get-WhitelistState {
         $null = Get-Item -LiteralPath $script:Config.WhitelistFile -ErrorAction Stop
         try {
             # Explicit UTF-8 read (BOM aware, see ConvertFrom-SweeprListBytes) through
-            # Read-SweeprListBytes (shared access, not a plain ReadAllBytes); a read
+            # Read-SweeprListBytes; a read
             # error is caught below and retains every target.
             $userBytes = Read-SweeprListBytes -Path $script:Config.WhitelistFile
             $userPatterns = @(ConvertFrom-SweeprListBytes -Bytes $userBytes)

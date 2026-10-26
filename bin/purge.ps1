@@ -86,7 +86,7 @@ function Get-SearchPaths {
 
     # Load custom paths if available
     if (Test-Path -LiteralPath $script:ConfigFile) {
-        # Explicit UTF-8 read (BOM aware, shared access instead of a plain ReadAllBytes); an unreadable file counts as no custom paths.
+        # Explicit UTF-8 read (BOM aware, shared access); an unreadable file counts as no custom paths.
         $customPaths = @()
         try {
             $configBytes = Read-SweeprListBytes -Path $script:ConfigFile
