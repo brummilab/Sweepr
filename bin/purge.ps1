@@ -86,9 +86,17 @@ function Get-SearchPaths {
 
     # Load custom paths if available
     if (Test-Path -LiteralPath $script:ConfigFile) {
-        $customPaths = Get-Content -LiteralPath $script:ConfigFile -ErrorAction SilentlyContinue |
-                       Where-Object { $_ -and -not $_.StartsWith('#') } |
-                       ForEach-Object { $_.Trim() }
+        # Explicit UTF-8 read (BOM aware, shared access); an unreadable file counts as no custom paths.
+        $customPaths = @()
+        try {
+            $configBytes = Read-SweeprListBytes -Path $script:ConfigFile
+            $customPaths = @(ConvertFrom-SweeprListBytes -Bytes $configBytes |
+                    ForEach-Object { ConvertFrom-SweeprListEntry -Line $_ } |
+                    Where-Object { $_ })
+        }
+        catch {
+            Write-Debug "purge_paths.txt unreadable; using default search paths"
+        }
 
         foreach ($path in $customPaths) {
             if (Test-Path -LiteralPath $path) {
@@ -137,7 +145,8 @@ function Edit-SearchPaths {
 # $env:USERPROFILE\Code
 
 "@
-        Set-Content -LiteralPath $script:ConfigFile -Value $defaultContent
+        # UTF-8 with BOM: Windows PowerShell 5.1 and Notepad both read it back correctly.
+        [System.IO.File]::WriteAllText($script:ConfigFile, $defaultContent, (New-Object System.Text.UTF8Encoding($true)))
     }
 
     Write-Info "Opening paths configuration: $($script:ConfigFile)"

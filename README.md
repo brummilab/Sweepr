@@ -169,7 +169,7 @@ Sweepr kann Dateien löschen, deshalb werden Pfade validiert und System- sowie P
 - `clean`, `uninstall` und `purge` zuerst mit `--dry-run` ansehen, bei Bedarf `--debug` dazu
 - `clean` und `purge` löschen endgültig; verifizierte `uninstall`-Reste und in `sw analyze` gelöschte Dateien gehen in den Papierkorb
 - Als normaler Benutzer ausführen; System-Schritte laufen nur in einer Administrator-PowerShell
-- Pfade schützen mit `sw clean --whitelist`
+- Pfade schützen mit `sw clean --whitelist`. Einträge dürfen in Anführungszeichen stehen (wie "Als Pfad kopieren"), `/` statt `\` enthalten sowie `%VAR%` und `~` (Profilordner) nutzen. Einträge mit `*` oder `?` schützen auch alle Unterordner. Die Datei wird als UTF-8 (mit BOM) geschrieben; Umlaute sind möglich. Für `purge_paths.txt` gelten dieselben Schreibweisen.
 - Aktivitäten werden in `%USERPROFILE%\.config\sweepr\operations.log` protokolliert (portabel: `data\config\operations.log`; `sw history`; abschalten mit `SWEEPR_NO_OPLOG=1`)
 - `C:\Windows`, `C:\Program Files`, Windows-Defender-Ordner und das Profil-Stammverzeichnis werden nie angefasst
 

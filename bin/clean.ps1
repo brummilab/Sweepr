@@ -102,6 +102,7 @@ function Edit-Whitelist {
         $defaultContent = @"
 # Sweepr Whitelist - Paths listed here will never be cleaned
 # Use full paths or patterns with wildcards (*)
+# Quotes, forward slashes, %VAR% and ~ (your profile folder) are understood.
 #
 # Examples:
 # C:\Users\YourName\Documents\ImportantProject
@@ -111,7 +112,8 @@ function Edit-Whitelist {
 # Add your protected paths below:
 
 "@
-        Set-Content -LiteralPath $whitelistPath -Value $defaultContent
+        # UTF-8 with BOM: Windows PowerShell 5.1 and Notepad both read it back correctly.
+        [System.IO.File]::WriteAllText($whitelistPath, $defaultContent, (New-Object System.Text.UTF8Encoding($true)))
     }
 
     # Open in default editor

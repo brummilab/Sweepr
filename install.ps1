@@ -1006,6 +1006,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\Uninstall.Tests.ps1"
         "tests\UninstallWait.Tests.ps1"
         "tests\UpdateNotice.Tests.ps1"
+        "tests\WhitelistParsing.Tests.ps1"
     )
 }
 

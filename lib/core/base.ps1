@@ -649,6 +649,126 @@ function Test-ProtectedPath {
     return (Test-SweeprProtectedPathForm -NormalizedPath $resolvedPath)
 }
 
+# User list files (whitelist, purge_paths) are read in two steps so the decoding is
+# never left to the platform default: Read-SweeprListBytes reads the raw bytes,
+# ConvertFrom-SweeprListBytes decodes them to lines.
+#
+# Read-SweeprListBytes opens the file through a FileStream with
+# FileShare.ReadWrite|Delete. File.ReadAllBytes would refuse a file an editor holds
+# open for writing; Get-Content never did.
+#
+# ConvertFrom-SweeprListBytes: Windows PowerShell 5.1 decodes a file without BOM
+# through the ANSI code page, and Notepad and VS Code save UTF-8 without BOM. A
+# UTF-8, UTF-16 (LE/BE) or UTF-32 (LE/BE) BOM is honoured and stripped; without a
+# BOM the text is UTF-8 (strict decode). Bytes that are not valid UTF-8 fall back
+# to the system ANSI code page (under PowerShell 7 that is UTF-8 as well).
+function Read-SweeprListBytes {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read, ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))
+    try {
+        $buffer = New-Object System.IO.MemoryStream
+        $stream.CopyTo($buffer)
+        return , $buffer.ToArray()
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function ConvertFrom-SweeprListBytes {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
+
+    $bytes = $Bytes
+    $start = 0
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $encoding = New-Object System.Text.UTF8Encoding($false, $true)
+        $start = 3
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE -and $bytes[2] -eq 0 -and $bytes[3] -eq 0) {
+        # UTF-32 LE starts like UTF-16 LE; test it first.
+        $encoding = New-Object System.Text.UTF32Encoding($false, $false, $true)
+        $start = 4
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0 -and $bytes[1] -eq 0 -and $bytes[2] -eq 0xFE -and $bytes[3] -eq 0xFF) {
+        $encoding = New-Object System.Text.UTF32Encoding($true, $false, $true)
+        $start = 4
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $encoding = New-Object System.Text.UnicodeEncoding($false, $false)
+        $start = 2
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        $encoding = New-Object System.Text.UnicodeEncoding($true, $false)
+        $start = 2
+    }
+    else {
+        $encoding = New-Object System.Text.UTF8Encoding($false, $true)
+    }
+    try {
+        $text = $encoding.GetString($bytes, $start, $bytes.Length - $start)
+    }
+    catch [System.Text.DecoderFallbackException] {
+        $text = [System.Text.Encoding]::Default.GetString($bytes, $start, $bytes.Length - $start)
+    }
+    # Same line breaks as Get-Content: CRLF, a lone CR and a lone LF.
+    return @($text -split "`r`n|`r|`n")
+}
+
+# Normalizes one line of a user list to the path it means, or returns $null for a
+# line that means nothing (blank, comment, empty after unquoting, a variable that
+# expands to nothing). Order: trim, comment, enclosing quotes ("Copy as path"),
+# trim, "/" to "\", "~" to the profile, %VAR% expansion. An undefined %VAR% stays
+# literal, so it matches no real path. A value must never mean more than written:
+# an entry whose %VAR% expanded away leaves a relative or root-relative remainder,
+# which would match a different place than the user named, so it is dropped.
+# With -IncludeRaw (the whitelist) an entry whose %VAR% expansion changed or dropped
+# it also yields its unexpanded spelling: a real folder may be named "%NAME%", and
+# the old reader protected that literal name. The raw form is only an extra pattern;
+# a relative one matches no absolute candidate.
+function ConvertFrom-SweeprListEntry {
+    param([AllowNull()][string]$Line, [switch]$IncludeRaw)
+
+    if ($null -eq $Line) { return $null }
+    $entry = $Line.Trim()
+    if (-not $entry -or $entry.StartsWith('#')) { return $null }
+
+    if ($entry.Length -ge 2 -and
+        (($entry[0] -eq '"' -and $entry[$entry.Length - 1] -eq '"') -or
+        ($entry[0] -eq "'" -and $entry[$entry.Length - 1] -eq "'"))) {
+        $entry = $entry.Substring(1, $entry.Length - 2).Trim()
+    }
+    if (-not $entry) { return $null }
+
+    # A single leading "/" is not a Windows spelling (a path of another platform
+    # keeps its separators); anything else is a Windows path typed with "/".
+    if (-not ($entry.Length -ge 2 -and $entry[0] -eq '/' -and $entry[1] -ne '/')) {
+        $entry = $entry.Replace('/', '\')
+    }
+
+    if ($entry -eq '~' -or $entry.StartsWith('~\')) {
+        $profileRoot = $env:USERPROFILE
+        if ([string]::IsNullOrWhiteSpace($profileRoot)) { return $null }
+        $entry = $profileRoot.TrimEnd('\') + $entry.Substring(1)
+    }
+
+    if ($entry.IndexOf('%') -ge 0) {
+        $expanded = [Environment]::ExpandEnvironmentVariables($entry)
+        if ($expanded -ne $entry) {
+            $expanded = $expanded.Trim()
+            # Only a drive-rooted or UNC result is a path the user can have meant.
+            if ($expanded -notmatch '^([A-Za-z]:\\|\\\\[^\\])') {
+                if ($IncludeRaw) { return $entry }
+                return $null
+            }
+            if ($IncludeRaw) { return @($expanded, $entry) }
+            return $expanded
+        }
+    }
+    return $entry
+}
+
 function Test-WhitelistPattern {
     param([string]$Path, [string]$Pattern)
 
@@ -657,7 +777,8 @@ function Test-WhitelistPattern {
     $root = $Pattern.TrimEnd('\')
     if ([string]::Equals($Path.TrimEnd('\'), $root, [StringComparison]::OrdinalIgnoreCase) -or
         $Path.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    return $Path -like $Pattern
+    if ($Path -like $Pattern) { return $true }
+    return ($root.IndexOfAny([char[]]@('[', '`')) -lt 0) -and ($Path -like ($root + '\*'))
 }
 
 # The patterns that protect a path, read once. A caller checking many paths in a
@@ -674,10 +795,15 @@ function Get-WhitelistState {
     try {
         $null = Get-Item -LiteralPath $script:Config.WhitelistFile -ErrorAction Stop
         try {
-            $userPatterns = @(Get-Content -LiteralPath $script:Config.WhitelistFile -ErrorAction Stop)
-            foreach ($pattern in $userPatterns) {
-                $pattern = $pattern.Trim()
-                if ($pattern -and -not $pattern.StartsWith('#')) { $patterns.Add($pattern) }
+            # Explicit UTF-8 read (BOM aware, see ConvertFrom-SweeprListBytes) through
+            # Read-SweeprListBytes; a read
+            # error is caught below and retains every target.
+            $userBytes = Read-SweeprListBytes -Path $script:Config.WhitelistFile
+            $userPatterns = @(ConvertFrom-SweeprListBytes -Bytes $userBytes)
+            foreach ($line in $userPatterns) {
+                foreach ($pattern in @(ConvertFrom-SweeprListEntry -Line $line -IncludeRaw)) {
+                    if ($pattern) { $patterns.Add($pattern) }
+                }
             }
         }
         catch {
@@ -764,7 +890,12 @@ function Test-Whitelisted {
     for ($i = 0; $i -lt $roots.Length; $i++) {
         if ([string]::Equals($trimmed, $roots[$i], [StringComparison]::OrdinalIgnoreCase) -or
             $Path.StartsWith($State.Prefixes[$i], [StringComparison]::OrdinalIgnoreCase)) { return $true }
-        if ($State.Wild[$i] -and $Path -like $State.Patterns[$i]) { return $true }
+        if ($State.Wild[$i]) {
+            # A * / ? entry naming a folder covers what is below it, like a literal one.
+            # Bracket and escape syntax stays exact: it is ambiguous with literal names.
+            if ($Path -like $State.Patterns[$i]) { return $true }
+            if ($roots[$i].IndexOfAny([char[]]@('[', '`')) -lt 0 -and $Path -like ($roots[$i] + '\*')) { return $true }
+        }
     }
     return $false
 }
