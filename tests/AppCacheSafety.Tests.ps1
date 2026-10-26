@@ -5,8 +5,9 @@ BeforeAll {
     . "$repo\lib\clean\dev.ps1"
     . "$repo\lib\clean\user.ps1"
     . "$repo\lib\clean\apps.ps1"
+    . "$repo\lib\clean\system.ps1"
     $script:SavedCacheEnvironment = @{}
-    foreach ($name in @('USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'SWEEPR_NO_OPLOG')) {
+    foreach ($name in @('USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'WINDIR', 'SWEEPR_NO_OPLOG')) {
         $script:SavedCacheEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
     }
     $script:SavedCacheWhitelist = $script:Config.WhitelistFile
@@ -32,6 +33,7 @@ Describe 'Application cache boundaries' {
         $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString('N').Substring(0,8))
         $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'Local'
         $env:APPDATA = Join-Path $env:USERPROFILE 'Roaming'
+        $env:WINDIR = Join-Path $env:USERPROFILE 'Windows'
         $env:SWEEPR_NO_OPLOG = '1'
         $script:Config.WhitelistFile = Join-Path $env:USERPROFILE 'whitelist.txt'
         $script:ExportListFile = Join-Path $env:USERPROFILE 'preview.txt'
@@ -109,6 +111,96 @@ Describe 'Application cache boundaries' {
         Test-Path -LiteralPath $local | Should -BeFalse
         Test-Path -LiteralPath $roaming | Should -BeFalse
         Test-Path -LiteralPath $settings | Should -BeTrue
+    }
+
+    It 'Keeps the <Editor> cache <Root>\<Leaf> while <Owner> runs and cleans it once idle' -ForEach @(
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\Cache'}
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\CachedData'}
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\CachedExtensions'}
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\CachedExtensionVSIXs'}
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\Code Cache'}
+        @{Editor='VS Code'; Owner='Code'; Root='APPDATA'; Leaf='Code\GPUCache'}
+        @{Editor='cpptools'; Owner='Code'; Root='LOCALAPPDATA'; Leaf='Microsoft\vscode-cpptools'}
+        @{Editor='VS Code Insiders'; Owner='Code - Insiders'; Root='APPDATA'; Leaf='Code - Insiders\Cache'}
+        @{Editor='VS Code Insiders'; Owner='Code - Insiders'; Root='APPDATA'; Leaf='Code - Insiders\GPUCache'}
+        @{Editor='Zed'; Owner='zed'; Root='LOCALAPPDATA'; Leaf='Zed\cache'}
+        @{Editor='Zed'; Owner='zed'; Root='APPDATA'; Leaf='Zed\cache'}
+    ) {
+        $base = [Environment]::GetEnvironmentVariable($Root)
+        $cache = (Get-Item -LiteralPath (New-CacheFile (Join-Path (Join-Path $base $Leaf) 'entry'))).FullName
+        $script:EditorOwner = $Owner
+        Mock Get-Process { [pscustomobject]@{ProcessName=$script:EditorOwner} }
+        Set-DryRunMode -Enabled $true
+        Clear-EditorCaches
+        if (Test-Path -LiteralPath $script:ExportListFile) {
+            Get-Content -LiteralPath $script:ExportListFile -Raw | Should -Not -Match ([regex]::Escape($cache))
+        }
+        Set-DryRunMode -Enabled $false
+        Clear-EditorCaches
+        Test-Path -LiteralPath $cache | Should -BeTrue
+        (Get-CleanupStats).FilesCleaned | Should -Be 0
+        Mock Get-Process { @() }
+        Clear-EditorCaches
+        Test-Path -LiteralPath $cache | Should -BeFalse
+    }
+
+    It 'Keeps VS Code and Zed caches when the editor process probe fails' {
+        $code = New-CacheFile "$env:APPDATA\Code\Cache\entry"
+        $cpptools = New-CacheFile "$env:LOCALAPPDATA\Microsoft\vscode-cpptools\ipch\entry"
+        $zed = New-CacheFile "$env:LOCALAPPDATA\Zed\cache\entry"
+        Mock Get-Process { throw 'unavailable' }
+        Clear-EditorCaches
+        Test-Path -LiteralPath $code | Should -BeTrue
+        Test-Path -LiteralPath $cpptools | Should -BeTrue
+        Test-Path -LiteralPath $zed | Should -BeTrue
+        (Get-CleanupStats).FilesCleaned | Should -Be 0
+    }
+
+    It 'Keeps recent crash dumps and non-dump entries in system dump cleanup preview and real run' {
+        $recent = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\recent.dmp"
+        $note = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-notes.txt"
+        $nested = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-folder\inner.dmp"
+        foreach ($path in @($note, $nested, (Split-Path $nested))) {
+            (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-10)
+            (Get-Item -LiteralPath $path).CreationTime = (Get-Date).AddDays(-10)
+        }
+        Set-DryRunMode -Enabled $true
+        Clear-MemoryDumps
+        if (Test-Path -LiteralPath $script:ExportListFile) {
+            $preview = Get-Content -LiteralPath $script:ExportListFile -Raw
+            $preview | Should -Not -Match 'recent\.dmp'
+            $preview | Should -Not -Match 'old-notes'
+            $preview | Should -Not -Match 'old-folder'
+        }
+        Set-DryRunMode -Enabled $false
+        Clear-MemoryDumps
+        Test-Path -LiteralPath $recent | Should -BeTrue
+        Test-Path -LiteralPath $note | Should -BeTrue
+        Test-Path -LiteralPath $nested | Should -BeTrue
+    }
+
+    It 'Removes only old crash dumps across user and system cleanup' {
+        $old = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old.dmp"
+        $recent = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\recent.dmp"
+        $note = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-notes.txt"
+        foreach ($path in @($old, $note)) {
+            (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-10)
+            (Get-Item -LiteralPath $path).CreationTime = (Get-Date).AddDays(-10)
+        }
+        Set-DryRunMode -Enabled $true
+        Clear-ErrorReports -DaysOld 7
+        Clear-MemoryDumps
+        Test-Path -LiteralPath $old | Should -BeTrue
+        $preview = Get-Content -LiteralPath $script:ExportListFile -Raw
+        $preview | Should -Match 'old\.dmp'
+        $preview | Should -Not -Match 'recent\.dmp'
+        $preview | Should -Not -Match 'old-notes'
+        Set-DryRunMode -Enabled $false
+        Clear-ErrorReports -DaysOld 7
+        Clear-MemoryDumps
+        Test-Path -LiteralPath $old | Should -BeFalse
+        Test-Path -LiteralPath $recent | Should -BeTrue
+        Test-Path -LiteralPath $note | Should -BeTrue
     }
 
     It 'Keeps Adobe Team Projects state beside rebuildable media caches' {
