@@ -23,6 +23,9 @@ CI runs the Pester tests under both Windows PowerShell 5.1 and pwsh 7, so avoid 
 
 ## Safety Rules
 
+The complete, current policy is in [docs/engineering-rules.md](docs/engineering-rules.md). In short:
+
+
 - Delete only through the helpers in `lib/core/file_ops.ps1` (`Remove-SafeItem`, `Remove-SafeItems`, `Remove-OldFiles`, `Clear-DirectoryContents`). They check protected paths and the whitelist and honor dry-run mode. Never call `Remove-Item -Recurse` directly.
 - Every command that deletes or uninstalls must do nothing but report in `--dry-run` mode.
 - Never touch `C:\Windows`, `C:\Program Files`, Windows Defender folders, or the user profile root. Add protections to `lib/core/base.ps1` rather than working around them.

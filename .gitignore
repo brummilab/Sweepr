@@ -41,10 +41,6 @@ temp/
 *.pid
 *.lock
 
-cmd/CONTRIBUTING.md
-lib/CONTRIBUTING.md
-tests/CONTRIBUTING.md
-
 # Build artifacts
 /analyze
 /status

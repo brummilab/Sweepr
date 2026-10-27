@@ -223,7 +223,7 @@ Vor jedem Merge muss das Gate grün sein:
 
 Unter Windows (Git Bash) laufen dabei alle Pester-Tests, sonst die plattformneutralen.
 
-Projektübersicht und Änderungsprotokoll: [Projektinhalt.md](Projektinhalt.md).
+Regeln für Änderungen (Sicherheit, Kompatibilität, CI, Release): [docs/engineering-rules.md](docs/engineering-rules.md).
 
 ## Lizenz
 

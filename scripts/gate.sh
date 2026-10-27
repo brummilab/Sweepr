@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gate: must be green before anything is merged into main .
+# Gate: must be green before anything is merged into main.
 #   ./scripts/gate.sh            Go checks, PowerShell parse, Pester
 # On Windows (Git Bash) every Pester test must pass. Elsewhere the full suite
 # runs too, and the failures must be the known Windows-only ones listed in

@@ -827,7 +827,7 @@ setlocal DisableDelayedExpansion
 function Get-SweeprInstallEntries {
     return @(
         ".editorconfig", ".git", ".gitattributes", ".github", ".gitignore", ".golangci.yml", ".shellcheckrc",
-        "CONTRIBUTING.md", "LICENSE", "Makefile", "NOTICE.md", "Projektinhalt.md",
+        "CONTRIBUTING.md", "LICENSE", "Makefile", "NOTICE.md",
         "README.md", "RELEASE.md", "SECURITY.md", "VERSION", "check.ps1",
         "bin", "cmd", "go.mod", "go.sum", "install.ps1", "lib", "sw.cmd", "sw.exe", "sweepr.cmd", "sweepr.ps1",
         "packaging", "quick-install.ps1", "scripts", "tests"
@@ -925,6 +925,7 @@ function Get-SweeprInstallNestedFiles {
         "cmd\status\watch_test.go"
         "cmd\status\windows_logic_test.go"
         "docs\development-pitfalls.md"
+        "docs\engineering-rules.md"
         "docs\img\logo-wordmark-dark.svg"
         "docs\img\logo-wordmark-light.svg"
         "docs\img\logo.svg"
