@@ -57,7 +57,6 @@ release/
 sweepr-windows.zip
 sweepr-*-x64.zip
 sweepr-*-x64.exe
-sweepr-*-x64.msi
 SHA256SUMS.txt
 
 # Test artifacts

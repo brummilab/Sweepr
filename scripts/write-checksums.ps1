@@ -1,6 +1,6 @@
 # Sweepr Windows - writes SHA256SUMS.txt for a set of release files.
-# Used by the release workflow and by sign-release.ps1, so the format lives in
-# one place: "<sha256>  <file name>", LF line endings, UTF-8 without a BOM.
+# Used by the release build, so the format lives in one place:
+# "<sha256>  <file name>", LF line endings, UTF-8 without a BOM.
 
 #Requires -Version 5.1
 param(

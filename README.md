@@ -200,7 +200,7 @@ Sicherheitslücken bitte privat über [GitHub Security Advisories](https://githu
 - **`SWEEPR_DATA_DIR`** gilt vor dem Portable-Modus und vor dem Profil. Ein relativer Pfad wird gegen das aktuelle Verzeichnis aufgelöst. Ist der Ordner nicht beschreibbar, bricht Sweepr ab, statt ins Profil auszuweichen. `sw remove` und `install.ps1 -Uninstall` entfernen nur die Installation, nennen den Datenordner und löschen ihn nie.
 - Der aktive Daten- und Cache-Ordner steht automatisch unter dem Schutz der Whitelist, auch wenn er in einem Bereinigungsziel liegt.
 
-Die Vorlagen für winget/Scoop (`packaging/`) sind vorbereitet, aber noch nicht veröffentlicht. Die Releases sind noch nicht code-signiert.
+Sweepr ist noch nicht über winget oder Scoop erhältlich. Die Releases sind nicht code-signiert.
 
 ## Entwicklung
 

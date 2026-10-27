@@ -75,15 +75,6 @@ jobs:
           & ./scripts/test.ps1 -NoGo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Test e2e orchestration with mocks
-        if: matrix.shell == 'pwsh'
-        env:
-          SWEEPR_TEST_NO_AUTH: '1'
-          PYTHONDONTWRITEBYTECODE: '1'
-        run: |
-          python tests/e2e_harness_test.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Run Go tests
         if: matrix.shell == 'pwsh'
         run: |

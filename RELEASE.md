@@ -1,6 +1,6 @@
 # Sweepr - Release Guide
 
-A release goes through three steps: CI builds the assets into a draft release, the maintainer signs them on Windows, and the signed files replace the draft's before it is published.
+A release goes through two steps: CI builds the assets into a draft release, and the maintainer checks them before the draft is published.
 
 ## Tags
 
@@ -15,8 +15,8 @@ A release goes through three steps: CI builds the assets into a draft release, t
 
 | File | Purpose |
 |---|---|
-| `sweepr-<version>-x64.zip` | What winget and Scoop install; `sw.exe` at its root is what they put on PATH |
-| `sweepr-<version>-x64-portable.zip` | The same tree plus the `sweepr.portable` marker: unzip and run `sw.exe`, all data in its `data` folder. winget and Scoop use the normal zip, since the marker would switch them into portable mode |
+| `sweepr-<version>-x64.zip` | The install archive; `sw.exe` at its root is the command that goes on PATH |
+| `sweepr-<version>-x64-portable.zip` | The same tree plus the `sweepr.portable` marker: unzip and run `sw.exe`, all data in its `data` folder |
 | `analyze-windows-x64.exe`, `status-windows-x64.exe` | TUIs that source installs download on first use |
 | `SHA256SUMS.txt` | Checksums of the four files above; the TUI download refuses a file that does not match |
 
@@ -24,7 +24,6 @@ A release goes through three steps: CI builds the assets into a draft release, t
 
 1. CI is green on the `main` commit you will tag: `Check` and `Validation`, including both PowerShell legs.
 2. Bump the version in one commit: `VERSION` and `$script:SweeprDefaultVersion` in `lib/core/version.ps1`.
-3. Optional: `scripts/e2e_windows.py --host user@address` exits 0 against a real Windows PC at that commit (see `CONTRIBUTING.md`, "Windows e2e").
 
 ## 2. Tag
 
@@ -35,31 +34,10 @@ git push origin V0.1.0-windows
 
 `.github/workflows/release-windows.yml` runs the tests, runs `scripts/build-release.ps1`, and creates a **draft** release with the unsigned assets.
 
-## 3. Sign
-
-On a Windows machine with the code-signing certificate available:
+## 3. Publish
 
 ```powershell
-gh release download V0.1.0-windows --repo brummilab/sweepr --dir C:\sweepr-release
-$env:SWEEPR_SIGN_PARAMS = "/fd sha256 /tr <timestamp-url> /td sha256 /sha1 <thumbprint>"
-.\scripts\sign-release.ps1 -Path C:\sweepr-release
-```
-
-The script needs an x64 `signtool.exe` (it finds the Windows SDK build tools, or set `SWEEPR_SIGNTOOL`). It signs every `.ps1` and `.exe` in the zip and both TUI executables, verifies each signature and timestamp against the thumbprint, rebuilds the zip, and rewrites `SHA256SUMS.txt`. A timestamp or HSM hiccup is retried once; a second failure stops the script.
-
-Known gap: `sign-release.ps1` only handles `sweepr-<version>-x64.zip`. The portable zip is neither signed nor listed again when `SHA256SUMS.txt` is rewritten, so a signed release needs the script extended first (board card R-04).
-
-Without a code-signing certificate, the draft can be published unsigned; the checksums still protect the TUI downloads.
-
-## 4. Publish
-
-```powershell
-gh release upload V0.1.0-windows C:\sweepr-release\* --repo brummilab/sweepr --clobber
 gh release edit V0.1.0-windows --repo brummilab/sweepr --title "V0.1.0-windows" --draft=false
 ```
 
-Then check that a downloaded asset matches `SHA256SUMS.txt` and, for a signed release, that `Get-AuthenticodeSignature` reports `Valid` for `sw.exe`.
-
-## 5. Package managers
-
-Render and submit the winget and Scoop manifests as described in `packaging/README.md`.
+Then check that a downloaded asset matches `SHA256SUMS.txt`. Releases are not code-signed; the checksums protect the TUI downloads.

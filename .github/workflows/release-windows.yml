@@ -12,8 +12,7 @@ on:
         required: true
         type: string
 
-# The workflow only creates a draft. The maintainer signs the assets with the
-# code-signing certificate (scripts/sign-release.ps1), uploads them and
+# The workflow only creates a draft. The maintainer checks the assets and
 # publishes the draft; see RELEASE.md.
 permissions:
   contents: write  # Required for creating releases

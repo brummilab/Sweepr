@@ -1,5 +1,5 @@
 # Sweepr Windows - release tooling tests
-# Covers the checksum writer, manifest rendering and the package-manager update hint.
+# Covers the checksum writer, the release zip and the package-manager update hint.
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
@@ -29,41 +29,6 @@ Describe "write-checksums.ps1" {
         $dir = Join-Path $TestDrive "missing"
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
         { & (Join-Path $script:ScriptsDir "write-checksums.ps1") -Directory $dir -Files @("absent.zip") } | Should -Throw "*absent.zip*"
-    }
-}
-
-Describe "render-packaging.ps1" {
-    BeforeAll {
-        $script:Hash = "a" * 64
-        $script:Sums = Join-Path $TestDrive "SHA256SUMS.txt"
-        Set-Content -Path $script:Sums -Value @("$($script:Hash)  sweepr-1.31.0-x64.zip", ("b" * 64) + "  status-windows-x64.exe")
-        $script:Out = Join-Path $TestDrive "packaging"
-        & (Join-Path $script:ScriptsDir "render-packaging.ps1") -Version "1.31.0" -SumsFile $script:Sums -OutDir $script:Out -ReleaseDate "2026-10-11" 6>$null
-    }
-
-    It "Fills every placeholder in every manifest" {
-        $files = @(Get-ChildItem -Path $script:Out -Recurse -File)
-        $files.Count | Should -Be 4
-        foreach ($file in $files) {
-            [System.IO.File]::ReadAllText($file.FullName) | Should -Not -Match '\{\{'
-        }
-    }
-
-    It "Points Scoop and winget at the tagged zip and its checksum" {
-        $scoop = Get-Content (Join-Path $script:Out "scoop\sweepr.json") -Raw | ConvertFrom-Json
-        $scoop.version | Should -Be "1.31.0"
-        $scoop.architecture.'64bit'.url | Should -Be "https://github.com/brummilab/sweepr/releases/download/V1.31.0-windows/sweepr-1.31.0-x64.zip"
-        $scoop.architecture.'64bit'.hash | Should -Be $script:Hash
-
-        $installer = Get-Content (Join-Path $script:Out "winget\manifests\b\brummilab\Sweepr\1.31.0\brummilab.Sweepr.installer.yaml") -Raw
-        $installer | Should -Match "InstallerSha256: $($script:Hash)"
-        $installer | Should -Match "RelativeFilePath: sw.exe"
-    }
-
-    It "Refuses a release whose checksum file lacks the zip" {
-        $sums = Join-Path $TestDrive "no-zip.txt"
-        Set-Content -Path $sums -Value (("b" * 64) + "  status-windows-x64.exe")
-        { & (Join-Path $script:ScriptsDir "render-packaging.ps1") -Version "1.31.0" -SumsFile $sums -OutDir (Join-Path $TestDrive "x") } | Should -Throw "*sweepr-1.31.0-x64.zip*"
     }
 }
 
@@ -145,11 +110,9 @@ Describe "new-release-zip.ps1" {
     }
 
     It "Is the only way the release scripts build a zip" {
-        foreach ($script in @("build-release.ps1", "sign-release.ps1")) {
-            $text = Get-Content (Join-Path $script:ScriptsDir $script) -Raw
-            $text | Should -Not -Match 'Compress-Archive|CreateFromDirectory'
-            $text | Should -Match 'new-release-zip\.ps1'
-        }
+        $text = Get-Content (Join-Path $script:ScriptsDir "build-release.ps1") -Raw
+        $text | Should -Not -Match 'Compress-Archive|CreateFromDirectory'
+        $text | Should -Match 'new-release-zip\.ps1'
     }
 }
 
