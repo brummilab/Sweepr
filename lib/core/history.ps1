@@ -87,7 +87,13 @@ function Read-SwHistory {
     catch [System.IO.FileNotFoundException] { return $result }
     catch [System.IO.DirectoryNotFoundException] { return $result }
     catch {
-        throw (New-Object System.IO.IOException("Cannot read $Path ($($_.Exception.Message))"))
+        # New-Object wraps the real error ("Exception calling ..."); the inner .NET message is the
+        # useful part and usually names the path already, so add the path only when it does not.
+        $reason = $_.Exception
+        if ($null -ne $reason.InnerException) { $reason = $reason.InnerException }
+        $text = $reason.Message
+        if ($text.IndexOf($Path, [System.StringComparison]::Ordinal) -lt 0) { $text = "Cannot read '$Path': $text" }
+        throw (New-Object System.IO.IOException($text))
     }
     finally {
         if ($null -ne $reader) { $reader.Dispose() }
@@ -173,7 +179,7 @@ function Format-SwHistoryActions {
         if ($null -ne $Actions.PSObject.Properties[$name]) { $count = [int]$Actions.$name }
         if ($count -gt 0) { $parts += ('{0} {1}' -f $name, $count) }
     }
-    if ($parts.Count -eq 0) { return 'no file actions' }
+    if ($parts.Count -eq 0) { return 'nothing changed' }
     return ($parts -join ', ')
 }
 
