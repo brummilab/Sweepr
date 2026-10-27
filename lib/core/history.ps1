@@ -78,22 +78,24 @@ function Read-SwHistory {
     $stream = $null
     $reader = $null
     try {
+        # Static method calls, not New-Object: Windows PowerShell 5.1 reports a constructor failure
+        # from New-Object as a non-terminating error, so a log that cannot be opened would look empty.
         # ReadWrite sharing: a Sweepr process appending right now must neither block nor be blocked by us.
-        $stream = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
         # Detects and drops a BOM; invalid bytes become replacement characters instead of errors.
-        $reader = New-Object System.IO.StreamReader($stream, (New-Object System.Text.UTF8Encoding($false)), $true)
+        $reader = [System.IO.StreamReader]::new($stream, [System.Text.UTF8Encoding]::new($false), $true)
         while ($null -ne ($line = $reader.ReadLine())) { $lines.Add($line) }
     }
-    catch [System.IO.FileNotFoundException] { return $result }
-    catch [System.IO.DirectoryNotFoundException] { return $result }
     catch {
-        # New-Object wraps the real error ("Exception calling ..."); the inner .NET message is the
-        # useful part and usually names the path already, so add the path only when it does not.
+        # A method call wraps the real error ("Exception calling ..."); the inner .NET exception is
+        # the useful part and usually names the path already, so add the path only when it does not.
         $reason = $_.Exception
         if ($null -ne $reason.InnerException) { $reason = $reason.InnerException }
+        # The file vanished between the existence check and the open: same as missing.
+        if ($reason -is [System.IO.FileNotFoundException] -or $reason -is [System.IO.DirectoryNotFoundException]) { return $result }
         $text = $reason.Message
         if ($text.IndexOf($Path, [System.StringComparison]::Ordinal) -lt 0) { $text = "Cannot read '$Path': $text" }
-        throw (New-Object System.IO.IOException($text))
+        throw [System.IO.IOException]::new($text)
     }
     finally {
         if ($null -ne $reader) { $reader.Dispose() }
