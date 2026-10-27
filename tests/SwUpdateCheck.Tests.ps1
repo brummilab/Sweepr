@@ -661,7 +661,7 @@ function Invoke-SwUpdateLookup {
             $script:FixtureText = $fixture
 
             function script:Invoke-QuotingCase {
-                param([string]$Name, [string]$Value)
+                param([string]$Name, [string]$Value, [string]$Method = 'Source')
                 $base = Join-Path $TestDrive ('q-' + [guid]::NewGuid().ToString('N'))
                 $root = [System.IO.Path]::Combine($base, 'root', $Value)
                 $cache = [System.IO.Path]::Combine($base, 'cache', $Value)
@@ -670,7 +670,7 @@ function Invoke-SwUpdateLookup {
                 [System.IO.File]::WriteAllText([System.IO.Path]::Combine($root, 'lib', 'core', 'update_check.ps1'), $script:FixtureText)
                 $script:CacheDir = $cache
                 $script:CacheFile = [System.IO.Path]::Combine($cache, 'update-check.json')
-                $ctx = Start-SwUpdateProbe -RootDir $root -Version '1.0.0' -Method 'Source'
+                $ctx = Start-SwUpdateProbe -RootDir $root -Version '1.0.0' -Method $Method
                 [pscustomobject]@{ Base = $base; Root = $root; Cache = $cache; Work = $work; Context = $ctx }
             }
 
@@ -741,8 +741,9 @@ function Invoke-SwUpdateLookup {
             Assert-NoInjection (Get-StartInfo).CommandText
         }
 
-        It 'Delivers root and cache path <Name> unchanged to the background process' -ForEach $script:PathCases {
-            $case = Invoke-QuotingCase -Name $Name -Value $Value
+        It 'Delivers root, cache path, key and channel <Name> unchanged to the background process' -ForEach $script:PathCases {
+            # Method in other case: the background must get the folded channel 'Source'.
+            $case = Invoke-QuotingCase -Name $Name -Value $Value -Method 'SOURCE'
             $result = Invoke-CapturedInChild -Case $case
             $result | Should -Not -BeNullOrEmpty -Because 'the fixture update_check.ps1 in the given root must have run'
             $expectedRoot = ConvertTo-Hex ([System.IO.Path]::GetFullPath([System.IO.Path]::Combine($case.Root, 'lib', 'core')))
@@ -761,6 +762,41 @@ function Invoke-SwUpdateLookup {
                 })
             @($normalized | Where-Object { $_ -in $cacheForms }).Count | Should -BeGreaterThan 0
             @(Get-ChildItem -LiteralPath $case.Base -Recurse -Force -Filter 'marker').Count | Should -Be 0
+
+            # Channel: the folded channel (spelling is the module's choice, spec 2.5 compares without case),
+            # character for character the same value the foreground put into the command.
+            $channelArgs = @($result.ArgsHex | Where-Object { (ConvertTo-Hex ([string](-join @(for ($i = 0; $i -lt $_.Length; $i += 4) { [char][Convert]::ToInt32($_.Substring($i, 4), 16) }))).ToLowerInvariant()) -ceq (ConvertTo-Hex 'source') })
+            $channelArgs.Count | Should -Be 1
+            $commandStrings = @((Get-CommandAst (Get-StartInfo).CommandText).Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true) |
+                    ForEach-Object { ConvertTo-Hex $_.Value })
+            $commandStrings | Should -Contain $channelArgs[0]
+
+            # Key: the background must receive, character for character, the key the foreground stored in
+            # its pending entry. The file format is free, so every string value of the JSON counts.
+            $stored = New-Object System.Collections.Generic.List[string]
+            function Add-JsonStrings($Node) {
+                if ($null -eq $Node) { return }
+                if ($Node -is [string]) { $stored.Add((ConvertTo-Hex $Node)); return }
+                if ($Node -is [System.Collections.IEnumerable]) { foreach ($n in $Node) { Add-JsonStrings $n }; return }
+                if ($Node -is [System.Management.Automation.PSCustomObject]) { foreach ($p in $Node.PSObject.Properties) { Add-JsonStrings $p.Value } }
+            }
+            Add-JsonStrings (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText([System.IO.Path]::Combine($case.Cache, 'update-check.json'))))
+            $keyArgs = @($result.ArgsHex | Where-Object { $_ -in $stored -and $_ -cne $channelArgs[0] -and $_ -notin $cacheForms })
+            $keyArgs.Count | Should -Be 1 -Because 'the stored key must arrive unchanged'
+
+            # And it must still be that entry's key: the real lookup with the received arguments updates it.
+            $positional = New-Object System.Collections.Generic.List[object]
+            $named = @{}
+            $pending = $null
+            foreach ($h in $result.ArgsHex) {
+                $text = -join @(for ($i = 0; $i -lt $h.Length; $i += 4) { [char][Convert]::ToInt32($h.Substring($i, 4), 16) })
+                if ($null -eq $pending -and $text -match '^-([A-Za-z]+):?$') { $pending = $Matches[1]; continue }
+                if ($null -ne $pending) { $named[$pending] = $text; $pending = $null } else { $positional.Add($text) }
+            }
+            Set-LatestEverywhere '9.9.9'
+            $positionalArgs = $positional.ToArray()
+            Invoke-SwUpdateLookup @positionalArgs @named
+            Get-SwUpdateHint -Context $case.Context | Should -Match '9\.9\.9'
         }
     }
 

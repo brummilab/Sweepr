@@ -23,7 +23,7 @@ A release goes through three steps: CI builds the assets into a draft release, t
 ## 1. Prepare
 
 1. CI is green on the `main` commit you will tag: `Check` and `Validation`, including both PowerShell legs.
-2. Bump the version in one commit: `VERSION` and `$script:SweeprDefaultVersion` in `lib/core/version.ps1`.
+2. Bump the version in one commit: `VERSION` and `$script:SwFallbackVersion` in `lib/core/version.ps1`. (The transition variable `$script:SweeprDefaultVersion` takes the same value from it until N-14; do not edit it.)
 3. Optional: `scripts/e2e_windows.py --host user@address` exits 0 against a real Windows PC at that commit (see `CONTRIBUTING.md`, "Windows e2e").
 
 ## 2. Tag
