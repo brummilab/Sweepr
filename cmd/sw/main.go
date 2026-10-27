@@ -1,9 +1,8 @@
-// Command sw starts sweepr.ps1 from the same folder with Windows PowerShell.
-//
-// Package managers that can only expose an executable (winget portable
-// installs) put this on PATH as `sw`. It passes every argument through as a
-// literal PowerShell string, the same call shape as the sw.cmd launcher that
-// install.ps1 writes, and returns the script's exit code.
+// Command sw is the native entry point of Sweepr. Package managers and the
+// portable ZIP can only put an .exe on PATH, so this program starts
+// sweepr.ps1 from its own folder with Windows PowerShell 5.1, passes every
+// argument through as data and returns the script's exit code.
+// Behaviour rules V-1 to V-15 are locked by launcher_test.go.
 package main
 
 import (
@@ -13,86 +12,88 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings"
 )
+
+const programName = "sw"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
+// fail prints one error line on stderr; stdout stays reserved for the script.
+func fail(format string, a ...interface{}) int {
+	fmt.Fprintf(os.Stderr, programName+": "+format+"\n", a...)
+	return 1
+}
+
 func run(args []string) int {
-	script, err := scriptPath()
+	dir, err := programDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sw: %v\n", err)
-		return 1
+		return fail("sweepr.ps1 not found: cannot determine the program folder: %v", err)
+	}
+	script := filepath.Join(dir, "sweepr.ps1")
+	if info, err := os.Stat(script); err != nil || info.IsDir() {
+		return fail("sweepr.ps1 not found in %s", dir)
 	}
 
-	// The console sends Ctrl+C to PowerShell as well; let it decide.
-	signal.Ignore(os.Interrupt)
+	powershell, err := windowsPowerShellPath()
+	if err != nil {
+		return fail("%v", err)
+	}
 
-	cmd := exec.Command(powerShellPath(), "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", commandLine(script, args))
+	// No -NonInteractive: the main menu reads keys. No -File: the router
+	// expects this -Command form, which keeps every argument a plain string.
+	cmd := exec.Command(powershell,
+		"-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
+		"-Command", psCommandText(script, args))
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return exitErr.ExitCode()
-		}
-		fmt.Fprintf(os.Stderr, "sw: could not start PowerShell: %v\n", err)
-		return 1
+
+	// Ctrl+C reaches PowerShell too. Catching it here (instead of ignoring it,
+	// which the child would inherit) keeps the launcher alive until the script
+	// has decided how to end, so the shell prompt does not return early.
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	defer signal.Stop(interrupts)
+
+	if err := cmd.Start(); err != nil {
+		return fail("cannot start %s: %v", powershell, err)
+	}
+	err = cmd.Wait()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	if err != nil {
+		return fail("waiting for PowerShell failed: %v", err)
 	}
 	return 0
 }
 
-// scriptPath resolves sweepr.ps1 beside the real executable; winget runs this
-// through a symlink in its Links folder.
-func scriptPath() (string, error) {
+// programDir returns the folder of the real executable. winget starts sw.exe
+// through a symbolic link in its Links folder, so the link is resolved; if
+// that fails, the folder the program was started from is used.
+func programDir() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
 	}
-	script := filepath.Join(filepath.Dir(exe), "sweepr.ps1")
-	if _, err := os.Stat(script); err != nil {
-		return "", fmt.Errorf("sweepr.ps1 not found next to %s", exe)
-	}
-	return script, nil
+	return filepath.Dir(exe), nil
 }
 
-// powerShellPath is the absolute Windows PowerShell path, so a powershell.exe
-// earlier on PATH is never picked up instead.
-func powerShellPath() string {
+// windowsPowerShellPath returns the absolute path of Windows PowerShell 5.1
+// under %SystemRoot%. The path must be absolute so that a powershell.exe in
+// PATH or in the current folder can never be picked instead.
+func windowsPowerShellPath() (string, error) {
 	root := os.Getenv("SystemRoot")
 	if root == "" {
 		root = `C:\Windows`
 	}
-	return filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-}
-
-// commandLine builds `& 'script' 'arg' ...; exit $LASTEXITCODE` with every
-// value single-quoted, so PowerShell never expands or splits an argument.
-func commandLine(script string, args []string) string {
-	parts := make([]string, 0, len(args)+2)
-	parts = append(parts, "&", quote(script))
-	for _, arg := range args {
-		parts = append(parts, quote(arg))
+	p := filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("Windows PowerShell path %s is not absolute; check SystemRoot", p)
 	}
-	return strings.Join(parts, " ") + "; exit $LASTEXITCODE"
-}
-
-func quote(value string) string {
-	// PowerShell ends a '...' literal at U+2018, U+2019, U+201A and U+201B as well
-	// as at the ASCII apostrophe, so each of them has to be doubled.
-	var b strings.Builder
-	b.WriteByte('\'')
-	for _, r := range value {
-		b.WriteRune(r)
-		switch r {
-		case '\'', '\u2018', '\u2019', '\u201A', '\u201B':
-			b.WriteRune(r)
-		}
-	}
-	b.WriteByte('\'')
-	return b.String()
+	return p, nil
 }
