@@ -490,6 +490,12 @@ Describe 'Bounded owner process execution' {
             $timer.Elapsed.TotalSeconds | Should -BeLessThan 20
             Test-Path -LiteralPath $pidFile | Should -BeTrue
             $childId = [int](@(Get-Content -LiteralPath $pidFile)[0])
+            # A killed process can stay visible for a moment while Windows tears it down. A child that
+            # was not killed sleeps for 60 seconds, so a short bounded wait still tells the two apart.
+            $deadline = [Diagnostics.Stopwatch]::StartNew()
+            while ((Get-Process -Id $childId -ErrorAction SilentlyContinue) -and $deadline.Elapsed.TotalSeconds -lt 5) {
+                Start-Sleep -Milliseconds 100
+            }
             Get-Process -Id $childId -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
         }
         finally {
@@ -497,9 +503,13 @@ Describe 'Bounded owner process execution' {
                 # Only the process created by this fixture is eligible for cleanup.
                 $receipt = @(Get-Content -LiteralPath $pidFile)
                 $remaining = Get-Process -Id ([int]$receipt[0]) -ErrorAction SilentlyContinue
-                if ($remaining -and $remaining.StartTime.ToUniversalTime().Ticks -eq [long]$receipt[1]) {
-                    $remaining.Kill()
+                # The process may exit between the lookup and these reads; that is the outcome we want.
+                try {
+                    if ($remaining -and $remaining.StartTime.ToUniversalTime().Ticks -eq [long]$receipt[1]) {
+                        $remaining.Kill()
+                    }
                 }
+                catch { }
             }
         }
     }
