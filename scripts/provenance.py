@@ -3,7 +3,7 @@
 
 Advisory only: not part of the gate. For every file it compares the text in
 the working tree with the same file (or its rename source) in the original
-import commit bb3e845 and counts substantive lines:
+import commit 37b61b6 and counts substantive lines:
 
   unchanged  line equal to an old line at the matching place
   modified   line in a changed block that is at least 60 % similar to an old line
@@ -35,7 +35,7 @@ import re
 import subprocess
 import sys
 
-BASE_DEFAULT = "bb3e845"
+BASE_DEFAULT = "37b61b6"
 MIN_LENGTH = 8
 SIMILARITY = 0.6
 BLOCK_LINES = 3
@@ -179,7 +179,6 @@ def list_files(root, paths):
     else:
         args = ["ls-files"]
     names = git(root, *args).stdout.decode("utf-8", "replace").splitlines()
-    if not paths:
     return sorted(name for name in set(names) if os.path.isfile(os.path.join(root, name)))
 
 
