@@ -921,8 +921,9 @@ Describe 'Read-SwHistory: one file only, read only, no lock (H-1, H-2, H-12, S1,
     It 'H-12 throws, and names a real error, when the log path is a folder' {
         $path = [System.IO.Path]::Combine($TestDrive, 'folder-log', 'operations.log')
         [void][System.IO.Directory]::CreateDirectory($path)
-        $err = Get-ErrorFrom { Read-SwHistory -Path $path }
+        $err = Get-ErrorFrom { $null = Read-SwHistory -Path $path }
         ($null -ne $err) | Should -BeTrue
+        $err | Should -BeOfType ([System.Management.Automation.ErrorRecord])
         $err.Exception | Should -Not -BeOfType ([System.Management.Automation.CommandNotFoundException])
         $err.FullyQualifiedErrorId | Should -Not -Match 'CommandNotFound'
     }
