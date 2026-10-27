@@ -228,4 +228,4 @@ Regeln für Änderungen (Sicherheit, Kompatibilität, CI, Release): [docs/engine
 
 ## Lizenz
 
-GPL-3.0 – siehe [LICENSE](LICENSE). Lizenz- und Drittanbieter-Hinweise: [NOTICE.md](NOTICE.md).
+GPL-3.0 – siehe [LICENSE](LICENSE).
