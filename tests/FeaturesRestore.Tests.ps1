@@ -1636,7 +1636,7 @@ Describe "sw history counts the RESTORED action" {
     }
 
     It "Counts RESTORED, FAILED and SKIPPED of a restore session, nothing under other" {
-        $history = Read-SweeprHistory -Path (Write-HistoryFixture $script:RestoreLogLines)
+        $history = Read-SwHistory -Path (Write-HistoryFixture $script:RestoreLogLines)
         @($history.Sessions).Count | Should -Be 1
         $actions = $history.Sessions[0].actions
         $actions.restored | Should -Be 2
@@ -1648,7 +1648,7 @@ Describe "sw history counts the RESTORED action" {
     }
 
     It "Keeps the action name restored and the appx:/feature: paths" {
-        $history = Read-SweeprHistory -Path (Write-HistoryFixture $script:RestoreLogLines)
+        $history = Read-SwHistory -Path (Write-HistoryFixture $script:RestoreLogLines)
         $history.Operations[0].action | Should -Be 'restored'
         $history.Operations[0].path | Should -BeExactly 'appx:Contoso.Example_2.5.0.0_x64__examplepublisher'
         $history.Operations[1].path | Should -BeExactly 'feature:Contoso-Legacy'
@@ -1657,22 +1657,22 @@ Describe "sw history counts the RESTORED action" {
 
     It "Shows restored in the text summary and in the JSON" {
         $path = Write-HistoryFixture $script:RestoreLogLines
-        $history = Read-SweeprHistory -Path $path
-        Format-SweeprHistoryActions $history.Sessions[0].actions | Should -Match 'restored 2'
-        $json = ConvertTo-SweeprHistoryJson -History $history -Limit 20 -LogPath $path | ConvertFrom-Json
+        $history = Read-SwHistory -Path $path
+        Format-SwHistoryActions $history.Sessions[0].actions | Should -Match 'restored 2'
+        $json = ConvertTo-SwHistoryJson -History $history -Limit 20 -LogPath $path | ConvertFrom-Json
         $json.sessions[0].actions.restored | Should -Be 2
     }
 
     It "Does not call a session with only a RESTORED line empty" {
         $path = Write-HistoryFixture @("[2026-10-25 11:00:02] [features run=r2] RESTORED feature:Contoso-Legacy (Enable-WindowsOptionalFeature -Online -FeatureName Contoso-Legacy -NoRestart)")
-        $history = Read-SweeprHistory -Path $path
-        Format-SweeprHistoryActions $history.Sessions[0].actions | Should -Be 'restored 1'
+        $history = Read-SwHistory -Path $path
+        Format-SwHistoryActions $history.Sessions[0].actions | Should -Be 'restored 1'
     }
 
     It "Counts restored as 0 for the sessions of the other commands" {
         $path = Write-HistoryFixture @(
             "[2026-10-25 10:00:01] [clean run=c1] REMOVED C:\Temp\one (1.0KB)"
         )
-        (Read-SweeprHistory -Path $path).Sessions[0].actions.restored | Should -Be 0
+        (Read-SwHistory -Path $path).Sessions[0].actions.restored | Should -Be 0
     }
 }

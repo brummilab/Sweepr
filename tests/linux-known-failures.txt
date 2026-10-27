@@ -290,12 +290,10 @@ install.ps1 -Uninstall.Records the cache removal in the operation log
 sw --help and --version.Reports the version, platform and install method
 sw --help and --version.Returns failure for an unknown command from the installed File entrypoint
 sw --help and --version.Shows the logo with the website and the command layout
-sw history command.Prints sessions and operations as text
-sw history command.Refuses a limit out of range with exit code 2
-sw history command.Refuses a missing limit with exit code 2
-sw history command.Refuses a stray argument with exit code 2
-sw history command.Takes the limit as one word
-sw history command.Takes the limit as two words
+sw history on real Windows (H-1, H-12, S2, S6).H-1 reads %USERPROFILE%\.config\sweepr\operations.log in profile mode
+sw history on real Windows (H-1, H-12, S2, S6).H-1 reads data\config\operations.log next to the program folder in portable mode
+sw history on real Windows (H-1, H-12, S2, S6).H-12 exits 1 with the path in the message when access to the log is denied by an ACL
+sw history on real Windows (H-1, H-12, S2, S6).H-12 throws when access to the log is denied by an ACL
 sw optimize steps.Allows a laptop only with complete online non-discharging power evidence
 sw optimize steps.An unrelated unhealthy disk does not block the healthy system disk
 sw optimize steps.Checks target disk health before optimization and keeps a failing target untouched
