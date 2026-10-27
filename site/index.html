@@ -37,21 +37,20 @@
           <img class="wordmark" src="img/logo-wordmark-light.svg" alt="Sweepr" width="480" height="128">
         </picture>
         <h1>Mehr Platz, weniger Ballast.</h1>
-        <p class="lead">Freies Open-Source-Kommandozeilen-Tool für Windows 10 und 11: Caches leeren, Apps samt Resten
-          deinstallieren, optimieren, Speicher analysieren und das System live überwachen. Alles, was löscht, lässt sich
-          vorher ansehen.</p>
+        <p class="lead">Kommandozeilen-Tool für Windows 10 und 11. Leert Caches, deinstalliert Apps samt Resten, zeigt, was
+          Platz belegt. Jeder löschende Befehl hat eine Vorschau.</p>
         <div class="cta">
           <a class="btn btn-primary" href="#installation">Installieren</a>
           <a class="btn" href="https://github.com/brummilab/Sweepr">Quellcode auf GitHub</a>
         </div>
-        <p class="meta">Windows 10 / 11 · Windows PowerShell 5.1 · GPL-3.0 · kostenlos</p>
+        <p class="meta">Windows 10 / 11 · Windows PowerShell 5.1 · GPL-3.0</p>
       </div>
     </section>
 
     <section id="funktionen" class="section">
       <div class="wrap">
         <h2>Funktionen</h2>
-        <p class="section-lead">Ein Befehl, <code>sw</code>, für die übliche PC-Pflege. Ohne Argumente öffnet sich ein Menü.</p>
+        <p class="section-lead">Alle Befehle laufen über <code>sw</code>; ohne Argument öffnet sich ein Menü.</p>
         <div class="grid">
           <article class="card">
             <h3>Deep Clean</h3>
@@ -70,7 +69,7 @@
           </article>
           <article class="card">
             <h3>Speicheranalyse</h3>
-            <p>Interaktiver Disk-Explorer im Terminal, große Dateien schnell finden.</p>
+            <p>Zeigt im Terminal, welche Ordner und Dateien Platz belegen.</p>
             <code>sw analyze</code>
           </article>
           <article class="card">
@@ -85,17 +84,17 @@
           </article>
           <article class="card">
             <h3>Windows entschlacken</h3>
-            <p>Vorinstallierte Apps und optionale Features aus einer geprüften Liste entfernen – mit Wiederherstellung.</p>
+            <p>Vorinstallierte Apps und optionale Features aus einer geprüften Liste entfernen; <code>--restore</code> holt sie zurück.</p>
             <code>sw features</code>
           </article>
           <article class="card">
             <h3>PC einmal prüfen</h3>
-            <p>Nur lesend, ohne Installation, mit HTML-Bericht. Ideal für fremde PCs.</p>
+            <p>Nur lesend, ohne Installation; Ergebnis als HTML-Bericht.</p>
             <code>sw check</code>
           </article>
           <article class="card">
             <h3>Verlauf</h3>
-            <p>Was wurde wann entfernt? Jede Aktion steht im Protokoll, auch als JSON.</p>
+            <p>Zeigt, was wann entfernt wurde, auch als JSON.</p>
             <code>sw history</code>
           </article>
         </div>
@@ -106,30 +105,26 @@
       <div class="wrap split">
         <div>
           <h2>Erst ansehen, dann löschen</h2>
-          <p>Jeder Befehl, der etwas entfernt, hat eine Vorschau. <code>--dry-run</code> zeigt genau, was passieren würde,
-            und ändert nichts. Bei <code>sw features</code> sogar mit den exakten Windows-Befehlen.</p>
-          <p>Wer mehr wissen will, nimmt <code>--debug</code> dazu und bekommt ein Detail-Log.</p>
+          <p><code>--dry-run</code> zeigt, was entfernt würde, und ändert nichts. Bei <code>sw features</code> stehen dort
+            die exakten Windows-Befehle.</p>
+          <p><code>--debug</code> schreibt zusätzlich ein Detail-Log.</p>
         </div>
-        <div class="terminal" role="img" aria-label="Beispiel einer Vorschau im Terminal">
+        <div class="terminal">
           <div class="terminal-bar"><span></span><span></span><span></span></div>
 <pre><span class="prompt">PS&gt;</span> sw clean --dry-run
-<span class="dim">Preview only, nothing is deleted.</span>
-
-  User temp files            <span class="num">1.2 GB</span>
-  Browser caches             <span class="num">840 MB</span>
-  Windows error reports      <span class="num">96 MB</span>
-  Developer tool caches      <span class="num">2.3 GB</span>
-
-<span class="ok">Would free about 4.4 GB.</span></pre>
+<span class="prompt">PS&gt;</span> sw uninstall --dry-run
+<span class="prompt">PS&gt;</span> sw optimize --dry-run
+<span class="prompt">PS&gt;</span> sw purge --dry-run
+<span class="prompt">PS&gt;</span> sw features --dry-run
+<span class="prompt">PS&gt;</span> sw history</pre>
         </div>
       </div>
     </section>
 
     <section id="sicherheit" class="section">
       <div class="wrap">
-        <h2>Sicherheit zuerst</h2>
-        <p class="section-lead">Ein Aufräumer, der das Falsche löscht, richtet mehr Schaden an als einer, der etwas übersieht.
-          Sweepr überspringt alles, was nicht nachweislich sicher ist.</p>
+        <h2>Sicherheit</h2>
+        <p class="section-lead">Was nicht nachweislich sicher entfernt werden kann, bleibt liegen.</p>
         <ul class="checks">
           <li><strong>Geschützte Ordner:</strong> <code>C:\Windows</code>, <code>C:\Program Files</code>, Windows Defender und
             das Profil-Stammverzeichnis werden nie angefasst, ebenso Schlüssel- und Anmeldedaten.</li>
@@ -149,7 +144,6 @@
     <section id="installation" class="section section-alt">
       <div class="wrap">
         <h2>Installation</h2>
-        <p class="section-lead">Drei Wege, je nachdem, was auf dem PC sein darf.</p>
         <div class="grid grid-3">
           <article class="card">
             <h3>Portable</h3>
@@ -176,7 +170,7 @@
     <section id="roadmap" class="section">
       <div class="wrap">
         <h2>Roadmap</h2>
-        <p class="section-lead">Was fertig ist und was als Nächstes kommt. Die ausführliche Fassung steht in
+        <p class="section-lead">Ausführlich in
           <a href="https://github.com/brummilab/Sweepr/blob/main/ROADMAP.md">ROADMAP.md</a>.</p>
         <ol class="roadmap">
           <li class="done">
@@ -211,7 +205,7 @@
             <h3>Später</h3>
             <ul>
               <li>winget und Scoop</li>
-              <li>Community</li>
+              <li>Vorstellung auf Reddit</li>
             </ul>
           </li>
         </ol>

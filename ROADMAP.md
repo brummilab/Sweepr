@@ -1,6 +1,6 @@
 # Roadmap
 
-Wohin sich Sweepr entwickelt. Die Reihenfolge kann sich ändern; Sicherheit geht vor Tempo. Wünsche und Fehler bitte als
+Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bitte als
 [Issue](https://github.com/brummilab/Sweepr/issues) melden.
 
 ## Erledigt
@@ -9,11 +9,11 @@ Wohin sich Sweepr entwickelt. Die Reihenfolge kann sich ändern; Sicherheit geht
   `sw status`
 - **Sicherheit:** geschützte System- und Profilordner, Whitelist, `--dry-run` für alles, was löscht, Papierkorb für
   Deinstallationsreste, Protokoll `operations.log` mit `sw history`
-- **Portable Version** (läuft vom USB-Stick, ohne Spuren im Profil) und **Installation mit Komponentenauswahl**
+- **Portable Version** (läuft z. B. vom USB-Stick, Daten bleiben im Programmordner) und **Installation mit Komponentenauswahl**
 - **Windows entschlacken** (`sw features`): geprüfte Liste vorinstallierter Apps und optionaler Features, mit
   `--restore` zum Zurückholen
 - **PC einmal prüfen** (`sw check`): nur lesend, mit HTML-Bericht, ohne Installation
-- Eigener Launcher `sw.exe`, automatischer Hinweis auf neue Versionen
+- Launcher `sw.exe`, Hinweis auf neue Versionen
 
 ## Als Nächstes
 
@@ -35,4 +35,4 @@ Wohin sich Sweepr entwickelt. Die Reihenfolge kann sich ändern; Sicherheit geht
 ## Später
 
 - Installation über **winget** und **Scoop**
-- Projektseite und Bekanntmachung in der Community
+- Vorstellung auf Reddit
