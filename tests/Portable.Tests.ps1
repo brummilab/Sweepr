@@ -258,10 +258,39 @@ Describe 'Command scripts take their files from the configured folders' {
         $source = Get-Content -LiteralPath $path -Raw
         $source | Should -Match 'Get-ConfigPath|Get-CachePath|\$script:Config\.(ConfigPath|CachePath)'
     }
+}
 
-    It 'Keeps the update check file in the cache folder' {
-        $source = Get-Content -LiteralPath (Join-Path $script:ProjectRoot 'lib\core\update_check.ps1') -Raw
-        $source | Should -Match "Get-CachePath\) 'update-check\.json'"
+Describe 'Update check file follows the configured folder' {
+    BeforeAll {
+        . (Join-Path $script:ProjectRoot 'lib\core\update_check.ps1')
+    }
+
+    BeforeEach {
+        $script:Case = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:UserHome = Join-Path $script:Case 'home'
+        $script:AppRoot = Join-Path $script:Case 'app'
+        New-Item -ItemType Directory -Path $script:UserHome, $script:AppRoot -Force | Out-Null
+        $env:USERPROFILE = $script:UserHome
+        $script:SavedSystemRoot = $env:SystemRoot
+        $env:SystemRoot = 'C:\Windows'
+        Mock Start-SwBackgroundProcess { }
+    }
+
+    AfterEach {
+        $env:USERPROFILE = $script:SavedProfile
+        $env:SWEEPR_DATA_DIR = $script:SavedDataDir
+        $env:SystemRoot = $script:SavedSystemRoot
+    }
+
+    It 'Writes update-check.json into the data folder cache, not the profile' {
+        # sweepr.ps1 points SWEEPR_DATA_DIR at <program>\data for a portable copy.
+        $data = Join-Path $script:AppRoot 'data'
+        $env:SWEEPR_DATA_DIR = $data
+        $script:SWEEPR_BASE_LOADED = $false
+        . (Join-Path $script:ProjectRoot 'lib\core\base.ps1')
+        $null = Start-SwUpdateProbe -RootDir $script:AppRoot -Version '1.0.0' -Method 'Portable'
+        Test-Path -LiteralPath (Join-Path $data 'cache/update-check.json') -PathType Leaf | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $script:UserHome -Recurse -Force).Count | Should -Be 0
     }
 }
 
