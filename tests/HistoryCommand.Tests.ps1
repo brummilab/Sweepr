@@ -3,9 +3,9 @@
 # Covers the rules H-1 to H-18 and the safety invariants S1 to S7. The rule
 # number is part of every test name.
 #
-# Interface pinned here (spec 2.7):
+# Interface pinned here:
 #   Read-SwHistory -Path <file>                        object with Sessions and Operations, oldest first
-#   Format-SwHistoryActions -Actions <actions object>  "removed 1, failed 1" or the "no file actions" hint
+#   Format-SwHistoryActions -Actions <actions object>  "removed 1, failed 1" or the hint for a session without actions
 #   ConvertTo-SwHistoryJson -History -Limit -LogPath   the JSON document (string)
 #   Write-SwHistoryText -History -Limit -LogPath       text on the host (information stream, 6>&1)
 #   ConvertTo-SwHistoryLimit -Value <string>           [int] 1..200 or $null
@@ -14,7 +14,7 @@
 #   - Function tests and most process tests are platform neutral: fixture logs are plain text files in
 #     $TestDrive (Windows paths only as text); the log path is steered with SWEEPR_DATA_DIR.
 #   - bin\history.ps1 and the router (sweepr.ps1) run in a child process of the same PowerShell host.
-#     The router forms of --limit (spec 2.1) go through the real router; the other argument shapes call
+#     The router forms of --limit go through the real router; the other argument shapes call
 #     the script directly with named parameters (-Json, -Limit:<value>, -ShowHelp, positional words).
 #   - The router creates its own config and cache folders; "creates nothing" is therefore checked on the
 #     script (direct call) and, for the router, on the log file and everything below the data folder
@@ -141,7 +141,7 @@ BeforeAll {
         return Read-SwHistory -Path (New-LogFile $Lines)
     }
 
-    # Records of two plain REMOVED entries (spec H-17 example).
+    # Records of two plain REMOVED entries.
     function script:Get-ExampleLines {
         return @(
             ''

@@ -1345,7 +1345,7 @@ Describe "sw features operations log" {
         $script:OnAppRemove = { param($Package) if ($Package -like 'Contoso.Other_*') { throw 'app boom' } }
         $script:OnPrompt = { $script:Packages.Remove('Contoso.Third') }
         $null = Invoke-Features -Keys (New-SelectionKeys -Select 0, 1, 2, 3 -Rows 5)
-        $history = Read-SweeprHistory -Path $script:LogFile
+        $history = Read-SwHistory -Path $script:LogFile
         @($history.Sessions).Count | Should -Be 1
         $session = $history.Sessions[0]
         $session.command | Should -Be 'features'
@@ -1390,7 +1390,7 @@ Describe "sw history counts the features actions" {
     }
 
     It "Counts REMOVED, DISABLED, FAILED and SKIPPED of a features session, nothing under other" {
-        $history = Read-SweeprHistory -Path (Write-HistoryFixture $script:FeatureLogLines)
+        $history = Read-SwHistory -Path (Write-HistoryFixture $script:FeatureLogLines)
         @($history.Sessions).Count | Should -Be 1
         $actions = $history.Sessions[0].actions
         $history.Sessions[0].command | Should -Be 'features'
@@ -1403,7 +1403,7 @@ Describe "sw history counts the features actions" {
     }
 
     It "Keeps the appx: and feature: identifiers as paths" {
-        $history = Read-SweeprHistory -Path (Write-HistoryFixture $script:FeatureLogLines)
+        $history = Read-SwHistory -Path (Write-HistoryFixture $script:FeatureLogLines)
         $history.Operations[0].path | Should -BeExactly 'appx:Contoso.Example_2.5.0.0_x64__examplepublisher'
         $history.Operations[1].path | Should -BeExactly 'feature:Contoso-Legacy'
         $history.Operations[1].action | Should -Be 'disabled'
@@ -1412,17 +1412,17 @@ Describe "sw history counts the features actions" {
 
     It "Shows disabled in the text summary and in the JSON" {
         $path = Write-HistoryFixture $script:FeatureLogLines
-        $history = Read-SweeprHistory -Path $path
-        Format-SweeprHistoryActions $history.Sessions[0].actions | Should -Match 'disabled 1'
-        $json = ConvertTo-SweeprHistoryJson -History $history -Limit 20 -LogPath $path | ConvertFrom-Json
+        $history = Read-SwHistory -Path $path
+        Format-SwHistoryActions $history.Sessions[0].actions | Should -Match 'disabled 1'
+        $json = ConvertTo-SwHistoryJson -History $history -Limit 20 -LogPath $path | ConvertFrom-Json
         $json.sessions[0].actions.disabled | Should -Be 1
         $json.sessions[0].actions.removed | Should -Be 1
     }
 
     It "Does not call a session with only a DISABLED line empty" {
         $path = Write-HistoryFixture @("[2026-10-25 10:00:02] [features run=f2] DISABLED feature:Contoso-Legacy (Disable-WindowsOptionalFeature -Online -FeatureName Contoso-Legacy -NoRestart)")
-        $history = Read-SweeprHistory -Path $path
-        Format-SweeprHistoryActions $history.Sessions[0].actions | Should -Be 'disabled 1'
+        $history = Read-SwHistory -Path $path
+        Format-SwHistoryActions $history.Sessions[0].actions | Should -Be 'disabled 1'
     }
 
     It "Counts appx-provisioned: lines like any other path" {
@@ -1431,7 +1431,7 @@ Describe "sw history counts the features actions" {
             "[2026-10-25 10:00:02] [features run=f3] REMOVED appx-provisioned:Contoso.Example_2.5.0.0_neutral_~_examplepublisher (Remove-AppxProvisionedPackage -Online -PackageName Contoso.Example_2.5.0.0_neutral_~_examplepublisher)",
             "[2026-10-25 10:00:03] [features run=f3] FAILED appx-provisioned:Contoso.Other_2.5.0.0_neutral_~_examplepublisher (Remove-AppxProvisionedPackage -Online -PackageName Contoso.Other_2.5.0.0_neutral_~_examplepublisher; boom)"
         )
-        $history = Read-SweeprHistory -Path $path
+        $history = Read-SwHistory -Path $path
         $history.Sessions[0].actions.removed | Should -Be 2
         $history.Sessions[0].actions.failed | Should -Be 1
         $history.Sessions[0].actions.other | Should -Be 0
@@ -1443,7 +1443,7 @@ Describe "sw history counts the features actions" {
             "[2026-10-25 10:00:01] [clean run=c1] REMOVED C:\Temp\one (1.0KB)",
             "[2026-10-25 10:00:02] [clean run=c1] SKIPPED C:\Temp\two (refused)"
         )
-        $actions = (Read-SweeprHistory -Path $path).Sessions[0].actions
+        $actions = (Read-SwHistory -Path $path).Sessions[0].actions
         $actions.removed | Should -Be 1
         $actions.skipped | Should -Be 1
         $actions.disabled | Should -Be 0
