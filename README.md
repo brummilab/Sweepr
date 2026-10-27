@@ -19,7 +19,7 @@
 
 ## Schnellstart
 
-Sweepr läuft auf Windows 10 und 11 mit dem eingebauten Windows PowerShell 5.1. Die Release-Dateien (z. B. Release `V0.1.0-windows`) liegen unter [github.com/brummilab/Sweepr/releases](https://github.com/brummilab/Sweepr/releases):
+Sweepr läuft auf Windows 10 und 11 mit dem eingebauten Windows PowerShell 5.1. Die Release-Dateien liegen unter [github.com/brummilab/Sweepr/releases](https://github.com/brummilab/Sweepr/releases):
 
 | Datei | Zweck |
 | --- | --- |
