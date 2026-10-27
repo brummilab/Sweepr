@@ -5,6 +5,7 @@
   </picture>
   <p><b>Windows-PC aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen. Freies Open-Source-CLI.</b></p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL_v3-blue.svg?style=flat-square" alt="License"></a>
+  <p><a href="https://brummilab.github.io/Sweepr/">Projektseite</a> · <a href="ROADMAP.md">Roadmap</a></p>
 </div>
 
 ## Funktionen
@@ -223,7 +224,7 @@ Vor jedem Merge muss das Gate grün sein:
 
 Unter Windows (Git Bash) laufen dabei alle Pester-Tests, sonst die plattformneutralen.
 
-Regeln für Änderungen (Sicherheit, Kompatibilität, CI, Release): [docs/engineering-rules.md](docs/engineering-rules.md).
+Regeln für Änderungen (Sicherheit, Kompatibilität, CI, Release): [docs/engineering-rules.md](docs/engineering-rules.md). Geplante Entwicklung: [ROADMAP.md](ROADMAP.md). Die Projektseite (GitHub Pages) liegt in `site/` und wird bei Änderungen dort automatisch veröffentlicht.
 
 ## Lizenz
 
