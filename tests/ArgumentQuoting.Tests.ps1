@@ -4,7 +4,7 @@
 # path or argument holding one must not end the literal or run a command.
 # Not affected: the sw.cmd / sweepr.cmd launchers in install.ps1 (they pass %* to
 # powershell -File, no PowerShell source is built) and the Go sw.exe, which has its
-# own tests in cmd/sw/quote_test.go.
+# own tests in cmd/sw/launcher_test.go.
 
 # Hostile values, defined at discovery time because they feed -ForEach. Windows file
 # names cannot hold " : \ /, so path positions get a sanitised copy (ConvertTo-SafeName
