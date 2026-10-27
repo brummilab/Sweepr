@@ -894,6 +894,7 @@ function Get-SweeprInstallNestedFiles {
         "cmd\analyze\view.go"
         "cmd\analyze\view_test.go"
         "cmd\analyze\windows_test.go"
+        "cmd\sw\launcher_test.go"
         "cmd\sw\main.go"
         "cmd\sw\main_test.go"
         "cmd\sw\quote_test.go"
