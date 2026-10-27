@@ -980,6 +980,7 @@ function Get-SweeprInstallNestedFiles {
         "tests\FeaturesRestore.Tests.ps1"
         "tests\GitProxy.Tests.ps1"
         "tests\History.Tests.ps1"
+        "tests\HistoryCommand.Tests.ps1"
         "tests\Install.Tests.ps1"
         "tests\InstallComponents.Tests.ps1"
         "tests\InstallLifecycle.Tests.ps1"
