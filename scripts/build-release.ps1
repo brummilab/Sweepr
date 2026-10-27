@@ -313,7 +313,7 @@ Get-ChildItem $releaseDir | ForEach-Object {
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Test the ZIP archive: Expand-Archive release\$archiveName.zip -DestinationPath test\" -ForegroundColor Gray
-Write-Host "  2. Follow RELEASE.md to sign and publish" -ForegroundColor Gray
+Write-Host "  2. Follow RELEASE.md to check and publish" -ForegroundColor Gray
 Write-Host ""
 Write-Host "To verify integrity:" -ForegroundColor Cyan
 Write-Host "  sha256sum -c release\SHA256SUMS.txt" -ForegroundColor Gray

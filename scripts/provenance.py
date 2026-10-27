@@ -213,7 +213,16 @@ def main(argv=None):
         return 2
 
     base = Base(root, args.base)
-    paths = [os.path.relpath(os.path.abspath(p), root) for p in args.paths]
+    paths = []
+    for given in args.paths:
+        full = os.path.realpath(os.path.abspath(given))
+        if not os.path.exists(full):
+            print(f"provenance: path not found: {given}", file=sys.stderr)
+            return 2
+        if os.path.commonpath([full, os.path.realpath(root)]) != os.path.realpath(root):
+            print(f"provenance: path is outside the repository: {given}", file=sys.stderr)
+            return 2
+        paths.append(os.path.relpath(full, os.path.realpath(root)))
     rows, skipped = [], []
     for path in list_files(root, paths):
         row = measure(root, path, base, args.moved_threshold)

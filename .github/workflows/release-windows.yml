@@ -243,6 +243,6 @@ jobs:
 
             Already installed? Run `sw update`.
 
-            The files below are what package managers and `sw` download. `SHA256SUMS.txt` lists their checksums; `sw` refuses a downloaded tool that does not match. Releases are not code-signed unless these notes say otherwise.
+            The files below are the release archives and the tools `sw` downloads. `SHA256SUMS.txt` lists their checksums; `sw` refuses a downloaded tool that does not match. Releases are not code-signed unless these notes say otherwise.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

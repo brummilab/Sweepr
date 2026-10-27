@@ -44,7 +44,7 @@ Two scans can target the same path and still represent different requests. Estab
 
 Cross-compilation proves the Go source builds for Windows; it does not exercise PowerShell, junction behavior, shell recycling or CMD quoting. Use actual Windows fixtures for those surfaces and mock destructive third-party owner commands. Preserve dry-run and positive eligible-target controls alongside protected-target tests.
 
-A passing CI run and pushed source do not establish delivery in signed packages. Keep source, native validation and release evidence separate in the development record, and verify the actual release channel before telling users an update contains a fix.
+A passing CI run and pushed source do not establish delivery in a published release. Keep source, native validation and release evidence separate in the development record, and verify the actual release channel before telling users an update contains a fix.
 
 ## Installer inventory and shared directories
 
