@@ -1,81 +1,57 @@
-# Sweepr - Common Functions Library
-# Main entry point that loads all core modules
+# Sweepr - runtime loader for the router
+#
+# One dot-source gives the caller the shared PowerShell runtime: version.ps1, base.ps1, log.ps1,
+# file_ops.ps1 and ui.ps1, all taken from the folder of this file (never from the working directory
+# or caller variables). Loading writes nothing, creates no files and uses no network; loading twice
+# is harmless. The update check, TUI download, history and command modules are not loaded here.
 
-#Requires -Version 5.1
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+. ([System.IO.Path]::Combine($PSScriptRoot, 'version.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'base.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'log.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'file_ops.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'ui.ps1'))
 
-# Prevent multiple sourcing
-if ((Get-Variable -Name 'SWEEPR_COMMON_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_COMMON_LOADED) {
-    return
-}
-$script:SWEEPR_COMMON_LOADED = $true
-
-# Get the directory containing this script
-$script:SWEEPR_CORE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:SWEEPR_LIB_DIR = Split-Path -Parent $script:SWEEPR_CORE_DIR
-$script:SWEEPR_ROOT_DIR = Split-Path -Parent $script:SWEEPR_LIB_DIR
-
-# Version helpers are standalone and safe to load before the other core modules.
-. "$script:SWEEPR_CORE_DIR\version.ps1"
-
-# ============================================================================
-# Load Core Modules
-# ============================================================================
-
-# Base definitions (colors, icons, constants)
-. "$script:SWEEPR_CORE_DIR\base.ps1"
-
-# Logging functions
-. "$script:SWEEPR_CORE_DIR\log.ps1"
-
-# Safe file operations
-. "$script:SWEEPR_CORE_DIR\file_ops.ps1"
-
-# UI components
-. "$script:SWEEPR_CORE_DIR\ui.ps1"
-
-# ============================================================================
-# Version Information
-# ============================================================================
-
-$script:SWEEPR_VERSION = Get-SweeprVersionString -RootDir $script:SWEEPR_ROOT_DIR
-
-function Get-SweeprVersion {
+function Get-SwRuntimeInfo {
     <#
     .SYNOPSIS
-        Get Sweepr version information
+        Sweepr version, PowerShell version and Windows version for --version and the debug header.
+    .DESCRIPTION
+        The installation root is two levels above the folder of this file. An error of the Windows
+        version query reaches the caller, which decides how to report it.
     #>
+    $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    $windows = Get-WindowsVersion
     return @{
-        Version   = $script:SWEEPR_VERSION
-        PowerShell = $PSVersionTable.PSVersion.ToString()
-        Windows    = (Get-WindowsVersion).Version
+        Version    = [string](Get-SwInstalledVersion -RootDir $root)
+        PowerShell = [string]$PSVersionTable.PSVersion.ToString()
+        Windows    = [string]$windows['Version']
     }
 }
 
-# ============================================================================
-# Initialization
-# ============================================================================
-
-function Initialize-Sweepr {
+function Initialize-SwDataFolders {
     <#
     .SYNOPSIS
-        Initialize Sweepr environment
+        Makes sure the config and cache folders of the current data mode exist.
+    .DESCRIPTION
+        The folders come from base.ps1 (profile, portable or SWEEPR_DATA_DIR). Existing folders and
+        their content stay as they are. A folder that cannot be created is a terminating error; the
+        router checks beforehand that the data folder is writable and explains it to the user.
     #>
-
-    # Ensure config directory exists
-    $configPath = Get-ConfigPath
-
-    # Ensure cache directory exists
-    $cachePath = Get-CachePath
-
-    Write-Debug "Sweepr initialized"
-    Write-Debug "Config: $configPath"
-    Write-Debug "Cache: $cachePath"
+    $ErrorActionPreference = 'Stop'
+    foreach ($path in @((Get-ConfigPath), (Get-CachePath))) {
+        # The base functions report a failure as an error record; make sure it really stops here.
+        if (-not [System.IO.Directory]::Exists([string]$path)) {
+            throw "Cannot create the Sweepr data folder: $path"
+        }
+    }
 }
 
-# ============================================================================
-# Exports (functions are available via dot-sourcing)
-# ============================================================================
-# All functions from base.ps1, log.ps1, file_ops.ps1, and ui.ps1 are
-# automatically available when this file is dot-sourced.
+# Old names, kept as forwarding functions (not aliases, so test mocks of either name behave) until the
+# router is rewritten.
+function Get-SweeprVersion { Get-SwRuntimeInfo }
+
+function Initialize-Sweepr { Initialize-SwDataFolders }
+
+# The router relies on these for the rest of its run.
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest

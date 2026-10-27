@@ -23,7 +23,7 @@ A release goes through two steps: CI builds the assets into a draft release, and
 ## 1. Prepare
 
 1. CI is green on the `main` commit you will tag: `Check` and `Validation`, including both PowerShell legs.
-2. Bump the version in one commit: `VERSION` and `$script:SweeprDefaultVersion` in `lib/core/version.ps1`.
+2. Bump the version in one commit: `VERSION` and `$script:SwFallbackVersion` in `lib/core/version.ps1`. (The older variable `$script:SweeprDefaultVersion` takes the same value from it; do not edit it.)
 
 ## 2. Tag
 

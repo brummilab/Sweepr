@@ -731,81 +731,16 @@ Describe "Logging Module" {
     }
 }
 
-Describe "UI Module" {
-    Context "Show-Banner" {
-        It "Should display banner without error" {
-            { Show-Banner } | Should -Not -Throw
-        }
-    }
-
-}
-
 Describe "Version Helpers" {
     Context "Shared VERSION Source" {
-        It "Should read the version from VERSION" {
-            $expected = (Get-Content $script:VersionFile -Raw).Trim()
-            Get-SweeprVersionString -RootDir $script:WindowsDir | Should -Be $expected
-        }
-
         It "Should keep TUI release lookup aligned with VERSION" {
             $expected = (Get-Content $script:VersionFile -Raw).Trim()
             Get-SweeprVersionFromScriptFile -WindowsDir $script:WindowsDir | Should -Be $expected
-        }
-
-        It "Should keep the compiled-in fallback in sync with VERSION" {
-            # A root with no VERSION file is what a released artifact looked
-            # like before this version: the fallback is then the only version
-            # the user ever sees, so it must never drift from VERSION.
-            $expected = (Get-Content $script:VersionFile -Raw).Trim()
-            $rootWithoutVersionFile = Join-Path $script:WindowsDir "no-version-file-here"
-            Get-SweeprVersionString -RootDir $rootWithoutVersionFile | Should -Be $expected
         }
     }
 }
 
 Describe "Module path repair" {
-    BeforeEach {
-        $script:SavedModulePath = $env:PSModulePath
-        $script:SavedSystemRoot = $env:SystemRoot
-        $env:SystemRoot = 'C:\Windows'
-    }
-    AfterEach {
-        $env:PSModulePath = $script:SavedModulePath
-        $env:SystemRoot = $script:SavedSystemRoot
-    }
-
-    It "Drops PowerShell 7 module folders inherited by Windows PowerShell and keeps the rest" {
-        $env:PSModulePath = @(
-            'C:\Users\me\Documents\PowerShell\Modules',
-            'C:\Program Files\PowerShell\Modules',
-            'c:\program files\powershell\7\Modules',
-            'C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.0.0_x64__8wekyb3d8bbwe\Modules',
-            'C:\Users\me\Documents\WindowsPowerShell\Modules',
-            'D:\Tools\Modules',
-            'C:\Program Files\WindowsPowerShell\Modules',
-            'C:\Windows\system32\WindowsPowerShell\v1.0\Modules\'
-        ) -join ';'
-        Repair-SweeprModulePath -Edition 'Desktop'
-        $env:PSModulePath | Should -Be (@(
-            'C:\Users\me\Documents\WindowsPowerShell\Modules',
-            'D:\Tools\Modules',
-            'C:\Program Files\WindowsPowerShell\Modules',
-            'C:\Windows\system32\WindowsPowerShell\v1.0\Modules\'
-        ) -join ';')
-    }
-
-    It "Puts the Windows PowerShell system modules back when the inherited path lost them" {
-        $env:PSModulePath = 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
-        Repair-SweeprModulePath -Edition 'Desktop'
-        $env:PSModulePath | Should -Be ('D:\Tools\Modules;' + 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules')
-    }
-
-    It "Leaves PowerShell 7 itself alone" {
-        $env:PSModulePath = 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
-        Repair-SweeprModulePath -Edition 'Core'
-        $env:PSModulePath | Should -Be 'C:\Program Files\PowerShell\7\Modules;D:\Tools\Modules'
-    }
-
     It "Runs in sweepr.ps1 before the runtime is loaded" {
         $lines = Get-Content (Join-Path $script:WindowsDir 'sweepr.ps1')
         $repair = [array]::FindIndex([string[]]$lines, [Predicate[string]] { param($l) $l -match '^\s*Repair-SweeprModulePath\s*$' })

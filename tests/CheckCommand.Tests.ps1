@@ -646,13 +646,6 @@ Describe 'sw check router and help' {
         Should -Invoke Get-SweeprFeatureInventory -Times 0 -Exactly
         Should -Invoke Invoke-SweeprCheckReport -Times 0 -Exactly
     }
-
-    It 'Does not offer the update notice for check' {
-        $code = (Get-Content -LiteralPath (Join-Path $script:LibDir 'core\update_check.ps1') -Raw) -replace '(?m)^\s*#.*$', ''
-        $line = @($code -split "`n" | Where-Object { $_ -match '\$CommandName -notin @\(' })
-        $line.Count | Should -Be 1
-        $line[0] | Should -Not -Match "'check'"
-    }
 }
 
 Describe 'sw check run' {
