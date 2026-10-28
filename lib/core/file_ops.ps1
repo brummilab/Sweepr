@@ -134,6 +134,15 @@ function Add-SwFileOpsCount {
     $script:TotalItems = $total + $Items
 }
 
+function Get-SwFileOpsInnerMessage {
+    # The message of the innermost exception: a method call wraps the real cause in "Exception calling ...".
+    param($ErrorRecord)
+
+    $exception = $ErrorRecord.Exception
+    while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
+    return [string]$exception.Message
+}
+
 function Write-SwFileOpsOperation {
     # One line of the operations log. The writer decides about SWEEPR_NO_OPLOG and about its own
     # failures; a failure that still gets out is reported and ignored, because the line describes a
@@ -225,17 +234,16 @@ function Initialize-SwFileOpsNative {
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
 
 [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface SwFileOpsShellItem
 {
-    void BindToHandler(IntPtr bindContext, ref Guid handlerId, ref Guid interfaceId, out IntPtr result);
-    void GetParent(out SwFileOpsShellItem parent);
-    void GetDisplayName(uint nameType, out IntPtr name);
-    void GetAttributes(uint mask, out uint attributes);
-    void Compare(SwFileOpsShellItem other, uint hint, out int order);
+    void BindToHandler(IntPtr context, ref Guid handler, ref Guid wanted, out IntPtr found);
+    void GetParent(out SwFileOpsShellItem folder);
+    void GetDisplayName(uint form, out IntPtr text);
+    void GetAttributes(uint selection, out uint answer);
+    void Compare(SwFileOpsShellItem second, uint mode, out int outcome);
 }
 
 // Only the methods up to RecycleItem are declared: the order of the table is what counts, and nothing
@@ -243,12 +251,12 @@ internal interface SwFileOpsShellItem
 [ComImport, Guid("00adb003-bde9-45c6-8e29-d09f9353e108"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface SwFileOpsTransferSource
 {
-    [PreserveSig] int Advise(IntPtr sink, out uint cookie);
-    [PreserveSig] int Unadvise(uint cookie);
-    [PreserveSig] int SetProperties(IntPtr properties);
-    [PreserveSig] int OpenItem(SwFileOpsShellItem item, uint flags, ref Guid interfaceId, out IntPtr result);
-    [PreserveSig] int MoveItem(SwFileOpsShellItem item, SwFileOpsShellItem parentDestination, [MarshalAs(UnmanagedType.LPWStr)] string newName, uint flags, out SwFileOpsShellItem newItem);
-    [PreserveSig] int RecycleItem(SwFileOpsShellItem source, SwFileOpsShellItem parentDestination, uint flags, out SwFileOpsShellItem newItem);
+    [PreserveSig] int Advise(IntPtr listener, out uint token);
+    [PreserveSig] int Unadvise(uint token);
+    [PreserveSig] int SetProperties(IntPtr changes);
+    [PreserveSig] int OpenItem(SwFileOpsShellItem entry, uint options, ref Guid wanted, out IntPtr found);
+    [PreserveSig] int MoveItem(SwFileOpsShellItem entry, SwFileOpsShellItem targetFolder, [MarshalAs(UnmanagedType.LPWStr)] string targetName, uint options, out SwFileOpsShellItem moved);
+    [PreserveSig] int RecycleItem(SwFileOpsShellItem entry, SwFileOpsShellItem targetFolder, uint options, out SwFileOpsShellItem moved);
 }
 
 public static class SwFileOpsNative
@@ -257,9 +265,13 @@ public static class SwFileOpsNative
     private struct ByHandleFileInformation
     {
         public uint FileAttributes;
-        public FILETIME CreationTime;
-        public FILETIME LastAccessTime;
-        public FILETIME LastWriteTime;
+        // The three time stamps (two 32-bit halves each) are not used; they only keep the layout.
+        public uint CreationLow;
+        public uint CreationHigh;
+        public uint AccessLow;
+        public uint AccessHigh;
+        public uint WriteLow;
+        public uint WriteHigh;
         public uint VolumeSerialNumber;
         public uint FileSizeHigh;
         public uint FileSizeLow;
@@ -320,9 +332,14 @@ public static class SwFileOpsNative
         }
     }
 
+    private static void Release(object item)
+    {
+        if (item != null && Marshal.IsComObject(item)) { Marshal.FinalReleaseComObject(item); }
+    }
+
     private static string GetItemName(SwFileOpsShellItem item)
     {
-        IntPtr text;
+        IntPtr text = IntPtr.Zero;
         try { item.GetDisplayName(0x80058000, out text); }
         catch (Exception) { return "(Recycle Bin)"; }
         string value = Marshal.PtrToStringUni(text);
@@ -332,27 +349,42 @@ public static class SwFileOpsNative
 
     private static string RecycleOnThisThread(string path)
     {
-        Guid shellItemId = new Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
-        SwFileOpsShellItem source;
-        SHCreateItemFromParsingName(path, IntPtr.Zero, ref shellItemId, out source);
+        SwFileOpsShellItem source = null;
+        SwFileOpsShellItem folder = null;
+        SwFileOpsShellItem bin = null;
+        SwFileOpsShellItem recycled = null;
+        SwFileOpsTransferSource transfer = null;
+        try
+        {
+            Guid shellItemId = new Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
+            SHCreateItemFromParsingName(path, IntPtr.Zero, ref shellItemId, out source);
 
-        Guid binFolderId = new Guid("b7534046-3ecb-4c18-be4e-64cd4cb7d6ac");
-        SwFileOpsShellItem bin;
-        SHGetKnownFolderItem(ref binFolderId, 0, IntPtr.Zero, ref shellItemId, out bin);
+            Guid binFolderId = new Guid("b7534046-3ecb-4c18-be4e-64cd4cb7d6ac");
+            SHGetKnownFolderItem(ref binFolderId, 0, IntPtr.Zero, ref shellItemId, out bin);
 
-        Guid handlerId = new Guid("d5e346a1-f753-4932-b403-4574800e2498");
-        Guid transferId = new Guid("00adb003-bde9-45c6-8e29-d09f9353e108");
-        IntPtr pointer;
-        source.BindToHandler(IntPtr.Zero, ref handlerId, ref transferId, out pointer);
-        SwFileOpsTransferSource transfer;
-        try { transfer = (SwFileOpsTransferSource)Marshal.GetObjectForIUnknown(pointer); }
-        finally { Marshal.Release(pointer); }
+            // The transfer handler is offered by a folder, so it is asked of the folder that holds the
+            // entry; the entry itself is handed to RecycleItem.
+            source.GetParent(out folder);
+            Guid handlerId = new Guid("d5e346a1-f753-4932-b403-4574800e2498");
+            Guid transferId = new Guid("00adb003-bde9-45c6-8e29-d09f9353e108");
+            IntPtr pointer;
+            folder.BindToHandler(IntPtr.Zero, ref handlerId, ref transferId, out pointer);
+            try { transfer = (SwFileOpsTransferSource)Marshal.GetObjectForIUnknown(pointer); }
+            finally { Marshal.Release(pointer); }
 
-        SwFileOpsShellItem recycled;
-        int result = transfer.RecycleItem(source, bin, 0, out recycled);
-        if (result < 0) { Marshal.ThrowExceptionForHR(result); }
-        if (recycled == null) { throw new IOException("The shell did not report where the item went."); }
-        return GetItemName(recycled);
+            int result = transfer.RecycleItem(source, bin, 0, out recycled);
+            if (result < 0) { Marshal.ThrowExceptionForHR(result); }
+            if (recycled == null) { throw new IOException("The shell did not report where the item went."); }
+            return GetItemName(recycled);
+        }
+        finally
+        {
+            Release(recycled);
+            Release(transfer);
+            Release(bin);
+            Release(folder);
+            Release(source);
+        }
     }
 
     // The shell needs a single-threaded apartment, so the call runs on a thread of its own and is
@@ -466,6 +498,9 @@ function Get-SwPathSnapshot {
         if (-not (Initialize-SwFileOpsNative)) { return $null }
 
         $full = [System.IO.Path]::GetFullPath($Path)
+        # Normalization can turn a device name into a device path (C:\x\CON becomes \\.\CON on .NET
+        # Framework); only a drive-letter path may be bound.
+        if (-not [regex]::IsMatch($full, '\A[A-Za-z]:[\\/]')) { return $null }
         if ($full.Length -gt 3) { $full = $full.TrimEnd([char[]]@('\')) }
 
         $entries = @{}
@@ -542,6 +577,7 @@ function Get-SwFileOpsChildSnapshot {
         if (-not (Initialize-SwFileOpsNative)) { return $null }
 
         $full = [System.IO.Path]::GetFullPath($Path)
+        if (-not [regex]::IsMatch($full, '\A[A-Za-z]:[\\/]')) { return $null }
         if ($full.Length -gt 3) { $full = $full.TrimEnd([char[]]@('\')) }
         $above = [System.IO.Path]::GetDirectoryName($full)
         if ($null -eq $above -or -not (Test-SwFileOpsSamePath -Left $above -Right $parentPath)) { return $null }
@@ -696,7 +732,7 @@ function Get-SwSafeDirectoryTreeItems {
         foreach ($item in $items) {
             $entry = [string]$item.FullName
             if (-not (Test-SwFileOpsSafe -Path $entry -State $WhitelistState)) {
-                $failed.Reason = "protected or whitelisted entry inside: $entry"
+                $failed.Reason = "the folder holds an entry that has to stay: $entry"
                 return $failed
             }
         }
@@ -946,12 +982,15 @@ function Remove-SwTreeEntry {
     $attributes = [System.IO.File]::GetAttributes($Path)
     $isFolder = ((($attributes -band [System.IO.FileAttributes]::Directory) -ne 0) -or [System.IO.Directory]::Exists($Path))
     if ($isFolder) {
-        if (($attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+        $isLink = (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+        # A link keeps its attributes: it is unlinked as it is, and a failure then stays a failure
+        # (the attribute of a link may be the one of its target).
+        if ((-not $isLink) -and (($attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0)) {
             $writable = [int]$attributes -band (-bnot [int][System.IO.FileAttributes]::ReadOnly)
             [System.IO.File]::SetAttributes($Path, [System.IO.FileAttributes]$writable)
         }
         # Other hosts unlink a folder link with File.Delete; on Windows Directory.Delete removes the link.
-        if ((($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) -and -not (Test-SwBaseWindows)) {
+        if ($isLink -and -not (Test-SwBaseWindows)) {
             [System.IO.File]::Delete($Path)
         }
         else {
@@ -1037,7 +1076,7 @@ function Remove-SwDirectoryTree {
         # doing now decides, not what it was doing when the list was made.
         if ($null -ne $CanRemove -and -not (Test-SwFileOpsCondition -Block $CanRemove)) {
             $Report['OwnerHeld'] = $true
-            $Report['Reason'] = "refused: the owner of $Path is active or unknown"
+            $Report['Reason'] = "refused: $Path may be in use, its owner is running or cannot be determined"
             return $false
         }
 
@@ -1064,12 +1103,12 @@ function Remove-SwDirectoryTree {
         }
 
         if (-not (Test-SwFileOpsSafe -Path $Path -State $WhitelistState) -or -not (Test-SwFileOpsUnchanged -Snapshot $rootSnapshot)) {
-            $Report['Reason'] = "kept the folder ${Path}: it changed or is protected now"
+            $Report['Reason'] = "the folder ${Path} stays: it changed or became protected after the check"
             return $false
         }
         try { Remove-SwTreeEntry -Path $Path }
         catch {
-            $Report['Reason'] = "kept the folder ${Path}: $($_.Exception.Message)"
+            $Report['Reason'] = "the folder ${Path} stays, it could not be removed: $($_.Exception.Message)"
             return $false
         }
         return $true
@@ -1096,6 +1135,7 @@ function Move-SwItemToRecycleBin {
     param([string]$Path, [object]$Snapshot)
 
     $ErrorActionPreference = 'Stop'
+    if (Test-SwDryRunMode) { throw "Not moving '$Path' to the Recycle Bin: this is a dry run." }
     $target = [string](Get-SwFileOpsField $Snapshot 'Path')
     if ([string]::IsNullOrWhiteSpace($target)) { throw "Not moving '$Path' to the Recycle Bin: there is no checked snapshot of it." }
     if (-not [string]::IsNullOrWhiteSpace($Path) -and -not (Test-SwFileOpsSamePath -Left $Path -Right $target)) {
@@ -1296,7 +1336,7 @@ function Remove-SwItem {
         if ($Recycle) {
             try { Move-SwItemToRecycleBin -Path $Path -Snapshot $candidate.Snapshot }
             catch {
-                $message = [string]$_.Exception.Message
+                $message = Get-SwFileOpsInnerMessage -ErrorRecord $_
                 try { Write-Warning "Sweepr could not move '$Path' to the Recycle Bin and left it where it is. Check by hand what is left of it." }
                 catch { Write-SwFileOpsDebug "warning not shown: $($_.Exception.Message)" }
                 Write-SwFileOpsOperation -Action 'FAILED' -Path $Path -Detail $message

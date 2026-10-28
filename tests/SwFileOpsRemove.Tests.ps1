@@ -1841,6 +1841,17 @@ Describe 'Remove-SwItem removes and previews' {
         $script:FilesCleaned | Should -Be 1
     }
 
+    It 'F-27 [W] moves a single file of the test drive to the Recycle Bin: true, the file is gone, RECYCLED, no kilobytes' {
+        $file = New-File (P $script:Target 'single-recycle.txt') 1000
+        Assert-Result (Remove-SwItem -Path $file -Recycle) $true 'real shell operation on a file'
+        Exists $file | Should -BeFalse
+        $script:Ops.Count | Should -Be 1
+        $script:Ops[0].Action | Should -BeExactly 'RECYCLED'
+        $script:Ops[0].Path | Should -BeExactly $file
+        $script:TotalSizeCleaned | Should -Be 0
+        $script:FilesCleaned | Should -Be 1
+    }
+
     It 'F-28 writes REMOVED for a success, FAILED for a failure and SKIPPED for a refused folder, and nothing for the other refusals' {
         $ok = New-File (P $script:Target 'ok.txt') 10
         Assert-Result (Remove-SwItem -Path $ok) $true 'success'
