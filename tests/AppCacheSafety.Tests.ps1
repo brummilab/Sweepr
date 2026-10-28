@@ -334,7 +334,7 @@ Describe 'Application cache boundaries' {
         Should -Invoke Get-SwValidatedTreeSize -Times 1 -Exactly
         Test-Path -LiteralPath $cache | Should -BeTrue
         (Get-CleanupStats).FilesCleaned | Should -Be 0
-        Test-Path -LiteralPath $script:ExportListFile | Should -BeFalse
+        [System.IO.File]::ReadAllText($script:ExportListFile) | Should -BeNullOrEmpty
     }
 
     It 'Preserves protected stores even when passed to the shared sink directly' {
