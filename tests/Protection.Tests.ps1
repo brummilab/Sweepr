@@ -207,6 +207,8 @@ Describe "Clean leaves user data alone" {
         # The segment guard is off here, so these assertions are about the rows themselves.
         $script:SweeprCleanPathGuard = $false
         $script:ExportListFile = Join-Path $root "clean-list.txt"
+        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
+        [System.IO.File]::WriteAllText($script:ExportListFile, "")
         Reset-CleanupStats
 
         & {

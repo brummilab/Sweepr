@@ -37,6 +37,8 @@ Describe 'Application cache boundaries' {
         $env:SWEEPR_NO_OPLOG = '1'
         $script:Config.WhitelistFile = Join-Path $env:USERPROFILE 'whitelist.txt'
         $script:ExportListFile = Join-Path $env:USERPROFILE 'preview.txt'
+        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
+        [System.IO.File]::WriteAllText($script:ExportListFile, "")
         $script:SweeprCleanPathGuard = $true
         Set-DryRunMode -Enabled $false
         Reset-CleanupStats

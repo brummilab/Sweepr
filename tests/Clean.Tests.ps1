@@ -314,6 +314,8 @@ Describe "Cleanup accounting" {
         $file = Join-Path $dir "a.tmp"
         Set-Content -Path $file -Value "x"
         $script:ExportListFile = Join-Path $script:Root "clean-list.txt"
+        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
+        [System.IO.File]::WriteAllText($script:ExportListFile, "")
         try {
             Clear-DirectoryContents -Path $dir -Description "Test cache"
             $lines = Get-Content $script:ExportListFile
@@ -414,6 +416,8 @@ Describe "Owner cache accounting" {
         Reset-CleanupStats
         Set-DryRunMode -Enabled $false
         $script:ExportListFile = Join-Path $TestDrive 'owner-preview.txt'
+        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
+        [System.IO.File]::WriteAllText($script:ExportListFile, "")
         Mock Get-SweeprOwnerCachePath { $script:Root }
         Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
     }
