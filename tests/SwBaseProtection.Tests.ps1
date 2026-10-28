@@ -1761,6 +1761,87 @@ Describe 'Whitelist' {
             Assert-Result (Test-Wl 'C:\Lit\Folder-other\child.bin') $false "prefix sibling, order $($order -join '')"
         }
     }
+
+    It 'B-28 protects the full path of an existing folder written relative to the working directory' {
+        $folder = [System.IO.Path]::Combine($script:Case, 'rel-root')
+        $sibling = [System.IO.Path]::Combine($script:Case, 'rel-root-other')
+        [void][System.IO.Directory]::CreateDirectory($folder)
+        [void][System.IO.Directory]::CreateDirectory($sibling)
+        $full = Resolve-SwSafePath -Path $folder
+        $fullSibling = Resolve-SwSafePath -Path $sibling
+        Use-ProcessDirectory $script:Case {
+            Set-WlLines @('rel-root')
+            Assert-Result (Test-Wl $full) $true 'the folder'
+            Assert-Result (Test-Wl ($full + '\child.txt')) $true 'a file below it'
+            Assert-Result (Test-Wl ($fullSibling + '\child.txt')) $false 'prefix sibling'
+            Assert-Result (Test-Wl (Win $script:Case 'elsewhere\x')) $false 'unrelated path'
+        }
+    }
+
+    It 'B-28 protects nothing more for a relative line that names no existing folder' {
+        [void][System.IO.Directory]::CreateDirectory($script:Case)
+        Use-ProcessDirectory $script:Case {
+            Set-WlLines @('rel-missing')
+            Assert-Result (Test-Wl (Win $script:Case 'rel-missing\x')) $false 'path below the missing folder'
+            Assert-Result (Test-Wl (Win $script:Case 'rel-missing')) $false 'the missing folder itself'
+        }
+    }
+
+    It 'B-28 [W] protects the full path of an existing folder written without a drive (root-relative)' {
+        if (-not $script:OnWindows) { Set-ItResult -Skipped -Because 'a root-relative path needs a drive letter'; return }
+        $folder = [System.IO.Path]::Combine($script:Case, 'rooted-rel')
+        $sibling = [System.IO.Path]::Combine($script:Case, 'rooted-rel-other')
+        [void][System.IO.Directory]::CreateDirectory($folder)
+        [void][System.IO.Directory]::CreateDirectory($sibling)
+        $full = Resolve-SwSafePath -Path $folder
+        $fullSibling = Resolve-SwSafePath -Path $sibling
+        $rootRelative = [System.IO.Path]::GetFullPath($folder).Substring(2)
+        Use-ProcessDirectory $script:Case {
+            Set-WlLines @($rootRelative)
+            Assert-Result (Test-Wl ($full + '\child.txt')) $true 'a file below it'
+            Assert-Result (Test-Wl ($fullSibling + '\child.txt')) $false 'prefix sibling'
+        }
+    }
+
+    It 'B-24 keeps a default pattern from an empty environment value without effect, also for an existing folder of that name' {
+        $folder = [System.IO.Path]::Combine($script:Case, 'rel-default')
+        [void][System.IO.Directory]::CreateDirectory($folder)
+        $full = Resolve-SwSafePath -Path $folder
+        $script:DefaultWhitelistPatterns = @('rel-default')
+        Use-ProcessDirectory $script:Case {
+            Assert-Result (Test-Wl ($full + '\child.txt')) $false 'below the folder'
+        }
+    }
+
+    It 'B-22 trims the expanded value before it checks for a drive: <Value>' -ForEach @(
+        @{ Value = ' C:\Data ' }
+        @{ Value = "`tC:\Data`t" }
+    ) {
+        Set-Env 'SWTEST_WL_PAD' $Value
+        try {
+            ConvertFrom-SwListEntry -Line '%SWTEST_WL_PAD%' | Should -BeExactly 'C:\Data'
+            $items = Get-Items (ConvertFrom-SwListEntry -Line '%SWTEST_WL_PAD%' -IncludeRaw)
+            $items.Count | Should -Be 2
+            $items[0] | Should -BeExactly 'C:\Data'
+            $items[1] | Should -BeExactly '%SWTEST_WL_PAD%'
+            Set-WlLines @('%SWTEST_WL_PAD%')
+            Assert-Result (Test-Wl 'C:\Data\x') $true 'below the folder'
+            Assert-Result (Test-Wl 'C:\Data2\x') $false 'prefix sibling'
+        }
+        finally { Set-Env 'SWTEST_WL_PAD' $null }
+    }
+
+    It 'B-26 keeps every path for an invalid wildcard pattern and says why in the debug stream' {
+        Set-WlLines @('C:\Data\[b-a]')
+        Assert-Result (Test-Wl 'D:\Other\y') $true 'ordinary path'
+        $previous = $DebugPreference
+        try {
+            $DebugPreference = 'Continue'
+            $records = @(Get-SwWhitelistState 5>&1 | Where-Object { $_ -is [System.Management.Automation.DebugRecord] })
+        }
+        finally { $DebugPreference = $previous }
+        $records.Count | Should -BeGreaterOrEqual 1
+    }
 }
 
 # ============================================================================

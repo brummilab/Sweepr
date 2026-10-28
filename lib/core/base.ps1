@@ -919,7 +919,7 @@ function ConvertFrom-SwListEntry {
         $expanded = [System.Environment]::ExpandEnvironmentVariables($entry)
         if ([string]::Equals($expanded, $entry, [System.StringComparison]::Ordinal)) { return $entry }
 
-        $expanded = $expanded.Replace('/', '\')
+        $expanded = $expanded.Replace('/', '\').Trim()
         if ([regex]::IsMatch($expanded, '\A(?:[A-Za-z]:\\|\\\\[^\\])')) {
             if ($IncludeRaw) { return @($expanded, $entry) }
             return $expanded
@@ -938,10 +938,14 @@ function Add-SwBaseWhitelistRow {
     # Adds one protected folder or pattern to the rows of a whitelist state. A literal row (data
     # folders) never has wildcard meaning. For other rows the text is also a pattern when it holds
     # * ? [ or a backtick; a pattern without [ and backtick also protects what lies below its
-    # matches. When the written folder exists and the file system spells it differently (junction,
-    # symbolic link, short name), the final spelling is added as a literal row. Rows are independent
-    # of each other, so the order of the lines never matters.
-    param([System.Collections.Generic.List[object]]$Rows, [string]$Pattern, [bool]$Literal)
+    # matches. A pattern that is not a valid wildcard pattern is an error, which makes the whole
+    # state keep every path. When the written folder exists and the file system spells it
+    # differently (junction, symbolic link, short name), the final spelling is added as a literal
+    # row. With ResolveRelative (lines typed by the user) a text without drive or UNC root is
+    # resolved the same way against the working directory of the process; default patterns built
+    # from an empty environment value stay relative and without effect. Rows are independent of each
+    # other, so the order of the lines never matters.
+    param([System.Collections.Generic.List[object]]$Rows, [string]$Pattern, [bool]$Literal, [bool]$ResolveRelative = $false)
 
     if ([string]::IsNullOrWhiteSpace($Pattern)) { return }
     $root = $Pattern.TrimEnd([char[]]@('\'))
@@ -951,24 +955,39 @@ function Add-SwBaseWhitelistRow {
     $row = @{ Root = $root; RootSlash = $root + '\'; Wild = $null; WildChild = $null }
     if ($hasWildcard) {
         $options = [System.Management.Automation.WildcardOptions]::IgnoreCase -bor [System.Management.Automation.WildcardOptions]::CultureInvariant
-        try { $row.Wild = [System.Management.Automation.WildcardPattern]::new($root, $options) }
-        catch { $row.Wild = $null }
-        if ($root.IndexOfAny([char[]]@('[', '`')) -lt 0) {
-            try { $row.WildChild = [System.Management.Automation.WildcardPattern]::new($root + '\*', $options) }
-            catch { $row.WildChild = $null }
+        try {
+            $row.Wild = [System.Management.Automation.WildcardPattern]::new($root, $options)
+            # The pattern is compiled on first use; match once now so a bad one fails here, not later.
+            [void]$row.Wild.IsMatch('')
+            if ($root.IndexOfAny([char[]]@('[', '`')) -lt 0) {
+                $row.WildChild = [System.Management.Automation.WildcardPattern]::new($root + '\*', $options)
+                [void]$row.WildChild.IsMatch('')
+            }
         }
+        catch { throw "Invalid wildcard pattern in the whitelist: $root" }
     }
     $Rows.Add($row)
 
-    # A relative text is no folder to resolve: it would be taken against the working directory.
-    if ($hasWildcard -or -not [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')) { return }
+    if ($hasWildcard) { return }
+    $absolute = [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')
+    if (-not $absolute -and -not $ResolveRelative) { return }
+    # A bare drive (C:) or drive-relative text would mean the current folder of that drive.
+    if (-not $absolute -and [regex]::IsMatch($root, '\A[A-Za-z]:')) { return }
     try {
         $full = Get-SwBaseFullPath -Path $root
         if ($null -eq $full) { return }
         $info = Get-SwBaseFinalPathInfo -FullPath $full
-        if ([string]$info.Status -ne 'Resolved') { return }
-        $final = ConvertTo-SwBaseCmp ([string]$info.Path)
-        if ($final.Length -eq 0 -or $final.Equals((ConvertTo-SwBaseCmp $full), [System.StringComparison]::OrdinalIgnoreCase)) { return }
+        $final = $null
+        # Trailing separators only: other hosts keep their own separator, and candidates are compared as given.
+        $trim = [char[]]@('\', '/')
+        if ([string]$info.Status -eq 'Resolved') { $final = ([string]$info.Path).TrimEnd($trim) }
+        elseif ([string]$info.Status -eq 'NoApi' -and -not $absolute) {
+            # No Windows file API: the full path is the final spelling, if the item exists.
+            if ([System.IO.Directory]::Exists($full) -or [System.IO.File]::Exists($full)) { $final = $full.TrimEnd($trim) }
+        }
+        if ($null -eq $final -or $final.Length -eq 0) { return }
+        # An absolute text that the system spells the same adds nothing; a relative one always does.
+        if ($absolute -and (ConvertTo-SwBaseCmp $final).Equals((ConvertTo-SwBaseCmp $full), [System.StringComparison]::OrdinalIgnoreCase)) { return }
         $Rows.Add(@{ Root = $final; RootSlash = $final + '\'; Wild = $null; WildChild = $null })
     }
     catch {
@@ -1030,7 +1049,7 @@ function Get-SwWhitelistState {
                 # Assigned first: the result is nothing, one string or two strings.
                 $converted = ConvertFrom-SwListEntry -Line ([string]$line) -IncludeRaw
                 foreach ($pattern in @($converted)) {
-                    if ($null -ne $pattern) { Add-SwBaseWhitelistRow -Rows $rows -Pattern ([string]$pattern) -Literal $false }
+                    if ($null -ne $pattern) { Add-SwBaseWhitelistRow -Rows $rows -Pattern ([string]$pattern) -Literal $false -ResolveRelative $true }
                 }
             }
         }
