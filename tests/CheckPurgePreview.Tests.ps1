@@ -99,8 +99,8 @@ Describe 'Get-SweeprPurgePreview' {
         Write-Bytes -Path (Join-Path $script:Py 'requirements.txt') -Count 10
         Write-Bytes -Path (Join-Path $script:Py '.venv/bin/python') -Count 3000
 
-        Mock Get-SweeprPathSnapshot { [pscustomobject]@{ Path = $Path } }
-        Mock Test-SweeprPathSnapshot { $true }
+        Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
+        Mock Test-SwPathSnapshot { $true }
         foreach ($name in $script:ChangingCommands) { Mock $name ([scriptblock]::Create("throw '$name must not run in a preview'")) }
     }
 

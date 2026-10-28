@@ -277,7 +277,7 @@ Describe 'Generic game content in install folders' {
         $root = New-TestFolder 'Unknown install'
         $script:UnknownContentChild = Join-Path $root 'plugins'
         New-Item -ItemType Directory -Path $script:UnknownContentChild -Force | Out-Null
-        Mock Get-SweeprPathSnapshot { $null } -ParameterFilter { $Path -eq $script:UnknownContentChild }
+        Mock Get-SwPathSnapshot { $null } -ParameterFilter { $Path -eq $script:UnknownContentChild }
         Test-SweeprLeftoverOwnership $root $script:ContentApp | Should -BeFalse
     }
     It 'Retains an incomplete bounded listing rather than accepting its early files' {
@@ -971,9 +971,9 @@ Describe 'Complete install owner probes' {
 Describe 'Store display sizes without deletion authority' {
     It 'measures readable packages when ancestor deletion identity is unavailable' {
         $folder = New-TestFolder 'read-only-package'
-        Mock Get-SweeprPathSnapshot { $null }
+        Mock Get-SwPathSnapshot { $null }
         (Get-AppxInstallSizeKB -Path $folder) | Should -BeGreaterThan 0
-        Should -Invoke Get-SweeprPathSnapshot -Times 0 -Exactly
+        Should -Invoke Get-SwPathSnapshot -Times 0 -Exactly
     }
 
     It 'retains unknown size for missing packages and never follows a junction' {
@@ -1029,7 +1029,7 @@ Describe 'Uninstall rendered regression' {
         Mock Write-Info {}
         Mock Write-Progress {}
         Mock Get-ItemProperty { @() } -ParameterFilter { "$Path" -like 'HK*' }
-        Mock Get-SweeprPathSnapshot { $null }
+        Mock Get-SwPathSnapshot { $null }
         Mock Get-AppxPackageManifest { $null }
         Mock Get-AppxPackage {
             [pscustomobject]@{Name='Contoso.Notes';PackageFullName='Contoso.Notes_1.0_x64__abc';

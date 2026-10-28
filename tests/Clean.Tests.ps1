@@ -454,7 +454,7 @@ Describe "Owner cache accounting" {
     }
     It "Does not assume an unmeasurable post-cleanup tree is empty" {
         $script:WalkCount = 0
-        Mock Get-SafeDirectoryTreeItems {
+        Mock Get-SwSafeDirectoryTreeItems {
             $script:WalkCount++
             if ($script:WalkCount -eq 1) {
                 return @{ Success = $true; Items = @(Get-ChildItem -LiteralPath $script:Root | ForEach-Object {
@@ -491,9 +491,9 @@ Describe 'Review regressions: owner log and summary' {
         Set-DryRunMode -Enabled $false
         Mock Get-SweeprOwnerCachePath { 'C:\cache' }
         Mock Test-SafePath { $true }
-        Mock Get-SweeprPathSnapshot { @{ Path = 'C:\cache' } }
-        Mock Test-SweeprPathSnapshot { $true }
-        Mock Get-SafeDirectoryTreeItems { @{ Success = $true; Items = @() } }
+        Mock Get-SwPathSnapshot { @{ Path = 'C:\cache' } }
+        Mock Test-SwPathSnapshot { $true }
+        Mock Get-SwSafeDirectoryTreeItems { @{ Success = $true; Items = @() } }
         Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
         Mock Write-SweeprOperation { }
         Mock Write-Success { }

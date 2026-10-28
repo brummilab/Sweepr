@@ -154,7 +154,15 @@ Get-SwFreeSpace.A-17 [W] gives the free space of the default drive as number and
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter and colon as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter only as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter, colon and backslash as number and unit in the size format
+Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives Success true and no items for a root that is a junction to a folder with content
+Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives the snapshot of the root that a fresh Get-SwPathSnapshot -AllowLeafLink gives
+Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a protected folder inside a tree below the 8.3 spelling of the temp folder
+Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a tree with a junction whose target is protected (the final spelling of the link counts)
+Get-SwTreeItems.F-12 [W] gives every entry the snapshot a fresh Get-SwPathSnapshot -AllowLeafLink gives, and links appear once without content
+Get-SwTreeItems.F-12 [W] needs 1 + d calls of Get-SwPathSnapshot for a tree with d entered folders
+Get-SwTreeItems.F-13 [W] throws when an entered folder is replaced during the walk
 Get-SwWindowsVersion.A-18 [W] names Windows and gives a numeric build
+Get-SweeprCleanPreview.-SkipExternalTools.Still measures the folders that need no external program
 Install folder eligibility.Accepts an app's own folder, quoted or with a trailing slash
 Install folder eligibility.Accepts one game's folder inside a Steam library
 Junctions and symbolic links.Removes a folder holding a junction without touching the junction's target
@@ -193,6 +201,14 @@ Owner cache cleanup whitelist.Reads the whitelist once for the boundary recheck,
 Owner cache cleanup whitelist.Runs an owner for a known unprotected ordinary cache
 Owner process timeout.Says when it stops an owner process tree that ran past its timeout
 Package manager update without Git.Prints the winget command before requiring Git
+Path snapshots.F-7 [W] accepts a complete path written with forward slashes and gives the path in its normalized form
+Path snapshots.F-7 [W] also binds a file
+Path snapshots.F-7 [W] closes its handles: the entry can be renamed and removed right after the snapshot
+Path snapshots.F-7 [W] gives the same identity text for the same entry and different texts for different entries
+Path snapshots.F-7 [W] holds Path, Entries and AllowLeafLink for an existing folder, with one identity text per component up to the root
+Path snapshots.F-7 [W] mirrors the AllowLeafLink switch
+Path snapshots.F-7 [W] treats brackets and wildcard characters of the name literally
+Path snapshots.F-9 [W] gives a snapshot for a link as the entry with -AllowLeafLink, and never follows it
 Portable update without Git.Prints the portable message with an empty PATH
 Profile mode stays unchanged.Protects the profile data and cache folders the same way
 Profile mode stays unchanged.Still cleans an ordinary temp folder that is not the data folder
@@ -216,19 +232,26 @@ Purge project labels.names each project by its path while cleaning
 Purge project labels.shows paths under the profile from ~
 Quiet inventory scan.Scans the same inventory without host output
 Read-only system health queries.Collects health metrics in the current PowerShell host without query mocks
-Recoverable uninstall leftovers.Keeps a replaced root after sizing
-Recoverable uninstall leftovers.Keeps leftovers and reports no cleaned items when recycling fails
-Recoverable uninstall leftovers.Previews without calling the shell or permanent deletion
-Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: false)
-Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: true)
-Recoverable uninstall leftovers.Routes an accepted directory only to the recycle operation
 Registered Proton Pass uninstall compatibility.Uses the exact registered normal command for the known broken quiet command
+Removal with real identities [W].F-19 [W] stops at a locked file with a real lock and leaves the rest
+Removal with real identities [W].F-22 [W] does not remove a file that was replaced during the measurement
+Removal with real identities [W].F-22 [W] does not remove a folder that was replaced during the measurement: the replacement and the original stay
+Removal with real identities [W].F-22 [W] removes a file and a folder with their real identity, writes REMOVED lines and counts them
+Removal with real identities [W].F-29 [W] removes the paths of a list with real identities, and F-33 empties a folder
+Removal with real identities [W].F-34 [W] removes old files with real identities
+Removal with real identities [W].S-10 [W] never recycles a folder that gained a whitelisted entry before the shell call, and keeps its content
+Removal with real identities [W].S-3 [W] removes a junction as a link and not what it points to, with Remove-SwItem and as a child of a cleared folder
+Removal with real identities [W].S-9 [W] keeps a folder whose whitelist line uses the 8.3 spelling of the folder
 Remove Command.Help Display.Should mention uninstall behavior
 Remove Command.Help Display.Should show help without error
+Remove-SwItem removes and previews.F-22 [W] removes a file and a folder with their real identity
+Remove-SwItem removes and previews.F-27 [W] moves a folder of the test drive to the Recycle Bin: true, the folder is gone, RECYCLED, no kilobytes
+Remove-SwItem removes and previews.F-27 [W] moves a single file of the test drive to the Recycle Bin: true, the file is gone, RECYCLED, no kilobytes
 Resolve-SwDataPaths.A-10 [W] gives Override and the paths as text for a drive that does not exist, without an error
 Resolve-SwDataPaths.A-10 [W] trims and normalizes a drive-letter SWEEPR_DATA_DIR
 Resolve-SwSafePath.B-13 [W] gives the drive root form C:\ for a drive root
 Resolve-SwSafePath.B-13 [W] gives the on-disk spelling of the case of an existing folder
+Safety invariants of the removal paths.S-14 [W] never removes a file inside the data folders
 Scanning installed apps.Does not reuse the v5 inventory with lost install identities and Game Bar
 Scanning installed apps.Hides system components, updates and child entries
 Scanning installed apps.Keeps a large size that the install folder cannot disprove
@@ -245,6 +268,7 @@ Scanning installed apps.Reads the per-user 32-bit Uninstall key too
 Scanning installed apps.Retains shared root registration identity without recursive measurement or leftover removal
 Scanning installed apps.Retains system root registration identity without recursive measurement or leftover removal
 Scanning installed apps.Shows a RustDesk-like outlier size as measured, once, beside its duplicate key
+Size measurement.F-16 [W] gives the sum of all files below a folder with real identities
 Start menu shortcut removal.Removes a 1.30.0 Sweepr.lnk that starts this install
 Start menu shortcut removal.Removes this install's shortcut and keeps another app's
 Status Command.Help Display.Should mention system metrics in help
@@ -274,6 +298,11 @@ Test-SwProtectedPath links and aliases [W].B-11 still compares list entries in t
 Test-SwProtectedPath links and aliases [W].B-6 protects the target of a junction that is spelled as an exact list entry
 Test-SwProtectedPath links and aliases [W].B-9 protects what lies below the final spelling of a Packages folder that is a junction
 Test-SwProtectedPath links and aliases [W].S-B3 [W] Resolve-SwSafePath gives the final spelling of a junction and the target of a short name
+Test-SwSafePath on Windows file names [W].F-3 [W] accepts a path in the temp folder as the host spells it, including an 8.3 spelling
+Test-SwSafePath on Windows file names [W].F-3 [W] keeps a whitelisted junction row in both spellings
+Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path below a junction to a protected folder
+Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path with a trailing dot in a segment of a protected folder
+Test-SwSafePath on Windows file names [W].F-3 [W] refuses the 8.3 spelling of an existing protected folder and of its child
 Tree walk snapshots.Binds every item to the same chain a fresh snapshot of its path would
 Tree walk snapshots.Binds the root once and each child from its parent instead of reopening every ancestor
 Tree walk snapshots.Fails the recheck when a directory is replaced after the walk

@@ -63,7 +63,7 @@ Describe 'Cleanup physical boundaries' {
         $script:Cache = Join-Path $script:Root 'cache'
         New-Item -ItemType Directory -Path $script:Cache | Out-Null
         Set-Content -LiteralPath (Join-Path $script:Cache 'same.txt') -Value 'original'
-        Mock Get-ValidatedTreeSize {
+        Mock Get-SwValidatedTreeSize {
             Move-Item -LiteralPath $script:Cache -Destination (Join-Path $script:Root 'original')
             New-Item -ItemType Directory -Path $script:Cache | Out-Null
             Set-Content -LiteralPath (Join-Path $script:Cache 'same.txt') -Value 'replacement'
@@ -154,9 +154,9 @@ Describe 'Tree walk snapshots' {
         }
     }
     It 'Binds the root once and each child from its parent instead of reopening every ancestor' {
-        $script:RealSnapshot = ${function:Get-SweeprPathSnapshot}
+        $script:RealSnapshot = ${function:Get-SwPathSnapshot}
         $script:SnapshotCalls = 0
-        Mock Get-SweeprPathSnapshot {
+        Mock Get-SwPathSnapshot {
             $script:SnapshotCalls++
             & $script:RealSnapshot -Path $Path -AllowLeafLink:$AllowLeafLink
         }
@@ -379,12 +379,12 @@ Describe 'Owner cache cleanup whitelist' {
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
         foreach ($i in 1..8) { Set-Content -LiteralPath (Join-Path $script:OwnerCache "entry$i.bin") -Value 'x' }
         $script:FixtureWhitelistState = Get-WhitelistState
-        Mock Get-WhitelistState { $script:FixtureWhitelistState }
+        Mock Get-SwWhitelistState { $script:FixtureWhitelistState }
         Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
         Should -Invoke Invoke-SweeprOwnerProcess -Times 1
         # The root check, the tree walk, the boundary recheck and the walk that
         # measures what the owner removed: one per pass, never one per entry.
-        Should -Invoke Get-WhitelistState -Times 4 -Exactly
+        Should -Invoke Get-SwWhitelistState -Times 4 -Exactly
     }
     It 'Keeps a cache containing a specifically whitelisted child' {
         $child = Join-Path $script:OwnerCache 'keep.txt'
