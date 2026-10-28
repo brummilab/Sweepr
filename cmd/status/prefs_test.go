@@ -1,221 +1,396 @@
 package main
 
+// The settings file (ST-22): location, format, locking, atomic replacement and
+// silent failure.
+
 import (
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-// TestSavePrefPreservesOtherKeys is the whole point of the refactor: writing one
-// preference must not clobber another. The previous single-string store failed
-// exactly this scenario. t.Setenv redirects HOME to a temp dir so getConfigPath
-// resolves inside it and the test never touches the user's real config.
-func TestSavePrefPreservesOtherKeys(t *testing.T) {
-	setTestHome(t, t.TempDir())
-
-	savePref("cat_hidden", "true")
-	savePref("cpu_cores", "8")
-
-	prefs := loadPrefs()
-	if got := prefs["cat_hidden"]; got != "true" {
-		t.Errorf("cat_hidden = %q, want %q (clobbered by the second write)", got, "true")
+func tstDirNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
 	}
-	if got := prefs["cpu_cores"]; got != "8" {
-		t.Errorf("cpu_cores = %q, want %q", got, "8")
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+func tstMustNotExist(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Lstat(path); err == nil {
+		t.Errorf("%s exists, but nothing may be created there", path)
 	}
 }
 
-// TestCatHiddenRoundTrip checks the typed accessors still behave like before.
-func TestCatHiddenRoundTrip(t *testing.T) {
-	setTestHome(t, t.TempDir())
+// ---------------------------------------------------------------------------
+// Location
 
-	if loadCatHidden() {
-		t.Fatal("cat_hidden should default to false when no file exists")
+func TestPrefsLiveUnderTheDataFolderWhenSet(t *testing.T) {
+	e := tstIsolated(t)
+	p := tstOpenPrefs(e.env)
+	p.Set("cpu_cores", "4")
+	if got := e.readPrefs(t); got != "cpu_cores=4\n" {
+		t.Errorf("file = %q, want %q", got, "cpu_cores=4\n")
 	}
-	saveCatHidden(true)
-	if !loadCatHidden() {
-		t.Error("cat_hidden should be true after saveCatHidden(true)")
+	tstMustNotExist(t, e.home)
+	if names := tstDirNames(t, filepath.Dir(e.prefsFile())); !tstSameStrings(names, []string{"status_prefs", "status_prefs.lock"}) {
+		t.Errorf("settings folder holds %q, want the file and its lock file only (no temporary leftovers)", names)
 	}
-	saveCatHidden(false)
-	if loadCatHidden() {
-		t.Error("cat_hidden should be false after saveCatHidden(false)")
-	}
-}
-
-// TestLoadPrefsIgnoresBlanksAndComments keeps the file hand-editable.
-func TestLoadPrefsIgnoresBlanksAndComments(t *testing.T) {
-	setTestHome(t, t.TempDir())
-
-	// Seed a file with a comment, a blank line, and a malformed line.
-	savePref("cat_hidden", "true")
-	prefs := loadPrefs()
-	if len(prefs) != 1 || prefs["cat_hidden"] != "true" {
-		t.Fatalf("unexpected prefs after seed: %#v", prefs)
+	if fi, err := os.Stat(e.prefsFile() + ".lock"); err != nil || fi.Size() != 0 {
+		t.Errorf("lock file: %v, size must be 0", err)
 	}
 }
 
-// Staggered process starts do not prove anything here: each writer finishes its
-// whole read-modify-write before the next one is scheduled, so an unlocked
-// implementation passes too. Every helper must sit on a barrier and enter
-// savePref together. Without the flock, this loses keys.
-func TestSavePrefConcurrentProcessesPreserveEveryKey(t *testing.T) {
-	home := t.TempDir()
-	setTestHome(t, home)
-	const writers = 16
-	barrier := filepath.Join(home, "barrier")
-	readyDir := filepath.Join(home, "ready")
-	if err := os.MkdirAll(readyDir, 0o700); err != nil {
-		t.Fatalf("create ready dir: %v", err)
+func TestPrefsTrimSpacesAroundTheDataFolder(t *testing.T) {
+	e := tstIsolated(t)
+	p := tstOpenPrefs(e.with("SWEEPR_DATA_DIR", "  "+e.data+" \t").env)
+	p.Set("cpu_cores", "8")
+	if got := e.readPrefs(t); got != "cpu_cores=8\n" {
+		t.Errorf("file = %q", got)
 	}
+	tstMustNotExist(t, e.home)
+}
 
-	commands := make([]*exec.Cmd, 0, writers)
-	for i := range writers {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestSavePrefProcessHelper$")
+func TestPrefsFallBackToTheProfileWhenTheDataFolderIsEmpty(t *testing.T) {
+	for _, value := range []string{"", "   ", "\t"} {
+		e := tstIsolated(t)
+		p := tstOpenPrefs(e.with("SWEEPR_DATA_DIR", value).env)
+		p.Set("cpu_cores", "4")
+		profile := filepath.Join(e.home, ".config", "sweepr", "status_prefs")
+		b, err := os.ReadFile(profile)
+		if err != nil {
+			t.Errorf("SWEEPR_DATA_DIR=%q: no file in the profile: %v", value, err)
+			continue
+		}
+		if string(b) != "cpu_cores=4\n" {
+			t.Errorf("SWEEPR_DATA_DIR=%q: profile file = %q", value, b)
+		}
+		tstMustNotExist(t, e.data)
+	}
+}
+
+func TestPrefsFallBackToTheProfileWhenTheDataFolderIsAbsent(t *testing.T) {
+	e := tstIsolated(t)
+	env := map[string]string{"USERPROFILE": e.home, "HOME": e.home}
+	tstOpenPrefs(env).Set("cpu_cores", "2")
+	if _, err := os.Stat(filepath.Join(e.home, ".config", "sweepr", "status_prefs")); err != nil {
+		t.Errorf("no file in the profile: %v", err)
+	}
+}
+
+func TestPrefsDoNothingWithoutAnyFolder(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	p := tstOpenPrefs(map[string]string{})
+	p.Set("cpu_cores", "4")
+	if v, ok := p.Get("cpu_cores"); ok && v != "4" {
+		t.Errorf("Get = %q, %v", v, ok)
+	}
+	if names := tstDirNames(t, root); len(names) != 0 {
+		t.Errorf("files were created without a folder to put them in: %v", names)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Reading
+
+func TestPrefsReadOfAMissingFileGivesDefaultsAndCreatesNothing(t *testing.T) {
+	e := tstIsolated(t)
+	p := tstOpenPrefs(e.env)
+	if v, ok := p.Get("cpu_cores"); ok {
+		t.Errorf("Get on a missing file = %q, true", v)
+	}
+	e.assertUntouched(t)
+}
+
+func TestPrefsReadFormat(t *testing.T) {
+	content := "# comment\r\n" +
+		"\r\n" +
+		"  cpu_cores = 4  \r\n" +
+		"no equals sign here\n" +
+		"#hidden=1\n" +
+		"cat_hidden=1\n" +
+		"formula=a=b=c\n" +
+		"last=value"
+	e := tstIsolated(t)
+	e.writePrefs(t, content)
+	p := tstOpenPrefs(e.env)
+	want := map[string]string{"cpu_cores": "4", "cat_hidden": "1", "formula": "a=b=c", "last": "value"}
+	for k, v := range want {
+		if got, ok := p.Get(k); !ok || got != v {
+			t.Errorf("Get(%q) = %q, %v; want %q", k, got, ok, v)
+		}
+	}
+	for _, k := range []string{"hidden", "#hidden", "no equals sign here", "comment", "missing"} {
+		if got, ok := p.Get(k); ok {
+			t.Errorf("Get(%q) = %q, true; want no value", k, got)
+		}
+	}
+}
+
+func TestPrefsReadOfAnUnreadableFileGivesDefaults(t *testing.T) {
+	e := tstIsolated(t)
+	if err := os.MkdirAll(e.prefsFile(), 0o755); err != nil { // a folder where the file should be
+		t.Fatal(err)
+	}
+	p := tstOpenPrefs(e.env)
+	if v, ok := p.Get("cpu_cores"); ok {
+		t.Errorf("Get = %q, true", v)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Writing
+
+func TestPrefsSetKeepsAllOtherKeysSortedAndDropsEverythingElse(t *testing.T) {
+	e := tstIsolated(t)
+	e.writePrefs(t, "# note\r\nzeta = 9 \r\n\r\nnoequals\ncpu_cores=4\nx=1\ncat_hidden=1\nformula=a=b\n")
+	p := tstOpenPrefs(e.env)
+	p.Set("cpu_cores", "8")
+	want := "cat_hidden=1\ncpu_cores=8\nformula=a=b\nx=1\nzeta=9\n"
+	if got := e.readPrefs(t); got != want {
+		t.Errorf("file =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestPrefsSetExampleKeepsTheOrderOfTheFile(t *testing.T) {
+	e := tstIsolated(t)
+	e.writePrefs(t, "cpu_cores=4\nx=1\n")
+	tstOpenPrefs(e.env).Set("cpu_cores", "8")
+	if got := e.readPrefs(t); got != "cpu_cores=8\nx=1\n" {
+		t.Errorf("file = %q", got)
+	}
+}
+
+func TestPrefsSetWritesPlainUTF8WithLineFeeds(t *testing.T) {
+	e := tstIsolated(t)
+	e.writePrefs(t, "a=1\r\nb=2\r\n")
+	tstOpenPrefs(e.env).Set("c", "ä€")
+	got := e.readPrefs(t)
+	if strings.HasPrefix(got, "\xef\xbb\xbf") || strings.Contains(got, "\r") {
+		t.Errorf("file has a byte-order mark or carriage returns: %q", got)
+	}
+	if got != "a=1\nb=2\nc=ä€\n" {
+		t.Errorf("file = %q", got)
+	}
+}
+
+func TestPrefsGetReturnsWhatSetStored(t *testing.T) {
+	e := tstIsolated(t)
+	p := tstOpenPrefs(e.env)
+	p.Set("cpu_cores", "4")
+	if v, ok := p.Get("cpu_cores"); !ok || v != "4" {
+		t.Errorf("Get = %q, %v; want 4", v, ok)
+	}
+	p.Set("cpu_cores", "8")
+	if v, ok := p.Get("cpu_cores"); !ok || v != "8" {
+		t.Errorf("Get = %q, %v; want 8", v, ok)
+	}
+	if v, ok := tstOpenPrefs(e.env).Get("cpu_cores"); !ok || v != "8" {
+		t.Errorf("a new store reads %q, %v; want 8", v, ok)
+	}
+}
+
+func TestPrefsSetReadsTheFileAfterTakingTheLock(t *testing.T) {
+	e := tstIsolated(t)
+	a := tstOpenPrefs(e.env) // opened before the other writer saves
+	b := tstOpenPrefs(e.env)
+	b.Set("from_b", "1")
+	a.Set("from_a", "1")
+	if got := e.readPrefs(t); got != "from_a=1\nfrom_b=1\n" {
+		t.Errorf("file = %q; a key saved by another instance was lost", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Failure is silent
+
+func TestPrefsSetIgnoresFailures(t *testing.T) {
+	cases := map[string]func(t *testing.T, e tstEnv){
+		"data folder is a file": func(t *testing.T, e tstEnv) {
+			if err := os.WriteFile(e.data, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"config folder is a file": func(t *testing.T, e tstEnv) {
+			if err := os.MkdirAll(e.data, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(e.data, "config"), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"lock file is a folder": func(t *testing.T, e tstEnv) {
+			if err := os.MkdirAll(e.prefsFile()+".lock", 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"settings file is a folder": func(t *testing.T, e tstEnv) {
+			if err := os.MkdirAll(e.prefsFile(), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, setup := range cases {
+		setup := setup
+		t.Run(name, func(t *testing.T) {
+			e := tstIsolated(t)
+			setup(t, e)
+			p := tstOpenPrefs(e.env)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer func() {
+					if r := recover(); r != nil {
+						t.Errorf("Set panicked: %v", r)
+					}
+				}()
+				p.Set("cpu_cores", "4")
+			}()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("Set did not return")
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Two writers
+
+func tstAssertCompleteKeys(t *testing.T, e tstEnv, prefixes []string, count int) {
+	t.Helper()
+	b, err := os.ReadFile(e.prefsFile())
+	if err != nil {
+		t.Fatalf("settings file: %v", err)
+	}
+	got := map[string]string{}
+	var order []string
+	for _, line := range strings.Split(strings.TrimSuffix(string(b), "\n"), "\n") {
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			t.Fatalf("line %q is not key=value", line)
+		}
+		got[k] = v
+		order = append(order, k)
+	}
+	if !sort.StringsAreSorted(order) {
+		t.Errorf("keys are not sorted: %q", order)
+	}
+	for _, prefix := range prefixes {
+		for i := 0; i < count; i++ {
+			k := fmt.Sprintf("%s%02d", prefix, i)
+			if got[k] != fmt.Sprint(i) {
+				t.Errorf("key %s = %q, want %d: an update was lost", k, got[k], i)
+			}
+		}
+	}
+	if len(got) != len(prefixes)*count {
+		t.Errorf("file has %d keys, want %d", len(got), len(prefixes)*count)
+	}
+}
+
+func TestPrefsTwoStoresInOneProcessLoseNoKey(t *testing.T) {
+	e := tstIsolated(t)
+	const count = 25
+	var wg sync.WaitGroup
+	for _, prefix := range []string{"a", "b"} {
+		wg.Add(1)
+		go func(prefix string) {
+			defer wg.Done()
+			p := tstOpenPrefs(e.env)
+			for i := 0; i < count; i++ {
+				p.Set(fmt.Sprintf("%s%02d", prefix, i), fmt.Sprint(i))
+			}
+		}(prefix)
+	}
+	wg.Wait()
+	tstAssertCompleteKeys(t, e, []string{"a", "b"}, count)
+}
+
+func TestPrefsTwoProcessesSavingDifferentKeysLoseNone(t *testing.T) {
+	e := tstIsolated(t)
+	const count = 30
+	prefixes := []string{"a", "b"}
+	var cmds []*exec.Cmd
+	for _, prefix := range prefixes {
+		cmd := exec.Command(os.Args[0])
 		cmd.Env = append(os.Environ(),
-			"HOME="+home,
-			"SWEEPR_PREFS_TEST_HELPER=1",
-			fmt.Sprintf("SWEEPR_PREFS_TEST_KEY=key_%02d", i),
-			"SWEEPR_PREFS_TEST_VALUE="+strconv.Itoa(i),
-			"SWEEPR_PREFS_TEST_BARRIER="+barrier,
-			fmt.Sprintf("SWEEPR_PREFS_TEST_READY=%s", filepath.Join(readyDir, strconv.Itoa(i))),
+			tstModeEnv+"=prefs",
+			"SWEEPR_STATUS_TEST_DATA="+e.data,
+			"SWEEPR_STATUS_TEST_PREFIX="+prefix,
+			fmt.Sprintf("SWEEPR_STATUS_TEST_COUNT=%d", count),
 		)
 		if err := cmd.Start(); err != nil {
-			t.Fatalf("start writer %d: %v", i, err)
+			t.Fatalf("start child: %v", err)
 		}
-		commands = append(commands, cmd)
+		cmds = append(cmds, cmd)
 	}
 
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		entries, err := os.ReadDir(readyDir)
-		if err != nil {
-			t.Fatalf("read ready dir: %v", err)
-		}
-		if len(entries) == writers {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("only %d of %d writers reached the barrier", len(entries), writers)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	if err := os.WriteFile(barrier, []byte("go"), 0o600); err != nil {
-		t.Fatalf("release barrier: %v", err)
-	}
-
-	for i, cmd := range commands {
-		if err := cmd.Wait(); err != nil {
-			t.Fatalf("writer %d failed: %v", i, err)
-		}
-	}
-
-	prefs := loadPrefs()
-	for i := range writers {
-		key := fmt.Sprintf("key_%02d", i)
-		if got := prefs[key]; got != strconv.Itoa(i) {
-			t.Errorf("%s = %q, want %q", key, got, strconv.Itoa(i))
-		}
-	}
-}
-
-func TestSavePrefProcessHelper(t *testing.T) {
-	if os.Getenv("SWEEPR_PREFS_TEST_HELPER") != "1" {
-		return
-	}
-	if barrier := os.Getenv("SWEEPR_PREFS_TEST_BARRIER"); barrier != "" {
-		if ready := os.Getenv("SWEEPR_PREFS_TEST_READY"); ready != "" {
-			if err := os.WriteFile(ready, []byte("1"), 0o600); err != nil {
-				t.Fatalf("signal ready: %v", err)
-			}
-		}
-		deadline := time.Now().Add(30 * time.Second)
+	// While the children save, every state of the file seen by a reader is complete.
+	stop := make(chan struct{})
+	var readerErr string
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		for {
-			if _, err := os.Stat(barrier); err == nil {
-				break
+			select {
+			case <-stop:
+				return
+			default:
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("barrier %s never opened", barrier)
+			b, err := os.ReadFile(e.prefsFile())
+			if err != nil {
+				time.Sleep(200 * time.Microsecond) // not there yet, or briefly held during replacement
+				continue
 			}
-			time.Sleep(time.Millisecond)
-		}
-	}
-	savePref(os.Getenv("SWEEPR_PREFS_TEST_KEY"), os.Getenv("SWEEPR_PREFS_TEST_VALUE"))
-}
-
-// setTestHome points os.UserHomeDir at dir: it reads HOME on Unix and
-// USERPROFILE on Windows, so setting only HOME lets a Windows run read and
-// write the real profile's status_prefs.
-func setTestHome(t *testing.T, dir string) {
-	t.Helper()
-	t.Setenv("HOME", dir)
-	t.Setenv("USERPROFILE", dir)
-}
-
-func TestGetConfigPathUsesSweeprDataDir(t *testing.T) {
-	data := t.TempDir()
-	setTestHome(t, t.TempDir())
-	t.Setenv("SWEEPR_DATA_DIR", data)
-
-	want := filepath.Join(data, "config", "status_prefs")
-	if got := getConfigPath(); got != want {
-		t.Errorf("getConfigPath() = %q, want %q", got, want)
-	}
-}
-
-func TestGetConfigPathTrimsSweeprDataDir(t *testing.T) {
-	data := t.TempDir()
-	setTestHome(t, t.TempDir())
-	t.Setenv("SWEEPR_DATA_DIR", "  "+data+"  ")
-
-	want := filepath.Join(data, "config", "status_prefs")
-	if got := getConfigPath(); got != want {
-		t.Errorf("getConfigPath() = %q, want %q", got, want)
-	}
-}
-
-func TestGetConfigPathIgnoresEmptySweeprDataDir(t *testing.T) {
-	for _, value := range []string{"", "   ", "\t"} {
-		home := t.TempDir()
-		setTestHome(t, home)
-		t.Setenv("SWEEPR_DATA_DIR", value)
-
-		want := filepath.Join(home, ".config", "sweepr", "status_prefs")
-		if got := getConfigPath(); got != want {
-			t.Errorf("SWEEPR_DATA_DIR=%q: getConfigPath() = %q, want %q", value, got, want)
-		}
-	}
-}
-
-func TestSavePrefWritesLockAndPrefsUnderSweeprDataDir(t *testing.T) {
-	data := t.TempDir()
-	home := t.TempDir()
-	setTestHome(t, home)
-	t.Setenv("SWEEPR_DATA_DIR", data)
-
-	savePref("cpu_cores", "8")
-
-	prefs := filepath.Join(data, "config", "status_prefs")
-	if _, err := os.Stat(prefs); err != nil {
-		t.Errorf("status_prefs not written under SWEEPR_DATA_DIR: %v", err)
-	}
-	if _, err := os.Stat(prefs + ".lock"); err != nil {
-		t.Errorf("status_prefs.lock not created under SWEEPR_DATA_DIR: %v", err)
-	}
-	if entries, err := os.ReadDir(filepath.Join(data, "config")); err == nil {
-		for _, e := range entries {
-			if e.Name() != "status_prefs" && e.Name() != "status_prefs.lock" {
-				t.Errorf("leftover file %q beside status_prefs (temp file not cleaned up)", e.Name())
+			s := string(b)
+			if s == "" || !strings.HasSuffix(s, "\n") {
+				readerErr = fmt.Sprintf("a reader saw an incomplete file: %q", s)
+				return
+			}
+			var keys []string
+			for _, line := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
+				k, _, ok := strings.Cut(line, "=")
+				if !ok {
+					readerErr = fmt.Sprintf("a reader saw a broken line %q", line)
+					return
+				}
+				keys = append(keys, k)
+			}
+			if !sort.StringsAreSorted(keys) {
+				readerErr = fmt.Sprintf("a reader saw unsorted keys %q", keys)
+				return
 			}
 		}
+	}()
+	for i, cmd := range cmds {
+		if err := cmd.Wait(); err != nil {
+			t.Errorf("child %d: %v", i, err)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(home, ".config")); !os.IsNotExist(err) {
-		t.Errorf("profile .config must stay untouched when SWEEPR_DATA_DIR is set, stat err = %v", err)
+	close(stop)
+	wg.Wait()
+	if readerErr != "" {
+		t.Error(readerErr)
 	}
-	if got := loadPrefs()["cpu_cores"]; got != "8" {
-		t.Errorf("loadPrefs()[cpu_cores] = %q, want %q", got, "8")
-	}
+	tstAssertCompleteKeys(t, e, prefixes, count)
 }

@@ -3,16 +3,22 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
 
-// The status binary ships for Windows only; this lets the platform-neutral
-// code and its tests build on the macOS and Linux machines developers use.
-func lockPrefsFile(f *os.File) error {
-	return syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+// lockExclusive blocks until it holds an exclusive advisory lock on f. The
+// lock is released by unlock or when f is closed.
+func lockExclusive(f *os.File) error {
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+		if !errors.Is(err, syscall.EINTR) {
+			return err
+		}
+	}
 }
 
-func unlockPrefsFile(f *os.File) error {
-	return syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+func unlock(f *os.File) {
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 }

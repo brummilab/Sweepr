@@ -1,410 +1,291 @@
-// Package main provides the sw status command for real-time system monitoring.
+// Command status measures the load of the computer: CPU, memory, drives,
+// network and processes. It shows them in an interactive display, as one JSON
+// document or as a stream of JSON lines. It only measures; the single file it
+// ever writes is its own settings file.
 package main
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 )
 
+const helpText = `Usage: sw status [--json | --watch [--interval <duration>]]
+
+Show the load of this computer: CPU, memory, drives, network and processes.
+
+With a terminal as output, an interactive display opens. Press c to change
+how many CPU cores are listed, q, Esc or Ctrl+C to quit. Without a terminal
+(a pipe or a file), one JSON measurement is printed.
+
+Options:
+  --json                  Print one JSON measurement, even on a terminal.
+  --watch                 Print one JSON line per measurement until the output
+                          closes.
+  --interval <duration>   Wait between measurements of --watch, for example
+                          500ms, 1s or 2m. Must be greater than 0. Default: 1s.
+  -h, --help              Show this help.
+`
+
+// Area names used in notices and in the title of the display.
 const (
-	refreshInterval      = time.Second
-	processWatchInterval = refreshInterval
-	slowRefreshInterval  = 30 * time.Second
+	areaPlatform = "platform"
+	areaUptime   = "uptime"
+	areaCPU      = "cpu"
+	areaMemory   = "memory"
+	areaSwap     = "page file"
+	areaDisks    = "disks"
+	areaDiskIO   = "disk I/O"
+	areaNetwork  = "network"
+	areaProcs    = "processes"
 )
 
-var (
-	// Command-line flags
-	jsonOutput       = flag.Bool("json", false, "output metrics as JSON instead of TUI")
-	procCPUThreshold = flag.Float64("proc-cpu-threshold", 100, "alert when a process stays above this CPU percent")
-	procCPUWindow    = flag.Duration("proc-cpu-window", 5*time.Minute, "continuous duration a process must exceed the CPU threshold")
-	procCPUAlerts    = flag.Bool("proc-cpu-alerts", true, "enable persistent high-CPU process alerts")
-
-	// Watch mode: stream NDJSON (one snapshot per line) from a single warm collector.
-	watchMode     = flag.Bool("watch", false, "stream metrics continuously as newline-delimited JSON instead of the one-shot TUI/JSON")
-	watchInterval = flag.String("interval", "", "with --watch, collection interval (e.g. 1s, 2s); defaults to 1s")
-)
-
-func shouldUseJSONOutput(forceJSON bool, stdout *os.File) bool {
-	if forceJSON {
-		return true
-	}
-	if stdout == nil {
-		return false
-	}
-	info, err := stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return (info.Mode() & os.ModeCharDevice) == 0
-}
-
-type tickMsg struct{}
-type animTickMsg struct{}
-
-type model struct {
-	collector     *Collector
-	width         int
-	height        int
-	metrics       MetricsSnapshot
-	errMessage    string
-	schedule      collectionSchedule
-	fullCollected bool
-	lastUpdated   time.Time
-	collecting    bool
-	animFrame     int
-	catHidden     bool // true = hidden, false = visible
-	cpuCores      int  // how many CPU cores to list; 0 = all
-}
-
-// padViewToHeight ensures the rendered frame always overwrites the full
-// terminal region by padding with empty lines up to the current height.
-func padViewToHeight(view string, height int) string {
-	if height <= 0 {
-		return view
-	}
-
-	contentHeight := lipgloss.Height(view)
-	if contentHeight >= height {
-		return view
-	}
-
-	return view + strings.Repeat("\n", height-contentHeight)
-}
-
-func newModel() model {
-	return model{
-		collector: NewCollector(processWatchOptionsFromFlags()),
-		catHidden: loadCatHidden(),
-		cpuCores:  loadCPUCores(),
-	}
-}
-
-func processWatchOptionsFromFlags() ProcessWatchOptions {
-	return ProcessWatchOptions{
-		Enabled:      *procCPUAlerts,
-		CPUThreshold: *procCPUThreshold,
-		Window:       *procCPUWindow,
-	}
-}
-
-func validateFlags() error {
-	if *procCPUThreshold < 0 {
-		return fmt.Errorf("--proc-cpu-threshold must be >= 0")
-	}
-	if *procCPUWindow <= 0 {
-		return fmt.Errorf("--proc-cpu-window must be > 0")
-	}
-	return nil
-}
-
-func (m model) Init() tea.Cmd {
-	return tea.Batch(tickAfter(0), animTick())
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			return m, tea.Quit
-		case "k":
-			// Toggle cat visibility and persist preference
-			m.catHidden = !m.catHidden
-			saveCatHidden(m.catHidden)
-			return m, nil
-		case "c":
-			// Cycle how many CPU cores the card lists (2 → 4 → 8 → all) and persist.
-			m.cpuCores = nextCPUCores(m.cpuCores)
-			saveCPUCores(m.cpuCores)
-			return m, nil
+// unavailableAreas names the areas of a snapshot that could not be measured.
+// A process ranking that is missing only because the CPU could not be measured
+// is reported as the CPU.
+func unavailableAreas(s Snapshot) []string {
+	var out []string
+	add := func(missing bool, name string) {
+		if missing {
+			out = append(out, name)
 		}
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
-	case tickMsg:
-		if m.collecting {
-			return m, nil
-		}
-		m.collecting = true
-		return m, m.collectCmd(m.schedule.nextMode(time.Now()))
-	case collectionResult:
-		if msg.err != nil {
-			m.errMessage = msg.err.Error()
-		} else {
-			m.errMessage = ""
-		}
-		if !msg.data.CollectedAt.IsZero() {
-			m.metrics = msg.data
-			m.lastUpdated = msg.data.CollectedAt
-		}
-		if msg.mode == collectionFull && msg.err == nil {
-			m.fullCollected = true
-		}
-		m.collecting = false
-		delay := m.schedule.recordCompletion(msg, refreshInterval)
-		return m, tickAfter(delay)
-	case animTickMsg:
-		m.animFrame++
-		return m, animTickWithSpeed(m.metrics.CPU.Usage)
 	}
-	return m, nil
+	add(s.CPU == nil, areaCPU)
+	add(s.Memory == nil, areaMemory)
+	add(s.Memory != nil && (s.Memory.SwapTotal == nil || s.Memory.SwapUsed == nil), areaSwap)
+	add(s.Disks == nil, areaDisks)
+	add(s.DiskIO == nil, areaDiskIO)
+	add(s.Network == nil || s.NetworkTotal == nil, areaNetwork)
+	add(s.Procs == nil, areaProcs)
+	add(s.UptimeSeconds == nil, areaUptime)
+	add(s.Platform == nil, areaPlatform)
+	return out
 }
 
-func (m model) View() string {
-	if !m.schedule.hasSnapshot {
-		return "Loading..."
-	}
+type options struct {
+	help     bool
+	json     bool
+	watch    bool
+	interval time.Duration
+}
 
-	termWidth := m.width
-	if termWidth <= 0 {
-		termWidth = 80
-	}
+// usageError is a rejected command line.
+type usageError struct{ msg string }
 
-	header, mascot := renderHeader(m.metrics, m.errMessage, m.animFrame, termWidth, m.catHidden)
-	alertBar := renderProcessAlertBar(
-		m.metrics.ProcessAlerts,
-		m.metrics.ProcessStale,
-		m.metrics.ProcessCollectedAt,
-		termWidth,
-	)
+func (e usageError) Error() string { return e.msg }
 
-	renderFrame := func(cpuCores int, twoColumns bool) string {
-		var cardContent string
-		if !twoColumns {
-			cardWidth := termWidth
-			if cardWidth > 2 {
-				cardWidth -= 2
+// parseArgs reads the command line from left to right. The first problem ends
+// the parse; the help option ends it successfully, so it wins over everything
+// that was valid before it.
+func parseArgs(args []string) (options, error) {
+	opts := options{interval: time.Second}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") || arg == "-" || arg == "--" {
+			if arg == "-" || arg == "--" {
+				return opts, usageError{fmt.Sprintf("unknown option %q", arg)}
 			}
-			cards := buildCards(m.metrics, cardWidth, cpuCores, m.fullCollected)
-
-			var rendered []string
-			for i, c := range cards {
-				if i > 0 {
-					rendered = append(rendered, "")
+			return opts, usageError{fmt.Sprintf("unexpected argument %q", arg)}
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		value, hasValue := "", false
+		if k := strings.Index(name, "="); k >= 0 {
+			name, value, hasValue = name[:k], name[k+1:], true
+		}
+		switch name {
+		case "h", "help":
+			if hasValue {
+				return opts, usageError{fmt.Sprintf("option %q takes no value", "--"+name)}
+			}
+			opts.help = true
+			return opts, nil
+		case "json", "watch":
+			if hasValue {
+				return opts, usageError{fmt.Sprintf("option %q takes no value", "--"+name)}
+			}
+			if name == "json" {
+				opts.json = true
+			} else {
+				opts.watch = true
+			}
+		case "interval":
+			if !hasValue {
+				if i+1 >= len(args) {
+					return opts, usageError{"option \"--interval\" needs a value such as 500ms, 1s or 2m"}
 				}
-				rendered = append(rendered, renderCard(c, cardWidth))
+				i++
+				value = args[i]
 			}
-			cardContent = lipgloss.JoinVertical(lipgloss.Left, rendered...)
-		} else {
-			cardWidth := max(24, termWidth/2-4)
-			cards := buildCards(m.metrics, cardWidth, cpuCores, m.fullCollected)
-			cardContent = renderTwoColumns(cards, termWidth)
+			d, err := time.ParseDuration(value)
+			if err != nil || d <= 0 {
+				return opts, usageError{fmt.Sprintf("invalid value %q for option \"--interval\": use a duration greater than 0 such as 500ms, 1s or 2m", value)}
+			}
+			opts.interval = d
+		default:
+			return opts, usageError{fmt.Sprintf("unknown option %q", arg)}
 		}
+	}
+	return opts, nil
+}
 
-		// Combine header, mascot, and cards with consistent spacing
-		parts := []string{header}
-		if alertBar != "" {
-			parts = append(parts, alertBar)
-		}
-		if mascot != "" {
-			parts = append(parts, mascot)
-		}
-		parts = append(parts, cardContent)
-		return lipgloss.JoinVertical(lipgloss.Left, parts...)
+// DashboardConfig is what the interactive display needs from Run.
+type DashboardConfig struct {
+	Env     map[string]string
+	Sources Sources
+	Clock   Clock
+	Prefs   *PrefsStore
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+// DashboardStarter runs the interactive display until the user quits and
+// returns the exit code.
+type DashboardStarter func(DashboardConfig) int
+
+// RunOption changes how Run behaves.
+type RunOption func(*runSettings)
+
+type runSettings struct {
+	dashboard DashboardStarter
+}
+
+// WithDashboard replaces the function that starts the interactive display, so
+// that the choice of the display can be checked without a terminal.
+func WithDashboard(start DashboardStarter) RunOption {
+	return func(r *runSettings) { r.dashboard = start }
+}
+
+// Run is the program without the process around it. It returns the exit code.
+// Standard output carries data only (help, JSON); messages go to stderr.
+func Run(args []string, env map[string]string, stdout, stderr io.Writer, stdoutIsTerminal bool,
+	src Sources, clk Clock, runOpts ...RunOption) int {
+	rs := runSettings{dashboard: runDashboard}
+	for _, o := range runOpts {
+		o(&rs)
+	}
+	if stderr == nil {
+		stderr = io.Discard
 	}
 
-	// Every extra core is another card row, and the frame has no scrollback: on
-	// a 20-core machine "all" adds ~18 lines and pushes the lower cards off a short
-	// window. Step the preference back down until the frame fits; the stored
-	// preference is untouched, so a taller window gets it back.
-	cpuCores := m.cpuCores
-	twoColumns := termWidth > 80
-	output := renderFrame(cpuCores, twoColumns)
-	for m.height > 0 && lipgloss.Height(output) > m.height && cpuCores != cpuCoresCycle[0] {
-		cpuCores = smallerCPUCores(cpuCores)
-		output = renderFrame(cpuCores, twoColumns)
-	}
-	// Reuse the two-column layout when a short console cannot fit the stacked
-	// cards. Keep tall narrow windows stacked and preserve every card.
-	if m.height > 0 && lipgloss.Height(output) > m.height && !twoColumns && termWidth >= 60 {
-		output = renderFrame(cpuCores, true)
-	}
-	return padViewToHeight(output, m.height)
-}
-
-func (m model) collectCmd(mode collectionMode) tea.Cmd {
-	return func() tea.Msg {
-		return m.collector.collectMode(mode)
-	}
-}
-
-func tickAfter(delay time.Duration) tea.Cmd {
-	return tea.Tick(delay, func(time.Time) tea.Msg { return tickMsg{} })
-}
-
-func animTick() tea.Cmd {
-	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return animTickMsg{} })
-}
-
-func animTickWithSpeed(cpuUsage float64) tea.Cmd {
-	// Higher CPU = faster animation.
-	interval := max(300-int(cpuUsage*2.5), 50)
-	return tea.Tick(time.Duration(interval)*time.Millisecond, func(time.Time) tea.Msg { return animTickMsg{} })
-}
-
-// runJSONMode collects metrics once and outputs as JSON.
-func runJSONMode() {
-	collector := NewCollector(processWatchOptionsFromFlags())
-
-	data, err := collector.Collect()
-	if code := writeJSONSnapshot(os.Stdout, os.Stderr, data, err); code != 0 {
-		os.Exit(code)
-	}
-}
-
-// writeJSONSnapshot follows the watch stream and the dashboard: one failed
-// collector is reported on stderr, and the metrics that did succeed are still
-// printed and exit 0. A snapshot with no core metrics, or an encoding error, fails.
-func writeJSONSnapshot(stdout, stderr io.Writer, data MetricsSnapshot, err error) int {
+	opts, err := parseArgs(args)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "status: collect failed: %v\n", err)
-	}
-	if !hasCoreMetrics(data) {
-		if err == nil {
-			_, _ = fmt.Fprintln(stderr, "status: collect failed: no metrics collected")
-		}
+		fmt.Fprintf(stderr, "status: %v\nTry 'sw status --help' for usage.\n", err)
 		return 1
 	}
+	if opts.help {
+		if _, err := io.WriteString(stdout, helpText); err != nil {
+			return 1
+		}
+		return 0
+	}
 
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(data); err != nil {
-		_, _ = fmt.Fprintf(stderr, "error encoding JSON: %v\n", err)
+	switch {
+	case opts.watch:
+		return stream(opts.interval, env, stdout, stderr, src, clk)
+	case opts.json || !stdoutIsTerminal:
+		return measureOnce(env, stdout, stderr, src, clk)
+	default:
+		return rs.dashboard(DashboardConfig{
+			Env:     env,
+			Sources: src,
+			Clock:   clk,
+			Prefs:   OpenPrefs(env),
+			Stdout:  stdout,
+			Stderr:  stderr,
+		})
+	}
+}
+
+func newSampler(env map[string]string, src Sources, clk Clock) *Sampler {
+	s := NewSampler(src, clk)
+	s.SetSystemDrive(lookupEnv(env, "SystemDrive"))
+	return s
+}
+
+// encode writes the snapshot as one JSON document followed by a newline.
+// HTML escaping is off, so adapter names stay readable.
+func encode(w io.Writer, s Snapshot, indent bool) error {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if indent {
+		enc.SetIndent("", "  ")
+	}
+	if err := enc.Encode(&s); err != nil {
+		return err
+	}
+	_, err := w.Write(buf.Bytes())
+	return err
+}
+
+func reportUnavailable(stderr io.Writer, areas []string) {
+	for _, a := range areas {
+		fmt.Fprintf(stderr, "status: %s is not available\n", a)
+	}
+}
+
+// measureOnce prints one measurement. It fails only when nothing could be
+// measured or the document could not be written.
+func measureOnce(env map[string]string, stdout, stderr io.Writer, src Sources, clk Clock) int {
+	snap, err := newSampler(env, src, clk).Sample()
+	reportUnavailable(stderr, unavailableAreas(snap))
+	if err != nil {
+		return 1
+	}
+	if err := encode(stdout, snap, true); err != nil {
+		fmt.Fprintln(stderr, "status: cannot write the measurement")
 		return 1
 	}
 	return 0
 }
 
-// CollectedAt records the attempt even if every collector failed. Core metrics
-// establish a usable sample; idle CPU and an empty process list are valid too.
-func hasCoreMetrics(data MetricsSnapshot) bool {
-	if data.CPU.LogicalCPU > 0 || data.Memory.Total > 0 || data.ProcessCollectedAt != nil {
-		return true
+// stream prints one compact JSON line per measurement, the next one interval
+// after the previous one finished. It ends quietly when stdout is closed. A
+// notice about an unavailable area appears once per outage, not once per line.
+func stream(interval time.Duration, env map[string]string, stdout, stderr io.Writer, src Sources, clk Clock) int {
+	s := newSampler(env, src, clk)
+	reported := map[string]bool{}
+	for {
+		snap, _ := s.Sample()
+		if err := encode(stdout, snap, false); err != nil {
+			return 0
+		}
+		now := map[string]bool{}
+		for _, a := range unavailableAreas(snap) {
+			now[a] = true
+			if !reported[a] {
+				reportUnavailable(stderr, []string{a})
+			}
+		}
+		reported = now
+		clk.Sleep(interval)
 	}
-	for _, disk := range data.Disks {
-		if disk.Total > 0 {
-			return true
+}
+
+// environMap turns the process environment into a map.
+func environMap() map[string]string {
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if kv == "" {
+			continue
+		}
+		// Windows keeps entries such as "=C:=C:\" for the current folders,
+		// so the search for the separator starts after the first character.
+		if k, v, ok := strings.Cut(kv[1:], "="); ok {
+			env[kv[:1]+k] = v
 		}
 	}
-	return false
-}
-
-// runTUIMode runs the interactive terminal UI.
-func runTUIMode() {
-	p := tea.NewProgram(newModel(), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "system status error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func parseWatchInterval(raw string) (time.Duration, error) {
-	if raw == "" {
-		return refreshInterval, nil
-	}
-
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, fmt.Errorf("invalid --interval %q (want e.g. 1s, 2s): %w", raw, err)
-	}
-	if d <= 0 {
-		return 0, fmt.Errorf("invalid --interval %q (must be > 0)", raw)
-	}
-	return d, nil
-}
-
-// usageText is the help every other Sweepr subcommand prints by hand. The Go flag
-// package would otherwise render "Usage of /usr/local/bin/status-go:", naming a
-// bundled binary the user never typed, so the text is written out here instead.
-const usageText = `Usage: sw status [OPTIONS]
-
-Monitor system health. Without options it opens the interactive dashboard, and
-switches to a single JSON snapshot when stdout is not a terminal.
-
-Options:
-  --json                          Output one metrics snapshot as JSON
-  --watch                         Stream snapshots as newline-delimited JSON
-  --interval DURATION             With --watch, collection interval (default 1s)
-  --proc-cpu-alerts               Enable high-CPU process alerts (default true)
-  --proc-cpu-threshold PERCENT    Alert above this CPU percent (default 100)
-  --proc-cpu-window DURATION      Time above the threshold before alerting (default 5m)
-  -h, --help                      Show this help message
-
-Examples:
-  sw status                       Interactive dashboard
-  sw status --json                One machine-readable snapshot
-  sw status --watch --interval 2s Continuous NDJSON stream
-`
-
-// parseArgs applies Sweepr's CLI conventions to the flag package: help goes to
-// stdout and exits 0, and a bad invocation goes to stderr and exits 1 the way
-// every bash subcommand does, rather than the flag package's stderr-and-2.
-// It returns the exit code and whether main should keep running.
-func parseArgs(args []string, stdout, stderr io.Writer) (int, bool) {
-	flag.CommandLine.Init("sw status", flag.ContinueOnError)
-	// Parse must not print: this function decides which stream each message
-	// belongs on, and the default handler writes usage to stderr for both.
-	flag.CommandLine.SetOutput(io.Discard)
-	flag.CommandLine.Usage = func() {}
-
-	err := flag.CommandLine.Parse(args)
-	switch {
-	case errors.Is(err, flag.ErrHelp):
-		_, _ = fmt.Fprint(stdout, usageText)
-		return 0, false
-	case err != nil:
-		_, _ = fmt.Fprintln(stderr, err)
-		_, _ = fmt.Fprintln(stderr, "Use 'sw status --help' for usage information")
-		return 1, false
-	}
-
-	if err := validateFlags(); err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		_, _ = fmt.Fprintln(stderr, "Use 'sw status --help' for usage information")
-		return 1, false
-	}
-	return 0, true
+	return env
 }
 
 func main() {
-	if code, keepGoing := parseArgs(os.Args[1:], os.Stdout, os.Stderr); !keepGoing {
-		os.Exit(code)
-	}
-
-	if *watchMode {
-		interval, err := parseWatchInterval(*watchInterval)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			fmt.Fprintln(os.Stderr, "Use 'sw status --help' for usage information")
-			os.Exit(1)
-		}
-		runWatchMode(interval)
-		return
-	}
-
-	if shouldUseJSONOutput(*jsonOutput, os.Stdout) {
-		runJSONMode()
-	} else {
-		runTUIMode()
-	}
-}
-
-func activeAlerts(alerts []ProcessAlert) []ProcessAlert {
-	var active []ProcessAlert
-	for _, alert := range alerts {
-		if alert.Status == "active" {
-			active = append(active, alert)
-		}
-	}
-	return active
+	ignoreBrokenPipe()
+	os.Exit(Run(os.Args[1:], environMap(), os.Stdout, os.Stderr,
+		term.IsTerminal(os.Stdout.Fd()), nativeSources(), systemClock{}))
 }
