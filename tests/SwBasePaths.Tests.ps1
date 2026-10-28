@@ -151,9 +151,19 @@ BeforeAll {
         $saved
     }
     function script:Restore-Env([hashtable]$Saved) {
-        foreach ($name in @($Saved.Keys)) { [System.Environment]::SetEnvironmentVariable($name, $Saved[$name]) }
+        foreach ($name in @($Saved.Keys)) {
+            $value = $Saved[$name]
+            if ($null -eq $value) { $value = [NullString]::Value }
+            [System.Environment]::SetEnvironmentVariable($name, $value)
+        }
     }
-    function script:Set-Env([string]$Name, [string]$Value) { [System.Environment]::SetEnvironmentVariable($Name, $Value) }
+    # An empty value removes the variable. Since .NET 10 SetEnvironmentVariable(name, "") keeps the
+    # variable with an empty value, and PowerShell 7.6 passes a plain $null to the method as "";
+    # only [NullString]::Value is a real null.
+    function script:Set-Env([string]$Name, [AllowNull()][AllowEmptyString()][string]$Value) {
+        if ([string]::IsNullOrEmpty($Value)) { [System.Environment]::SetEnvironmentVariable($Name, [NullString]::Value) }
+        else { [System.Environment]::SetEnvironmentVariable($Name, $Value) }
+    }
 
     # Variables of the module that tests change or replace; saved and restored around each test.
     $script:StateNames = @('Config', 'Colors', 'Icons', 'ProtectedPaths', 'ExactProtectedPaths', 'DefaultWhitelistPatterns', 'SweeprCleanPathGuard', 'SWEEPR_BASE_LOADED')
@@ -226,6 +236,16 @@ BeforeAll {
         $stderr = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'child PowerShell timed out' }
         return [pscustomobject]@{ ExitCode = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
+    }
+
+    # Windows PowerShell serializes progress records into redirected stderr as CLIXML ("Preparing modules
+    # for first use"). That is the host talking, not the loaded file: drop the progress records and the
+    # envelope and keep whatever else was written.
+    function script:Get-ChildStderr([string]$Text) {
+        if ([string]::IsNullOrEmpty($Text)) { return '' }
+        $clean = [regex]::Replace($Text, '(?s)<Obj S="progress".*?</Obj>', '')
+        $clean = [regex]::Replace($clean, '<Objs[^>]*>|</Objs>|#< CLIXML', '')
+        return $clean.Trim()
     }
 
     function script:ConvertTo-TestLiteral([string]$Value) { "'" + $Value.Replace("'", "''") + "'" }
@@ -368,7 +388,7 @@ Describe 'Load contract' {
             [pscustomobject]@{
                 ExitCode = $Run.ExitCode
                 Output   = $parts[0]
-                Err      = $Run.Err
+                Err      = (Get-ChildStderr $Run.Err)
                 Data     = if ($parts.Count -gt 1) { $parts[1].Trim() | ConvertFrom-Json } else { $null }
             }
         }
