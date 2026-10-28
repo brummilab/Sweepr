@@ -993,7 +993,6 @@ function Get-SweeprInstallNestedFiles {
         "tests\Protection.Tests.ps1"
         "tests\Portable.Tests.ps1"
         "tests\PurgeBoundary.Tests.ps1"
-        "tests\Recycle.Tests.ps1"
         "tests\Release.Tests.ps1"
         "tests\Router.Tests.ps1"
         "tests\SwBasePaths.Tests.ps1"

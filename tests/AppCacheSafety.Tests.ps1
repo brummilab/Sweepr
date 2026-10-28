@@ -88,7 +88,7 @@ Describe 'Application cache boundaries' {
             (Get-Item -LiteralPath $path).CreationTime = (Get-Date).AddDays(-10)
         }
         $script:ReportAttachment = "$(Split-Path $report)\new.dmp"
-        Mock Get-ValidatedTreeSize {
+        Mock Get-SwValidatedTreeSize {
             [IO.File]::WriteAllText($script:ReportAttachment, 'new diagnostic')
             return 10
         }
@@ -327,9 +327,9 @@ Describe 'Application cache boundaries' {
         $cache = New-CacheFile "$env:APPDATA\Cursor\Cache\nested\entry"
         $script:CacheOwnerStarted = $false
         Mock Get-Process { if ($script:CacheOwnerStarted) { [pscustomobject]@{ProcessName='Cursor'} } }
-        Mock Get-ValidatedTreeSize { $script:CacheOwnerStarted = $true; return 13 }
+        Mock Get-SwValidatedTreeSize { $script:CacheOwnerStarted = $true; return 13 }
         Clear-AppCaches
-        Should -Invoke Get-ValidatedTreeSize -Times 1 -Exactly
+        Should -Invoke Get-SwValidatedTreeSize -Times 1 -Exactly
         Test-Path -LiteralPath $cache | Should -BeTrue
         (Get-CleanupStats).FilesCleaned | Should -Be 0
         Test-Path -LiteralPath $script:ExportListFile | Should -BeFalse

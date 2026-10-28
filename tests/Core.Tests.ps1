@@ -367,7 +367,7 @@ Describe "File Operations Module" {
         It "Records why a folder was refused before anything was removed" {
             $dir = Join-Path $script:TestDir ("refused-" + [guid]::NewGuid().ToString("N"))
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            Mock Get-SafeDirectoryTreeItems { @{ Success = $false; Items = @(); Reason = "protected or whitelisted entry inside: C:\x\keep" } }
+            Mock Get-SwSafeDirectoryTreeItems { @{ Success = $false; Items = @(); Reason = "protected or whitelisted entry inside: C:\x\keep" } }
 
             Remove-SafeItem -Path $dir -Recurse | Should -Be $false
             Remove-SafeItems -Paths @($dir) -Description "Refused"
@@ -403,7 +403,7 @@ Describe "File Operations Module" {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
             foreach ($name in @("a.txt", "b.txt", "locked.txt")) { Set-Content -LiteralPath (Join-Path $dir $name) -Value "x" }
             # Match by leaf: %TEMP% can be an 8.3 short path while the tree walk returns long names.
-            Mock Remove-TreeEntry { if ((Split-Path -Leaf $Path) -eq "locked.txt") { throw "in-use-canary" } else { Remove-Item -LiteralPath $Path -Force } }
+            Mock Remove-SwTreeEntry { if ((Split-Path -Leaf $Path) -eq "locked.txt") { throw "in-use-canary" } else { Remove-Item -LiteralPath $Path -Force } }
 
             Remove-SafeItem -Path $dir -Recurse | Should -Be $false
 
@@ -470,7 +470,7 @@ Describe "File Operations Module" {
             New-Item -ItemType Directory -Path (Join-Path $treeRoot "nested") -Force | Out-Null
             [System.IO.File]::WriteAllBytes((Join-Path $treeRoot "a.bin"), (New-Object byte[] 3000))
             [System.IO.File]::WriteAllBytes((Join-Path $treeRoot "nested\b.bin"), (New-Object byte[] 5000))
-            Mock Get-PathSize { throw "second walk of an already validated tree" }
+            Mock Get-SwPathSize { throw "second walk of an already validated tree" }
             Reset-CleanupStats
             try {
                 Set-DryRunMode -Enabled $DryRun
@@ -494,7 +494,7 @@ Describe "File Operations Module" {
             New-Item -ItemType Directory -Path $first, $second -Force | Out-Null
             [System.IO.File]::WriteAllBytes((Join-Path $first "a.bin"), (New-Object byte[] 4096))
             [System.IO.File]::WriteAllBytes((Join-Path $second "b.bin"), (New-Object byte[] 6144))
-            Mock Get-PathSize { throw "second walk of an already validated tree" }
+            Mock Get-SwPathSize { throw "second walk of an already validated tree" }
             Reset-CleanupStats
             try {
                 Set-DryRunMode -Enabled $DryRun
@@ -519,7 +519,7 @@ Describe "File Operations Module" {
             New-Item -ItemType Directory -Path (Join-Path $treeRoot "nested") -Force | Out-Null
             foreach ($i in 1..6) { Set-Content -LiteralPath (Join-Path $treeRoot "nested\file$i.txt") -Value "x" }
             $script:FixtureWhitelistState = Get-WhitelistState
-            Mock Get-WhitelistState { $script:FixtureWhitelistState }
+            Mock Get-SwWhitelistState { $script:FixtureWhitelistState }
             try {
                 switch ($_) {
                     "Remove-SafeDirectoryTree" { Remove-SafeDirectoryTree -Path $treeRoot | Should -BeTrue }
@@ -527,7 +527,7 @@ Describe "File Operations Module" {
                     "Remove-SafeItems" { Remove-SafeItems -Paths @($treeRoot) -Description "Tree" }
                 }
                 Test-Path -LiteralPath $treeRoot | Should -BeFalse
-                Should -Invoke Get-WhitelistState -Times 1 -Exactly
+                Should -Invoke Get-SwWhitelistState -Times 1 -Exactly
             }
             finally {
                 if (Test-Path $treeRoot) { Remove-Item -Path $treeRoot -Recurse -Force -ErrorAction SilentlyContinue }
@@ -545,11 +545,11 @@ Describe "File Operations Module" {
                 $script:Config.WhitelistFile = Join-Path $script:TestDir ("whitelist_" + [guid]::NewGuid().ToString("N") + ".txt")
                 Set-Content -LiteralPath $script:Config.WhitelistFile -Value (Split-Path -Parent $kept)
                 $script:FixtureWhitelistState = Get-WhitelistState
-                Mock Get-WhitelistState { $script:FixtureWhitelistState }
+                Mock Get-SwWhitelistState { $script:FixtureWhitelistState }
 
                 Remove-SafeDirectoryTree -Path $treeRoot | Should -BeFalse
                 Test-Path -LiteralPath $kept | Should -BeTrue
-                Should -Invoke Get-WhitelistState -Times 1 -Exactly
+                Should -Invoke Get-SwWhitelistState -Times 1 -Exactly
             }
             finally {
                 $script:Config.WhitelistFile = $savedWhitelist

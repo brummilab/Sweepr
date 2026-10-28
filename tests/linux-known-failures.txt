@@ -232,12 +232,6 @@ Purge project labels.names each project by its path while cleaning
 Purge project labels.shows paths under the profile from ~
 Quiet inventory scan.Scans the same inventory without host output
 Read-only system health queries.Collects health metrics in the current PowerShell host without query mocks
-Recoverable uninstall leftovers.Keeps a replaced root after sizing
-Recoverable uninstall leftovers.Keeps leftovers and reports no cleaned items when recycling fails
-Recoverable uninstall leftovers.Previews without calling the shell or permanent deletion
-Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: false)
-Recoverable uninstall leftovers.Rechecks newly added protected children after sizing (dry run: true)
-Recoverable uninstall leftovers.Routes an accepted directory only to the recycle operation
 Registered Proton Pass uninstall compatibility.Uses the exact registered normal command for the known broken quiet command
 Removal with real identities [W].F-19 [W] stops at a locked file with a real lock and leaves the rest
 Removal with real identities [W].F-22 [W] does not remove a file that was replaced during the measurement
@@ -252,6 +246,7 @@ Remove Command.Help Display.Should mention uninstall behavior
 Remove Command.Help Display.Should show help without error
 Remove-SwItem removes and previews.F-22 [W] removes a file and a folder with their real identity
 Remove-SwItem removes and previews.F-27 [W] moves a folder of the test drive to the Recycle Bin: true, the folder is gone, RECYCLED, no kilobytes
+Remove-SwItem removes and previews.F-27 [W] moves a single file of the test drive to the Recycle Bin: true, the file is gone, RECYCLED, no kilobytes
 Resolve-SwDataPaths.A-10 [W] gives Override and the paths as text for a drive that does not exist, without an error
 Resolve-SwDataPaths.A-10 [W] trims and normalizes a drive-letter SWEEPR_DATA_DIR
 Resolve-SwSafePath.B-13 [W] gives the drive root form C:\ for a drive root
