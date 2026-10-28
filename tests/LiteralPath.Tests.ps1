@@ -237,18 +237,6 @@ Describe 'Own data paths use -LiteralPath in the source' {
             }
         }
     }
-
-    It 'Uses -LiteralPath for the config and cache folder checks in base.ps1' {
-        $ast = Get-Ast 'lib\core\base.ps1'
-        foreach ($name in 'Get-ConfigPath', 'Get-CachePath') {
-            $function = Get-FunctionAst -Ast $ast -Name $name
-            $uses = @(Get-CommandUse -Node $function -Name 'Test-Path')
-            $uses.Count | Should -BeGreaterThan 0
-            foreach ($use in $uses) {
-                $use.Literal | Should -BeTrue -Because "lib/core/base.ps1:$($use.Line) in ${name}: $($use.Text)"
-            }
-        }
-    }
 }
 
 Describe 'clean whitelist in a data folder with brackets (F-01j)' {

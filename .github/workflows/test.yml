@@ -146,7 +146,7 @@ jobs:
           )
           
           foreach ($path in $protectedPaths) {
-              if (-not (Test-ProtectedPath -Path $path)) {
+              if (-not (Test-SwProtectedPath -Path $path)) {
                   Write-Host "FAIL: $path should be protected!" -ForegroundColor Red
                   exit 1
               }

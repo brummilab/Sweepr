@@ -52,12 +52,12 @@ Application cache boundaries.Rechecks the owner after sizing in dry-run true
 Application cache boundaries.Records a last-moment busy owner as skipped with no reclaimed files
 Application cache boundaries.Removes only old crash dumps across user and system cleanup
 Application cache boundaries.Uses Firefox local caches and keeps its roaming profile stores
+Assert-SwDataWritable.A-15 [W] stops with the message for a folder on a drive that does not exist
+Assert-SwDataWritable.A-15 [W] stops with the message when the ACL denies writing
 Background loading lifecycle.animates while the calling thread waits and stops before returning
 Background loading lifecycle.writes Unicode frames directly to a console buffer regardless of its legacy code page
 Base Module.Color Definitions.Should expose the full icon table in Windows PowerShell
-Base Module.Get-FreeSpace.Should accept drive parameter
 Base Module.Get-FreeSpace.Should return free space string
-Base Module.Get-WindowsVersion.Should return version info
 Base Module.Test-IsAdmin.Should return a boolean
 Bounded developer cache scans.Does not walk the Maven repository the default whitelist protects
 Bounded developer cache scans.Keeps the Stack candidate set while bounding the scan
@@ -99,6 +99,8 @@ Data folder protection in dry run.Remove-SafeItems still lists a prefix sibling 
 Data folder with brackets in its name.Does not let the bracket name act as a wildcard that protects a lookalike folder
 Debug through installed launcher call shapes.Creates a debug session through Command
 Debug through installed launcher call shapes.Creates a debug session through File
+Default protection lists.B-10 [W] protects a path with a trailing dot in a segment of a system folder
+Default protection lists.B-5 [W] protects the system root and its children (default lists)
 File Operations Module.Format-ByteSize.Should format bytes correctly
 File Operations Module.Format-ByteSize.Should handle large numbers
 File Operations Module.Get-PathSize.Should return 0 for non-existent path
@@ -147,6 +149,12 @@ Generated cmd launchers.Preserves apostrophes, exclamation marks, spaces, metach
 Generated cmd launchers.Returns the script exit code when removal deletes its running batch file
 Generic game content in install folders.Keeps ordinary installs and a single Steam game eligible
 Generic game content in install folders.Rechecks content in the existing final leftover ownership guard
+Get-SwFreeSpace.A-17 [W] gives the free space of a lower-case letter as number and unit in the size format
+Get-SwFreeSpace.A-17 [W] gives the free space of the default drive as number and unit in the size format
+Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter and colon as number and unit in the size format
+Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter only as number and unit in the size format
+Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter, colon and backslash as number and unit in the size format
+Get-SwWindowsVersion.A-18 [W] names Windows and gives a numeric build
 Install folder eligibility.Accepts an app's own folder, quoted or with a trailing slash
 Install folder eligibility.Accepts one game's folder inside a Steam library
 Junctions and symbolic links.Removes a folder holding a junction without touching the junction's target
@@ -156,6 +164,7 @@ Leftover install folder ownership.Previews a leftover when the only blocking key
 Leftover install folder ownership.Rechecks ownership in the final removal guard
 Leftover install folder ownership.Retains game content that appears at the final removal boundary
 Linked protected segments.Refuses a child of a protected segment that is a junction elsewhere
+Load contract.G-4 [W] loads in a fresh Windows PowerShell 5.1 process and gives 15 icons without output
 Logging Module.Debug session log.Writes a command script's own lines when the router already set SWEEPR_DEBUG
 Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through Command
 Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through File
@@ -216,6 +225,10 @@ Recoverable uninstall leftovers.Routes an accepted directory only to the recycle
 Registered Proton Pass uninstall compatibility.Uses the exact registered normal command for the known broken quiet command
 Remove Command.Help Display.Should mention uninstall behavior
 Remove Command.Help Display.Should show help without error
+Resolve-SwDataPaths.A-10 [W] gives Override and the paths as text for a drive that does not exist, without an error
+Resolve-SwDataPaths.A-10 [W] trims and normalizes a drive-letter SWEEPR_DATA_DIR
+Resolve-SwSafePath.B-13 [W] gives the drive root form C:\ for a drive root
+Resolve-SwSafePath.B-13 [W] gives the on-disk spelling of the case of an existing folder
 Scanning installed apps.Does not reuse the v5 inventory with lost install identities and Game Bar
 Scanning installed apps.Hides system components, updates and child entries
 Scanning installed apps.Keeps a large size that the install folder cannot disprove
@@ -250,6 +263,17 @@ Store package eligibility at the removal boundary.Still removes an exactly match
 System Cleanup Module.Admin Requirements.Should check for admin when needed
 Test runner exit status.passes when the native Go checks pass
 Test runner exit status.passes when two Go installs are on PATH
+Test-SwAdmin.A-16 [W] returns a bool that matches the elevation of the current process
+Test-SwAdmin.A-16 [W] returns the same value on every call
+Test-SwProtectedPath links and aliases [W].B-10 protects a junction to the profile root itself but not what lies below the target
+Test-SwProtectedPath links and aliases [W].B-10 protects a path that carries a trailing dot after the normalization
+Test-SwProtectedPath links and aliases [W].B-10 protects an existing path below a junction into a protected folder
+Test-SwProtectedPath links and aliases [W].B-10 protects an existing path below a junction when the final spelling hits a segment rule
+Test-SwProtectedPath links and aliases [W].B-10 protects the short name of an existing protected folder
+Test-SwProtectedPath links and aliases [W].B-11 still compares list entries in their typed and final spelling with -AlreadyResolved
+Test-SwProtectedPath links and aliases [W].B-6 protects the target of a junction that is spelled as an exact list entry
+Test-SwProtectedPath links and aliases [W].B-9 protects what lies below the final spelling of a Packages folder that is a junction
+Test-SwProtectedPath links and aliases [W].S-B3 [W] Resolve-SwSafePath gives the final spelling of a junction and the target of a short name
 Tree walk snapshots.Binds every item to the same chain a fresh snapshot of its path would
 Tree walk snapshots.Binds the root once and each child from its parent instead of reopening every ancestor
 Tree walk snapshots.Fails the recheck when a directory is replaced after the walk
@@ -281,6 +305,9 @@ Update Command.Installation Refresh.Should refresh the source directory on the f
 User Cleanup Module.Clear-UserTempFiles.Should run without error in dry-run mode
 Whitelist canonical pattern associations.Keeps mixed junction wildcard and literal rules associated in every position
 Whitelist canonical pattern associations.Retains a final wildcard at the removal sink after an expanded junction
+Whitelist junction roots [W].B-28 protects a candidate in the typed and in the final spelling below a junction root
+Whitelist junction roots [W].B-28 protects the final spelling of a junction used as the data folder
+Whitelist junction roots [W].S-B11 keeps protecting both spellings when more lines are added in any order
 Whitelisted junction roots.Keeps a child of a whitelisted junction by original and final spelling
 install.ps1 -Uninstall.Keeps a linked install directory and the files outside it
 install.ps1 -Uninstall.Keeps config behind a junction at .config
