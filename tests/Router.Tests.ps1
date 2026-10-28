@@ -273,7 +273,7 @@ Describe "Analyze debug routing" {
             $sweepr = Join-Path $script:WindowsDir 'sweepr.ps1'
             $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $sweepr analyze --help --debug 2>&1 | Out-String }
             $LASTEXITCODE | Should -Be 0
-            $output | Should -Match 'Interactive disk space analyzer'
+            $output | Should -Match 'Disk explorer'
             $log = Join-Path $profile '.config\sweepr\sweepr_debug_session.log'
             [System.IO.File]::ReadAllText($log) | Should -Match 'Command: sw analyze .*--debug'
         }
