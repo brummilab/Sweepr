@@ -948,8 +948,11 @@ function Add-SwBaseWhitelistRow {
     #    pattern when it holds * ? [ or a backtick; a pattern without [ and backtick also protects
     #    what lies below its matches. A pattern that is not a valid wildcard pattern is an error,
     #    which makes the whole state keep every path.
-    #  - When the written folder exists and the file system spells it differently (junction, symbolic
-    #    link, short name), its final spelling is added as a literal row.
+    #  - Every spelling that differs from the written text is added as a literal row: the normalized
+    #    full path (a short name may already be spelled out there, and callers compare candidates in
+    #    that form) and, for an existing folder, the final spelling (junction, symbolic link, short
+    #    name). Whether a spelling is new is judged the way candidates are matched: ignoring case
+    #    and a trailing backslash, but with / and \ kept apart.
     #  - With ResolveRelative (lines typed by the user) a text without drive or UNC root (relative,
     #    root-relative or drive-relative such as C:folder) is resolved the same way against the
     #    working directory of the process and against the PowerShell location, which can differ;
@@ -1030,7 +1033,7 @@ function Add-SwBaseWhitelistRow {
     $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
     $trim = [char[]]@('\', '/')
     $known = [System.Collections.Generic.List[string]]::new()
-    $known.Add((ConvertTo-SwBaseCmp $root))
+    $known.Add($root)
     foreach ($full in $fulls) {
         try {
             $info = Get-SwBaseFinalPathInfo -FullPath $full
@@ -1047,7 +1050,9 @@ function Add-SwBaseWhitelistRow {
             if ($null -ne $final) { $spellings.Add($final) }
             foreach ($spelling in $spellings) {
                 if ($spelling.Length -eq 0) { continue }
-                $form = ConvertTo-SwBaseCmp $spelling
+                # Same comparison as Test-SwWhitelisted: no case, no trailing backslash, and no / to \
+                # conversion, so a spelling that only differs in the separator still gets its row.
+                $form = $spelling.TrimEnd([char]92)
                 $seen = $false
                 foreach ($other in $known) { if ($form.Equals($other, $ignoreCase)) { $seen = $true; break } }
                 if ($seen) { continue }
