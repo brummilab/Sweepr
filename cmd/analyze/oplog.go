@@ -3,197 +3,208 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
-// What analyze moved, one line per item in the operations.log that the
-// PowerShell commands write through Write-SweeprOperation (lib/core/log.ps1), so
-// support can answer which path went where, when and how from one file.
-// SWEEPR_NO_OPLOG=1 turns it off. The launcher passes the run in
-// _SWEEPR_OPLOG_RUN_COMMAND and _SWEEPR_OPLOG_RUN_ID.
-var (
-	operationsLogPath             = defaultOperationsLogPath
-	operationsLogMaxBytes   int64 = 5 << 20
-	operationsLogNow              = time.Now
-	operationsLogRetryDelay       = 20 * time.Millisecond
+// The operations log is shared with the PowerShell commands: one line per
+// outcome, UTF-8 without a byte-order mark, CRLF line ends, appended. `sw
+// history` reads the same file, so the form of the lines must not drift.
 
-	operationsLogMu      sync.Mutex
-	operationsLogStarted bool
+const (
+	logTimeLayout   = "2006-01-02 15:04:05"
+	logRotateAbove  = 5 * 1024 * 1024
+	logAttempts     = 5
+	logRetryStep    = 20 * time.Millisecond
+	debugLogName    = "sweepr_debug_session.log"
+	defaultLogLabel = "analyze"
 )
 
-const operationsLogAttempts = 5
+// OpLog writes the operations log. The zero value and a nil pointer write
+// nothing. It is safe for concurrent use: the marker that opens a session is
+// written once, together with the first record that reaches the file, and no
+// line is torn.
+type OpLog struct {
+	mu       sync.Mutex
+	clock    Clock
+	appendFn func(path string, data []byte) error
+	path     string // the log file; empty when nothing is to be written
+	label    string // command and run id as they appear in every line
+	debug    bool
 
-func defaultOperationsLogPath() string {
-	// SWEEPR_DATA_DIR (portable mode) wins so the log stays next to the install
-	// instead of leaking into the user profile.
-	if dir := strings.TrimSpace(os.Getenv("SWEEPR_DATA_DIR")); dir != "" {
-		return filepath.Join(dir, "config", "operations.log")
-	}
-	home := os.Getenv("USERPROFILE")
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	if home == "" {
-		return ""
-	}
-	return filepath.Join(home, ".config", "sweepr", "operations.log")
+	rotated       bool
+	markerWritten bool
 }
 
-var logControlChars = regexp.MustCompile(`[\x00-\x1f\x7f]`)
+// NewOpLog prepares the log from the environment: SWEEPR_NO_OPLOG=1 turns it
+// off, SWEEPR_DATA_DIR names the data folder (the log lies in its config
+// folder) and otherwise the log lies in the profile folder. When no folder is
+// known it writes nothing, silently. appendFn appends data to a path; nil
+// appends to the real file. Nothing is created before the first record.
+func NewOpLog(env map[string]string, clock Clock, appendFn func(path string, data []byte) error) *OpLog {
+	l := &OpLog{clock: clock, appendFn: appendFn, label: logLabel(env), debug: env["SWEEPR_DEBUG"] == "1"}
+	if l.clock == nil {
+		l.clock = systemClock{}
+	}
+	if l.appendFn == nil {
+		l.appendFn = appendToFile
+	}
+	if env["SWEEPR_NO_OPLOG"] == "1" {
+		return l
+	}
+	if dir := envValue(env, "SWEEPR_DATA_DIR"); dir != "" {
+		l.path = filepath.Join(dir, "config", "operations.log")
+	} else if profile := profileFolder(env); profile != "" {
+		l.path = filepath.Join(profile, ".config", "sweepr", "operations.log")
+	}
+	return l
+}
 
-// logValue escapes control characters so a file name cannot forge a record.
-// Backslashes stay literal: Windows paths are full of them.
-func logValue(value string) string {
-	return logControlChars.ReplaceAllStringFunc(value, func(match string) string {
-		switch match[0] {
-		case '\t':
-			return `\t`
-		case '\n':
-			return `\n`
-		case '\r':
-			return `\r`
+// logLabel builds "command[ run=id]". A value with a blank, a closing
+// bracket or a control character would make the line unreadable for the
+// history command, so such a command falls back to the default and such an
+// id is left out.
+func logLabel(env map[string]string) string {
+	label := defaultLogLabel
+	if cmd := env["_SWEEPR_OPLOG_RUN_COMMAND"]; cmd != "" && labelOK(cmd) {
+		label = cmd
+	}
+	if id := env["_SWEEPR_OPLOG_RUN_ID"]; id != "" && labelOK(id) {
+		label += " run=" + id
+	}
+	return label
+}
+
+func labelOK(s string) bool {
+	for _, r := range s {
+		if r == ']' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// escapeControl writes control characters as text so that one record is one
+// line: tab, line feed and carriage return as \t \n \r, the others as \xNN.
+func escapeControl(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, `\x%02x`, r)
 		default:
-			return fmt.Sprintf(`\x%02x`, match[0])
+			b.WriteRune(r)
 		}
-	})
+	}
+	return b.String()
 }
 
-// operationLine is one record. The detail is parenthesis-free so a reader can
-// split it from a path such as "Program Files (x86)".
-func operationLine(now time.Time, label, action, path, detail string) string {
-	safeDetail := "-"
-	if detail != "" {
-		safeDetail = strings.NewReplacer("(", "[", ")", "]").Replace(logValue(detail))
+// FormatRecord builds one record line without the line end. Path and detail
+// have their control characters written out; in the detail the parentheses
+// become brackets, because the reader takes the last parenthesized group as
+// the detail. An empty detail is a dash.
+func FormatRecord(t time.Time, label, action, path, detail string) string {
+	d := escapeControl(detail)
+	d = strings.NewReplacer("(", "[", ")", "]").Replace(d)
+	if d == "" {
+		d = "-"
 	}
-	return fmt.Sprintf("[%s] [%s] %s %s (%s)", now.Format("2006-01-02 15:04:05"), label, action, logValue(path), safeDetail)
+	return fmt.Sprintf("[%s] [%s] %s %s (%s)", t.Format(logTimeLayout), label, action, escapeControl(path), d)
 }
 
-func operationsLogLabel() string {
-	command := os.Getenv("_SWEEPR_OPLOG_RUN_COMMAND")
-	if command == "" {
-		command = "analyze"
-	}
-	if id := os.Getenv("_SWEEPR_OPLOG_RUN_ID"); id != "" {
-		return command + " run=" + id
-	}
-	return command
-}
-
-// writeOperation appends one record. A failure never fails the deletion it
-// describes, and another Sweepr run holding the file is retried briefly.
-func writeOperation(action, path, detail string) {
-	if os.Getenv("SWEEPR_NO_OPLOG") == "1" || path == "" {
+// Record appends one line. A failure never reaches the caller: the line is
+// dropped, and with SWEEPR_DEBUG=1 a note says so in the debug file.
+func (l *OpLog) Record(action, path, detail string) {
+	if l == nil || l.path == "" || path == "" {
 		return
 	}
-	file := operationsLogPath()
-	if file == "" {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.clock.Now()
+	data := FormatRecord(now, l.label, action, path, detail) + "\r\n"
+	if !l.markerWritten {
+		data = "\r\n# ========== " + l.label + " session started at " + now.Format(logTimeLayout) + " ==========\r\n" + data
+	}
+	l.rotateOnce()
+	if err := l.appendWithRetry(data); err != nil {
+		l.note(err)
 		return
 	}
+	l.markerWritten = true
+}
 
-	operationsLogMu.Lock()
-	defer operationsLogMu.Unlock()
-
-	now := operationsLogNow()
-	label := operationsLogLabel()
-	text := operationLine(now, label, action, path, detail) + "\r\n"
-	if !operationsLogStarted {
-		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-			debugOperationFailure(file, err)
-			return
-		}
-		if info, err := os.Stat(file); err == nil && info.Size() > operationsLogMaxBytes {
-			_ = os.Rename(file, file+".old")
-		}
-		// The marker goes with the first record, so a run that removes
-		// nothing leaves the log untouched.
-		text = fmt.Sprintf("\r\n# ========== %s session started at %s ==========\r\n", label, now.Format("2006-01-02 15:04:05")) + text
+// rotateOnce moves a log above the size limit to <file>.old, replacing an
+// older one, at the first write of the process only.
+func (l *OpLog) rotateOnce() {
+	if l.rotated {
+		return
 	}
-	for attempt := 1; ; attempt++ {
-		err := appendOperationText(file, text)
-		if err == nil {
-			operationsLogStarted = true
-			return
-		}
-		if attempt >= operationsLogAttempts || errors.Is(err, os.ErrPermission) {
-			debugOperationFailure(file, err)
-			return
-		}
-		time.Sleep(time.Duration(attempt) * operationsLogRetryDelay)
+	l.rotated = true
+	if st, err := os.Stat(l.path); err == nil && st.Size() > logRotateAbove {
+		_ = os.Rename(l.path, l.path+".old")
 	}
 }
 
-// Keep normal TUI output quiet; explicit debug mode shares the shell's session log.
-func debugOperationFailure(file string, err error) {
-	if os.Getenv("SWEEPR_DEBUG") != "1" {
-		return
-	}
-	line := fmt.Sprintf("%s [DEBUG] operations.log not written: %s: %s\r\n", operationsLogNow().Format("15:04:05"), logValue(file), logValue(err.Error()))
-	logRoot := defaultOperationsLogPath()
-	if logRoot != "" {
-		debugFile := filepath.Join(filepath.Dir(logRoot), "sweepr_debug_session.log")
-		if appendOperationText(debugFile, line) == nil {
-			return
+// appendWithRetry tries up to logAttempts times, pausing a little longer
+// after each failure, because another Sweepr process may be appending at the
+// same moment. "Access denied" is not retried: waiting does not change it.
+func (l *OpLog) appendWithRetry(data string) error {
+	var err error
+	for attempt := 1; attempt <= logAttempts; attempt++ {
+		if err = l.appendFn(l.path, []byte(data)); err == nil {
+			return nil
+		}
+		if errors.Is(err, fs.ErrPermission) {
+			return err
+		}
+		if attempt < logAttempts {
+			l.clock.Sleep(time.Duration(attempt) * logRetryStep)
 		}
 	}
-	// Debug diagnostics still have an outlet when the entire log directory is unavailable.
-	_, _ = fmt.Fprint(os.Stderr, line)
+	return err
 }
 
-func appendOperationText(file, text string) error {
-	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+// note records a dropped line in the debug file; if that fails too, nothing
+// more happens (printing would disturb the display).
+func (l *OpLog) note(cause error) {
+	if !l.debug {
+		return
+	}
+	line := fmt.Sprintf("%s [DEBUG] operations log line not written to %s: %s\r\n",
+		l.clock.Now().Format("15:04:05"), escapeControl(l.path), escapeControl(cause.Error()))
+	_ = l.appendFn(filepath.Join(filepath.Dir(l.path), debugLogName), []byte(line))
+}
+
+// appendToFile appends to the real file, creating the folder and the file
+// when they are missing. Both are private to the user (the lines name paths).
+// The file is opened for appending with the default sharing, so a viewer or
+// another process may read and append at the same time. A failure to close
+// counts like a failure to write: the data may not have reached the file.
+func appendToFile(path string, data []byte) (err error) {
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
-	_, writeErr := f.WriteString(text)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	return closeErr
-}
-
-// recycleOutcome is what the shell did with an item it accepted.
-type recycleOutcome int
-
-const (
-	// recycledVerified: the Recycle Bin of the item's drive grew.
-	recycledVerified recycleOutcome = iota
-	// recycledUnverified: the shell reported success but the Recycle Bin
-	// could not be read before and after.
-	recycledUnverified
-	// deletedPermanently: the item is gone and the Recycle Bin did not grow,
-	// which is what the shell's "too big to recycle, delete permanently?"
-	// prompt leads to. A full bin that dropped an older item reads the same,
-	// so the detail keeps that doubt.
-	deletedPermanently
-)
-
-// logDeleteResult records one analyze deletion in operations.log.
-func logDeleteResult(path, size string, outcome recycleOutcome, err error) {
-	detail := func(parts ...string) string {
-		kept := make([]string, 0, len(parts))
-		for _, part := range parts {
-			if part != "" {
-				kept = append(kept, part)
-			}
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
 		}
-		return strings.Join(kept, "; ")
-	}
-	if err != nil {
-		writeOperation("FAILED", path, detail(size, err.Error()))
-		return
-	}
-	switch outcome {
-	case deletedPermanently:
-		writeOperation("REMOVED", path, detail(size, "the Recycle Bin did not grow, so the shell probably deleted it permanently"))
-	case recycledUnverified:
-		writeOperation("RECYCLED", path, detail(size, "Recycle Bin not verified"))
-	default:
-		writeOperation("RECYCLED", path, size)
-	}
+	}()
+	_, err = f.Write(data)
+	return err
 }
