@@ -187,20 +187,24 @@ func (l *OpLog) note(cause error) {
 	_ = l.appendFn(filepath.Join(filepath.Dir(l.path), debugLogName), []byte(line))
 }
 
-// appendToFile appends to the real file and creates the folder first. The
-// file is opened shared, so a viewer or another process may read and append
-// at the same time.
-func appendToFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+// appendToFile appends to the real file, creating the folder and the file
+// when they are missing. Both are private to the user (the lines name paths).
+// The file is opened for appending with the default sharing, so a viewer or
+// another process may read and append at the same time. A failure to close
+// counts like a failure to write: the data may not have reached the file.
+func appendToFile(path string, data []byte) (err error) {
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
-	_, werr := f.Write(data)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	return werr
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	_, err = f.Write(data)
+	return err
 }

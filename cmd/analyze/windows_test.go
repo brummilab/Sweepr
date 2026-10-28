@@ -26,11 +26,15 @@ import (
 func tstRealFS() FS             { return NewOSFS() }
 func tstRealRecycler() Recycler { return NewShellRecycler() }
 
+// tstMakeJunction creates a directory junction at link that leads to target.
+// A junction needs no special privilege; when it cannot be made here (the
+// helper program is missing, the folder does not allow it) the checks that
+// depend on it are skipped.
 func tstMakeJunction(t *testing.T, link, target string) {
 	t.Helper()
-	out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput()
-	if err != nil {
-		t.Skipf("cannot create a junction: %v: %s", err, out)
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", link, target)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("no junction could be created, so this check does not apply (%v): %s", err, strings.TrimSpace(string(out)))
 	}
 }
 

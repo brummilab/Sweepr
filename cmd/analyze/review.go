@@ -156,7 +156,7 @@ func reviewEntry(ctx context.Context, fsys FS, clock Clock, env map[string]strin
 			return refuse("cloud", "%s lies in a cloud folder: %s", name, cloudAdvice), nil
 		}
 	}
-	if v := byIdentity(chain, readDataIDs(fsys, p.rs.data)); v.kind != protNone {
+	if v := byIdentity(chain, p.dataIDs); v.kind != protNone {
 		return protectionRefusal(v, name), nil
 	}
 	snap := make(reviewSnapshot, len(chain))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -127,6 +128,13 @@ type explorerModel struct {
 	opCancel context.CancelFunc
 	opLog    *OpLog
 
+	// runMu guards the state that the goroutines of the moves share with the
+	// goroutine that waits for them when the program ends.
+	runMu    sync.Mutex
+	runCond  *sync.Cond
+	running  int  // moves whose Recycle Bin work has started
+	quitting bool // no move may start any more
+
 	rowCache []listRow
 	dirty    bool
 }
@@ -137,7 +145,7 @@ func newExplorerModel(d Deps, env map[string]string, target string) tea.Model {
 	if d.Clock == nil {
 		d.Clock = systemClock{}
 	}
-	return &explorerModel{
+	m := &explorerModel{
 		deps:    d,
 		env:     env,
 		noColor: env["NO_COLOR"] != "",
@@ -145,6 +153,8 @@ func newExplorerModel(d Deps, env map[string]string, target string) tea.Model {
 		kind:    viewFolder,
 		dirty:   true,
 	}
+	m.runCond = sync.NewCond(&m.runMu)
+	return m
 }
 
 type (
@@ -595,6 +605,9 @@ func keyName(k tea.KeyMsg) string {
 }
 
 func (m *explorerModel) quit() tea.Cmd {
+	m.runMu.Lock()
+	m.quitting = true
+	m.runMu.Unlock()
 	m.invalidate()
 	m.cancelOperation()
 	return tea.Quit
@@ -621,7 +634,17 @@ func (m *explorerModel) onKey(k tea.KeyMsg) tea.Cmd {
 			m.say("Canceled.", false)
 		}
 		return nil
-	case modeChecking, modeMoving:
+	case modeChecking:
+		switch key {
+		case "q":
+			return m.quit()
+		case "esc":
+			m.cancelOperation()
+			m.mode = modeBrowse
+			m.say("Canceled.", false)
+		}
+		return nil
+	case modeMoving:
 		if key == "q" {
 			return m.quit()
 		}
@@ -829,22 +852,28 @@ func (m *explorerModel) markedItems() []Item {
 	return out
 }
 
-// itemsSizeText is the sum of the sizes; a plus says that not every entry
-// was measured completely.
+// itemsSizeText is the sum of the sizes that were measured. A plus says that
+// not every entry was measured completely; when no entry has a measured size
+// there is no sum to show, and the text says so instead of a number.
 func itemsSizeText(items []Item) string {
 	var sum int64
-	plus := false
+	known, plus := false, false
 	for _, it := range items {
-		sum += it.Size
+		if it.measured() {
+			sum += it.Size
+			known = true
+		}
 		if it.State != Complete {
 			plus = true
 		}
 	}
-	text := FormatSize(sum)
-	if plus {
-		text += "+"
+	if !known {
+		return "not measured"
 	}
-	return text
+	if plus {
+		return FormatSize(sum) + "+"
+	}
+	return FormatSize(sum)
 }
 
 // ---------------------------------------------------------------------------
@@ -974,6 +1003,19 @@ func (m *explorerModel) confirm() tea.Cmd {
 	m.say("Moving to the Recycle Bin... (only Q and Ctrl+C work meanwhile)", false)
 	deps, env, root, log := m.deps, m.env, m.root, m.log()
 	return func() tea.Msg {
+		m.runMu.Lock()
+		if m.quitting {
+			m.runMu.Unlock()
+			return nil // the program is ending: nothing may start now
+		}
+		m.running++
+		m.runMu.Unlock()
+		defer func() {
+			m.runMu.Lock()
+			m.running--
+			m.runCond.Broadcast()
+			m.runMu.Unlock()
+		}()
 		return moveMsg{id: id, items: items, results: RecycleItems(ctx, deps, env, root, items, log)}
 	}
 }
@@ -1013,4 +1055,16 @@ func (m *explorerModel) onMove(r moveMsg) tea.Cmd {
 	}
 	m.expireSnapshots()
 	return m.startFolderScan(m.root)
+}
+
+// waitIdle blocks until the moves that have started have returned. A call to
+// the Recycle Bin that has begun cannot be taken back, so the program waits for
+// it instead of ending in the middle; the entries after it are not started
+// once the program is quitting, and nothing is logged for an interrupted run.
+func (m *explorerModel) waitIdle() {
+	m.runMu.Lock()
+	defer m.runMu.Unlock()
+	for m.running > 0 {
+		m.runCond.Wait()
+	}
 }

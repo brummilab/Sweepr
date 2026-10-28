@@ -859,6 +859,7 @@ function Get-SweeprInstallNestedFiles {
         "bin\status.ps1"
         "bin\uninstall.ps1"
         "bin\update.ps1"
+        "cmd\analyze\datafolder_test.go"
         "cmd\analyze\explorer.go"
         "cmd\analyze\explorer_delete_test.go"
         "cmd\analyze\explorer_nav_test.go"

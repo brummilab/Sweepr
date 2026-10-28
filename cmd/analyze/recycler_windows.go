@@ -61,6 +61,13 @@ func (e hresultError) Error() string {
 }
 
 // comCall calls a method of a COM object by its slot in the method table.
+//
+// The arguments may be addresses of Go variables that the method writes to
+// (out parameters). The directive makes the compiler keep every object that
+// was passed as uintptr(unsafe.Pointer(x)) alive, and on the heap, until the
+// call returns, as it does for LazyProc.Call.
+//
+//go:uintptrescapes
 func comCall(obj unsafe.Pointer, slot int, args ...uintptr) int32 {
 	table := *(**[vtableSlots]uintptr)(obj)
 	all := make([]uintptr, 0, 1+len(args))
@@ -172,7 +179,7 @@ func recycleInApartment(path string) error {
 	}
 
 	// The shell said yes; trust only the file system.
-	p, err := windows.UTF16PtrFromString(path)
+	p, err := windows.UTF16PtrFromString(apiPath(path))
 	if err != nil {
 		return err
 	}

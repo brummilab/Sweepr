@@ -130,7 +130,12 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer, stdoutI
 	if start == nil {
 		start = runTerminalUI
 	}
-	if err := start(newExplorerModel(d, env, target)); err != nil {
+	model := newExplorerModel(d, env, target)
+	err = start(model)
+	if em, ok := model.(*explorerModel); ok {
+		em.waitIdle()
+	}
+	if err != nil {
 		fmt.Fprintf(stderr, "analyze: the display could not start: %v\n", err)
 		return 1
 	}

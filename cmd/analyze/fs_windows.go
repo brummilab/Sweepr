@@ -5,6 +5,7 @@ package main
 import (
 	"io/fs"
 	"strings"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -133,21 +134,6 @@ func (osFS) Resolve(path string) (string, error) {
 	}
 }
 
-// reparseTag reads the tag of the entry itself from its directory entry.
-func reparseTag(path string) (uint32, error) {
-	p, err := windows.UTF16PtrFromString(strings.TrimRight(apiPath(path), `\`))
-	if err != nil {
-		return 0, err
-	}
-	var data windows.Win32finddata
-	h, err := windows.FindFirstFile(p, &data)
-	if err != nil {
-		return 0, err
-	}
-	windows.FindClose(h)
-	return data.Reserved0, nil
-}
-
 func (osFS) Identity(path string) (FileID, error) {
 	h, err := openHandle(path, windows.FILE_READ_ATTRIBUTES, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT)
 	if err != nil {
@@ -158,11 +144,18 @@ func (osFS) Identity(path string) (FileID, error) {
 	if err := windows.GetFileInformationByHandle(h, &info); err != nil {
 		return FileID{}, pathError("identity", path, err)
 	}
+	// The tag comes from the handle that was just opened, so it describes
+	// the very object the identity belongs to.
 	var tag uint32
 	if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-		if tag, err = reparseTag(path); err != nil {
+		var ti struct {
+			FileAttributes uint32
+			ReparseTag     uint32
+		}
+		if err := windows.GetFileInformationByHandleEx(h, windows.FileAttributeTagInfo, (*byte)(unsafe.Pointer(&ti)), uint32(unsafe.Sizeof(ti))); err != nil {
 			return FileID{}, pathError("identity", path, err)
 		}
+		tag = ti.ReparseTag
 	}
 	isDir, reparse, _ := classify(info.FileAttributes, tag)
 	return FileID{
