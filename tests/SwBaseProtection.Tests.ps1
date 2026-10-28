@@ -1966,6 +1966,30 @@ Describe 'Whitelist' {
         Assert-Result (Test-Wl ($short + '\f')) $true 'short spelling below the folder'
         Assert-Result (Test-Wl ($other + '\f')) $false 'prefix sibling in long spelling'
     }
+
+    It 'B-28 protects the backslash spelling below a default pattern whose environment value uses forward slashes' {
+        $local = $script:Case.Replace('\', '/') + '/local'
+        $explorer = $local + '\Microsoft\Windows\Explorer'
+        [void][System.IO.Directory]::CreateDirectory($explorer.Replace('\', [System.IO.Path]::DirectorySeparatorChar))
+        $script:DefaultWhitelistPatterns = @($explorer)
+        $normalized = [System.IO.Path]::GetFullPath($explorer)
+        Assert-Result (Test-Wl (Win $normalized 'f')) $true 'below the normalized spelling'
+        Assert-Result (Test-Wl (Win $explorer 'f')) $true 'below the spelling as built'
+        Assert-Result (Test-Wl (Win ($normalized + '-old') 'f')) $false 'prefix sibling'
+    }
+
+    It 'B-28 protects the backslash spelling below ~\keep when USERPROFILE uses forward slashes, also for a folder that does not exist' {
+        $profileText = $script:Case.Replace('\', '/') + '/home'
+        $saved = Save-Env @('USERPROFILE')
+        try {
+            Set-Env 'USERPROFILE' $profileText
+            Set-WlLines @('~\keep')
+            $normalized = [System.IO.Path]::GetFullPath($profileText + '\keep')
+            Assert-Result (Test-Wl (Win $normalized 'f')) $true 'below the normalized spelling'
+            Assert-Result (Test-Wl (Win ($normalized + '-old') 'f')) $false 'prefix sibling'
+        }
+        finally { Restore-Env $saved }
+    }
 }
 
 # ============================================================================
