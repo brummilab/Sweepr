@@ -223,10 +223,11 @@ Describe "release workflow portable asset" {
     }
 
     It "Attaches the portable zip to the release" {
-        $collect = $script:WorkflowText.IndexOf('$files = @(')
-        $collect | Should -BeGreaterThan -1
-        $block = $script:WorkflowText.Substring($collect, $script:WorkflowText.IndexOf(')', $collect) - $collect)
-        $block | Should -Match ([regex]::Escape($script:Asset))
-        $block | Should -Match ([regex]::Escape('-x64.zip"'))
+        # The release job lists the files it attaches under "files:" of the release action.
+        $release = [regex]::Match($script:WorkflowText, '(?ms)uses: softprops/action-gh-release@.*?files: \|(?<files>.*?)^\s*draft:')
+        $release.Success | Should -BeTrue
+        $files = $release.Groups['files'].Value
+        $files | Should -Match ([regex]::Escape('release/sweepr-${{ needs.build-windows.outputs.version }}-x64-portable.zip'))
+        $files | Should -Match ([regex]::Escape('release/sweepr-${{ needs.build-windows.outputs.version }}-x64.zip'))
     }
 }
