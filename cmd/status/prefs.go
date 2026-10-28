@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The settings file holds one "key=value" line per setting. It is read when
@@ -33,7 +34,21 @@ type PrefsStore struct {
 	// newest remembers the latest ticket saved per key, so that a slow older
 	// save cannot overwrite a newer one (see setOrdered).
 	newest map[string]uint64
+
+	// File operations that can fail for a moment on Windows while another
+	// program (a reader, a virus scanner) has the file open. They are fields
+	// so that tests can make them fail on purpose.
+	readFile func(string) ([]byte, error)
+	rename   func(oldPath, newPath string) error
+	pause    func(time.Duration)
 }
+
+const (
+	// saveAttempts bounds the retries of a read or a replace that fails; the
+	// pause grows from 5 ms to at most 50 ms between them, about 0.4 s in all.
+	saveAttempts = 12
+	maxSavePause = 50 * time.Millisecond
+)
 
 // lookupEnv reads from the environment map. Windows names are case
 // insensitive, so the lookup falls back to a case-insensitive match there.
@@ -67,9 +82,16 @@ func prefsPath(env map[string]string) string {
 // OpenPrefs reads the settings file if there is one. A missing or unreadable
 // file gives no values; reading never creates a folder or a file.
 func OpenPrefs(env map[string]string) *PrefsStore {
-	p := &PrefsStore{path: prefsPath(env), values: map[string]string{}, newest: map[string]uint64{}}
+	p := &PrefsStore{
+		path:     prefsPath(env),
+		values:   map[string]string{},
+		newest:   map[string]uint64{},
+		readFile: os.ReadFile,
+		rename:   os.Rename,
+		pause:    time.Sleep,
+	}
 	if p.path != "" {
-		if data, err := os.ReadFile(p.path); err == nil {
+		if data, err := p.readFile(p.path); err == nil {
 			p.values = parsePrefs(data)
 		}
 	}
@@ -114,10 +136,34 @@ func validPrefsEntry(key, value string) bool {
 	return !strings.ContainsAny(key, "=\r\n") && !strings.ContainsAny(value, "\r\n")
 }
 
+// retry runs op until it succeeds or the attempts are used up. An error that
+// says a file does not exist is final. On Windows, replacing or reading a file
+// fails with a sharing violation or "access denied" while another program has
+// it open without delete sharing; that passes within milliseconds, and giving
+// up on the first failure would silently drop the change.
+func (p *PrefsStore) retry(op func() error) error {
+	pause := 5 * time.Millisecond
+	var err error
+	for i := 0; i < saveAttempts; i++ {
+		if err = op(); err == nil || errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if i < saveAttempts-1 {
+			p.pause(pause)
+			if pause *= 2; pause > maxSavePause {
+				pause = maxSavePause
+			}
+		}
+	}
+	return err
+}
+
 // save merges one key into the file: lock first, then read the current
 // content, set the key, write all keys sorted into a temporary file in the
 // same folder and replace the file with it. Two programs that save different
-// keys at the same time therefore lose neither. Errors end the save quietly.
+// keys at the same time therefore lose neither. Reading and replacing are
+// retried a few times, because a reader that holds the file open can block
+// them for a moment. Errors that remain end the save quietly.
 func (p *PrefsStore) save(key, value string) {
 	if p.path == "" || !validPrefsEntry(key, strings.TrimSpace(value)) {
 		return
@@ -138,13 +184,17 @@ func (p *PrefsStore) save(key, value string) {
 	defer unlock(lock)
 
 	current := map[string]string{}
-	data, err := os.ReadFile(p.path)
+	var data []byte
+	err = p.retry(func() (err error) {
+		data, err = p.readFile(p.path)
+		return err
+	})
 	switch {
 	case err == nil:
 		current = parsePrefs(data)
 	case errors.Is(err, os.ErrNotExist):
 	default:
-		// Unreadable: never replace what cannot be read.
+		// Still unreadable after the retries: never replace what cannot be read.
 		return
 	}
 	current[key] = value
@@ -166,7 +216,7 @@ func (p *PrefsStore) save(key, value string) {
 	tmpName := tmp.Name()
 	_, werr := tmp.Write(out.Bytes())
 	cerr := tmp.Close()
-	if werr != nil || cerr != nil || os.Rename(tmpName, p.path) != nil {
+	if werr != nil || cerr != nil || p.retry(func() error { return p.rename(tmpName, p.path) }) != nil {
 		_ = os.Remove(tmpName)
 	}
 }
