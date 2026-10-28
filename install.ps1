@@ -914,6 +914,7 @@ function Get-SweeprInstallNestedFiles {
         "cmd\status\prefs.go"
         "cmd\status\prefs_lock_other.go"
         "cmd\status\prefs_lock_windows.go"
+        "cmd\status\prefs_retry_test.go"
         "cmd\status\prefs_test.go"
         "cmd\status\privacy_test.go"
         "cmd\status\render.go"
