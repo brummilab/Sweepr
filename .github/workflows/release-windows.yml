@@ -13,9 +13,10 @@ on:
         type: string
 
 # The workflow only creates a draft. The maintainer checks the assets and
-# publishes the draft; see RELEASE.md.
+# publishes the draft; see RELEASE.md. The build job has read access only;
+# write access is limited to the job that creates the draft.
 permissions:
-  contents: write  # Required for creating releases
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,13 +27,17 @@ jobs:
     name: Build Windows Release Artifacts
     runs-on: windows-latest
     timeout-minutes: 45
-    
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      prerelease: ${{ steps.version.outputs.PRERELEASE }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      
+          persist-credentials: false
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -44,7 +49,7 @@ jobs:
       - name: Check for known vulnerabilities
         run: |
           go version
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./cmd/...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./cmd/...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
 
@@ -57,17 +62,22 @@ jobs:
       - name: Extract version
         id: version
         shell: pwsh
+        # Inputs and refs arrive as environment values, never as script text,
+        # and must look like a version before any later step uses them.
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          GIT_REF: ${{ github.ref }}
         run: |
-          if ("${{ github.event.inputs.version }}" -ne "") {
-            $version = "${{ github.event.inputs.version }}"
-          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
-            $version = "${{ github.ref }}" -replace '^refs/tags/[Vv]', ''
+          if ($env:INPUT_VERSION) {
+            $version = $env:INPUT_VERSION
+          } elseif ($env:GIT_REF -like "refs/tags/*") {
+            $version = $env:GIT_REF -replace '^refs/tags/[Vv]', ''
             $version = $version -replace '-windows$', ''
           } else {
             $version = (Get-Content VERSION -Raw).Trim()
           }
-          if (-not $version) {
-            Write-Error "Could not detect version"
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
+            Write-Host "::error::Not a version: '$version'"
             exit 1
           }
           # 0.1.0 is a stable release; 0.1.0-beta.1 stays a prerelease.
@@ -161,8 +171,11 @@ jobs:
 
       - name: Build release artifacts (ZIP)
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          & scripts\build-release.ps1 -Version ${{ steps.version.outputs.VERSION }}
+          & scripts\build-release.ps1 -Version $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: List release artifacts
         shell: pwsh
@@ -207,33 +220,48 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Collect release files
-        id: release_files
-        shell: pwsh
+  release:
+    name: Create draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # Required for creating the draft release
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Check the release files
+        env:
+          RELEASE_VERSION: ${{ needs.build-windows.outputs.version }}
         run: |
-          $files = @(
-            "release/sweepr-${{ steps.version.outputs.VERSION }}-x64.zip",
-            "release/sweepr-${{ steps.version.outputs.VERSION }}-x64-portable.zip",
-            "release/analyze-windows-x64.exe",
-            "release/status-windows-x64.exe",
-            "release/SHA256SUMS.txt"
-          )
-          "files<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          $files | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-      
+          set -eu
+          for f in "sweepr-${RELEASE_VERSION}-x64.zip" "sweepr-${RELEASE_VERSION}-x64-portable.zip" \
+                   analyze-windows-x64.exe status-windows-x64.exe SHA256SUMS.txt; do
+            test -f "release/$f" || { echo "::error::Missing release file $f"; exit 1; }
+          done
+          (cd release && sha256sum --check --ignore-missing SHA256SUMS.txt)
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: ${{ github.ref_name }}
-          files: ${{ steps.release_files.outputs.files }}
+          files: |
+            release/sweepr-${{ needs.build-windows.outputs.version }}-x64.zip
+            release/sweepr-${{ needs.build-windows.outputs.version }}-x64-portable.zip
+            release/analyze-windows-x64.exe
+            release/status-windows-x64.exe
+            release/SHA256SUMS.txt
           draft: true
-          prerelease: ${{ steps.version.outputs.PRERELEASE }}
+          prerelease: ${{ needs.build-windows.outputs.prerelease }}
           make_latest: false
           generate_release_notes: false
           body: |
-            ## Sweepr CLI for Windows ${{ steps.version.outputs.VERSION }}
+            ## Sweepr CLI for Windows ${{ needs.build-windows.outputs.version }}
 
             Install from PowerShell:
 
