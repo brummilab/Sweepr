@@ -971,28 +971,61 @@ function Add-SwBaseWhitelistRow {
     if ($hasWildcard) { return }
     $absolute = [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')
     if (-not $absolute -and -not $ResolveRelative) { return }
-    # A bare drive (C:) or drive-relative text would mean the current folder of that drive.
-    if (-not $absolute -and [regex]::IsMatch($root, '\A[A-Za-z]:')) { return }
+    # A bare drive (C:) would mean the current folder of that drive: nothing to resolve.
+    if (-not $absolute -and [regex]::IsMatch($root, '\A[A-Za-z]:\z')) { return }
+
+    # Absolute text has one full path. Relative text (relative, root-relative, drive-relative) is
+    # taken against the working directory of the process and against the PowerShell location, which
+    # can differ; each place where the item exists adds a row.
+    $fulls = [System.Collections.Generic.List[string]]::new()
     try {
-        $full = Get-SwBaseFullPath -Path $root
-        if ($null -eq $full) { return }
-        $info = Get-SwBaseFinalPathInfo -FullPath $full
-        $final = $null
-        # Trailing separators only: other hosts keep their own separator, and candidates are compared as given.
-        $trim = [char[]]@('\', '/')
-        if ([string]$info.Status -eq 'Resolved') { $final = ([string]$info.Path).TrimEnd($trim) }
-        elseif ([string]$info.Status -eq 'NoApi' -and -not $absolute) {
-            # No Windows file API: the full path is the final spelling, if the item exists.
-            if ([System.IO.Directory]::Exists($full) -or [System.IO.File]::Exists($full)) { $final = $full.TrimEnd($trim) }
+        $processFull = Get-SwBaseFullPath -Path $root
+        if ($null -ne $processFull) { $fulls.Add($processFull) }
+        if (-not $absolute) {
+            $location = [string](Get-Location -PSProvider FileSystem).ProviderPath
+            if (-not [string]::IsNullOrWhiteSpace($location)) {
+                $anchored = $null
+                $driveText = [regex]::Match($root, '\A([A-Za-z]):(?![\\/])')
+                if ($driveText.Success) {
+                    # Drive-relative: only meaningful against a location on that same drive.
+                    if ($location.StartsWith($driveText.Groups[1].Value + ':', [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $anchored = Join-SwBasePath $location $root.Substring(2)
+                    }
+                }
+                elseif ($root.StartsWith('\')) {
+                    $locationRoot = [System.IO.Path]::GetPathRoot($location)
+                    if (-not [string]::IsNullOrEmpty($locationRoot)) { $anchored = $locationRoot.TrimEnd([char[]]@('\', '/')) + $root }
+                }
+                else { $anchored = Join-SwBasePath $location $root }
+                if ($null -ne $anchored) {
+                    $locationFull = Get-SwBaseFullPath -Path $anchored
+                    if ($null -ne $locationFull) { $fulls.Add($locationFull) }
+                }
+            }
         }
-        if ($null -eq $final -or $final.Length -eq 0) { return }
-        # An absolute text that the system spells the same adds nothing; a relative one always does.
-        if ($absolute -and (ConvertTo-SwBaseCmp $final).Equals((ConvertTo-SwBaseCmp $full), [System.StringComparison]::OrdinalIgnoreCase)) { return }
-        $Rows.Add(@{ Root = $final; RootSlash = $final + '\'; Wild = $null; WildChild = $null })
     }
-    catch {
-        # Not resolvable: the written spelling stays the only one.
-        $null = $_
+    catch { $null = $_ }
+
+    # Trailing separators only: other hosts keep their own separator, and candidates are compared as given.
+    $trim = [char[]]@('\', '/')
+    foreach ($full in $fulls) {
+        try {
+            $info = Get-SwBaseFinalPathInfo -FullPath $full
+            $final = $null
+            if ([string]$info.Status -eq 'Resolved') { $final = ([string]$info.Path).TrimEnd($trim) }
+            elseif ([string]$info.Status -eq 'NoApi' -and -not $absolute) {
+                # No Windows file API: the full path is the final spelling, if the item exists.
+                if ([System.IO.Directory]::Exists($full) -or [System.IO.File]::Exists($full)) { $final = $full.TrimEnd($trim) }
+            }
+            if ($null -eq $final -or $final.Length -eq 0) { continue }
+            # An absolute text that the system spells the same adds nothing; a relative one always does.
+            if ($absolute -and (ConvertTo-SwBaseCmp $final).Equals((ConvertTo-SwBaseCmp $full), [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            $Rows.Add(@{ Root = $final; RootSlash = $final + '\'; Wild = $null; WildChild = $null })
+        }
+        catch {
+            # Not resolvable: the written spelling stays the only one.
+            $null = $_
+        }
     }
 }
 
@@ -1056,7 +1089,12 @@ function Get-SwWhitelistState {
         return @{ KeepAll = $false; Rows = $rows }
     }
     catch {
-        Write-Debug "The whitelist cannot be read, every path stays protected: $($_.Exception.Message)"
+        if ($_.Exception.Message.StartsWith('Invalid wildcard pattern', [System.StringComparison]::Ordinal)) {
+            Write-Debug "A whitelist pattern is not valid, so every path stays protected: $($_.Exception.Message)"
+        }
+        else {
+            Write-Debug "The whitelist cannot be read, every path stays protected: $($_.Exception.Message)"
+        }
         return @{ KeepAll = $true; Rows = [System.Collections.Generic.List[object]]::new() }
     }
 }

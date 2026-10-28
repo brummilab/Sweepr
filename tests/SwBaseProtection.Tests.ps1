@@ -1841,6 +1841,64 @@ Describe 'Whitelist' {
         }
         finally { $DebugPreference = $previous }
         $records.Count | Should -BeGreaterOrEqual 1
+        ($records | Select-Object -First 1).Message | Should -Match 'not valid'
+        ($records | Select-Object -First 1).Message | Should -Not -Match 'cannot be read'
+    }
+
+    It 'B-28 resolves a relative line against the PowerShell location when the process working directory differs' {
+        $processFolder = [System.IO.Path]::Combine($script:Case, 'process-folder')
+        $shellFolder = [System.IO.Path]::Combine($script:Case, 'shell-folder')
+        $item = [System.IO.Path]::Combine($shellFolder, 'only-in-shell')
+        $sibling = [System.IO.Path]::Combine($shellFolder, 'only-in-shell-other')
+        foreach ($dir in $processFolder, $item, $sibling) { [void][System.IO.Directory]::CreateDirectory($dir) }
+        $full = Resolve-SwSafePath -Path $item
+        $fullSibling = Resolve-SwSafePath -Path $sibling
+        Push-Location -LiteralPath $shellFolder
+        try {
+            Use-ProcessDirectory $processFolder {
+                Set-WlLines @('only-in-shell')
+                Assert-Result (Test-Wl $full) $true 'the folder under the PowerShell location'
+                Assert-Result (Test-Wl ($full + '\child.txt')) $true 'a file below it'
+                Assert-Result (Test-Wl ($fullSibling + '\child.txt')) $false 'prefix sibling'
+            }
+        }
+        finally { Pop-Location }
+    }
+
+    It 'B-28 resolves a relative line against the process working directory when the PowerShell location differs' {
+        $processFolder = [System.IO.Path]::Combine($script:Case, 'process-two')
+        $shellFolder = [System.IO.Path]::Combine($script:Case, 'shell-two')
+        $item = [System.IO.Path]::Combine($processFolder, 'only-in-process')
+        foreach ($dir in $item, $shellFolder) { [void][System.IO.Directory]::CreateDirectory($dir) }
+        $full = Resolve-SwSafePath -Path $item
+        Push-Location -LiteralPath $shellFolder
+        try {
+            Use-ProcessDirectory $processFolder {
+                Set-WlLines @('only-in-process')
+                Assert-Result (Test-Wl ($full + '\child.txt')) $true 'a file below the folder under the process directory'
+            }
+        }
+        finally { Pop-Location }
+    }
+
+    It 'B-28 [W] treats a drive-relative line like a relative one' {
+        if (-not $script:OnWindows) { Set-ItResult -Skipped -Because 'a drive-relative path needs a drive letter'; return }
+        $folder = [System.IO.Path]::Combine($script:Case, 'drive-rel')
+        $sibling = [System.IO.Path]::Combine($script:Case, 'drive-rel-other')
+        [void][System.IO.Directory]::CreateDirectory($folder)
+        [void][System.IO.Directory]::CreateDirectory($sibling)
+        $full = Resolve-SwSafePath -Path $folder
+        $fullSibling = Resolve-SwSafePath -Path $sibling
+        $drive = [System.IO.Path]::GetPathRoot($full).Substring(0, 2)
+        Push-Location -LiteralPath $script:Case
+        try {
+            Use-ProcessDirectory $script:Case {
+                Set-WlLines @($drive + 'drive-rel')
+                Assert-Result (Test-Wl ($full + '\child.txt')) $true 'a file below it'
+                Assert-Result (Test-Wl ($fullSibling + '\child.txt')) $false 'prefix sibling'
+            }
+        }
+        finally { Pop-Location }
     }
 }
 
