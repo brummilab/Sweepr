@@ -6,7 +6,7 @@
 
 # Built-in fallback when an installation has no VERSION file. A version bump changes this value and
 # the VERSION file in the same commit (a test keeps both equal).
-$script:SwFallbackVersion = '0.2.0'
+$script:SwFallbackVersion = '0.1.0'
 
 # Transition name until the release documentation and its callers move to the new one.
 $script:SweeprDefaultVersion = $script:SwFallbackVersion
