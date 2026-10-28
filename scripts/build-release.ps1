@@ -229,6 +229,7 @@ $filesToInclude = @(
     @{Source = "$projectRoot\VERSION"; Dest = "$tempBuildDir\VERSION"},
     @{Source = "$projectRoot\LICENSE"; Dest = "$tempBuildDir\LICENSE"},
     @{Source = "$projectRoot\README.md"; Dest = "$tempBuildDir\README.md"},
+    @{Source = "$projectRoot\README.de.md"; Dest = "$tempBuildDir\README.de.md"},
     @{Source = "$releaseDir\launcher\sw.exe"; Dest = "$tempBuildDir\sw.exe"}
 )
 
