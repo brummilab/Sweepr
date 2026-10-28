@@ -207,9 +207,19 @@ BeforeAll {
         $saved
     }
     function script:Restore-Env([hashtable]$Saved) {
-        foreach ($name in @($Saved.Keys)) { [System.Environment]::SetEnvironmentVariable($name, $Saved[$name]) }
+        foreach ($name in @($Saved.Keys)) {
+            $value = $Saved[$name]
+            if ($null -eq $value) { $value = [NullString]::Value }
+            [System.Environment]::SetEnvironmentVariable($name, $value)
+        }
     }
-    function script:Set-Env([string]$Name, [string]$Value) { [System.Environment]::SetEnvironmentVariable($Name, $Value) }
+    # An empty value removes the variable. Since .NET 10 SetEnvironmentVariable(name, "") keeps the
+    # variable with an empty value, and PowerShell 7.6 passes a plain $null to the method as "";
+    # only [NullString]::Value is a real null.
+    function script:Set-Env([string]$Name, [AllowNull()][AllowEmptyString()][string]$Value) {
+        if ([string]::IsNullOrEmpty($Value)) { [System.Environment]::SetEnvironmentVariable($Name, [NullString]::Value) }
+        else { [System.Environment]::SetEnvironmentVariable($Name, $Value) }
+    }
 
     $script:StateNames = @('Config', 'Colors', 'Icons', 'ProtectedPaths', 'ExactProtectedPaths', 'DefaultWhitelistPatterns', 'SweeprCleanPathGuard', 'SWEEPR_BASE_LOADED')
     function script:Save-BaseState {
@@ -1923,6 +1933,39 @@ Describe 'Whitelist' {
         }
         finally { Pop-Location }
     }
+
+    It 'B-28 protects a candidate in the normalized form of a line that holds dot segments' {
+        $keep = [System.IO.Path]::Combine($script:Case, 'keep-dots')
+        $keepOther = [System.IO.Path]::Combine($script:Case, 'keep-dot-slash')
+        $dotted = [System.IO.Path]::Combine($script:Case, 'a', '..', 'keep-dots')
+        $current = [System.IO.Path]::Combine($script:Case, '.', 'keep-dot-slash')
+        Set-WlLines @($dotted, $current)
+        $normalized = [System.IO.Path]::GetFullPath($keep)
+        $normalizedOther = [System.IO.Path]::GetFullPath($keepOther)
+        Assert-Result (Test-Wl (Win $normalized 'f')) $true 'below the normalized form of the .. line'
+        Assert-Result (Test-Wl (Win $normalizedOther 'f')) $true 'below the normalized form of the . line'
+        Assert-Result (Test-Wl (Win ($normalized + '-other') 'f')) $false 'prefix sibling'
+        Assert-Result (Test-Wl (Win $script:Case 'keep-else\f')) $false 'unrelated path'
+    }
+
+    It 'B-28 [W] protects a candidate in the long spelling below a line written with 8.3 short names' {
+        if (-not $script:OnWindows) { Set-ItResult -Skipped -Because 'short names exist only on Windows'; return }
+        if (-not ('SwTest.ShortName' -as [type])) {
+            Add-Type -Namespace SwTest -Name ShortName -MemberDefinition '[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern uint GetShortPathNameW(string longPath, System.Text.StringBuilder shortPath, uint length);'
+        }
+        $long = [System.IO.Path]::Combine($script:Case, 'LongFolderNameForShortForm', 'keep-this-folder')
+        $other = [System.IO.Path]::Combine($script:Case, 'LongFolderNameForShortForm', 'keep-this-folder-other')
+        [void][System.IO.Directory]::CreateDirectory($long)
+        [void][System.IO.Directory]::CreateDirectory($other)
+        $buffer = New-Object System.Text.StringBuilder 1024
+        $length = [SwTest.ShortName]::GetShortPathNameW($long, $buffer, 1024)
+        $short = $buffer.ToString()
+        if ($length -eq 0 -or $short -ieq $long) { Set-ItResult -Skipped -Because '8.3 names are disabled on this volume'; return }
+        Set-WlLines @($short)
+        Assert-Result (Test-Wl ($long + '\f')) $true 'long spelling below the folder'
+        Assert-Result (Test-Wl ($short + '\f')) $true 'short spelling below the folder'
+        Assert-Result (Test-Wl ($other + '\f')) $false 'prefix sibling in long spelling'
+    }
 }
 
 # ============================================================================
@@ -2191,7 +2234,10 @@ Describe 'Side effects of part B functions' {
             [System.IO.File]::WriteAllBytes($list, (Get-EncodedBytes 'UTF-8 with BOM' "$dir`r`n"))
             $script:Config = @{ ConfigPath = [System.IO.Path]::Combine($dir, 'config'); CachePath = [System.IO.Path]::Combine($dir, 'cache'); WhitelistFile = $list }
             $snapshot = {
-                @(Get-ChildItem -LiteralPath $script:FxRoot -Force -Recurse | ForEach-Object { '{0}|{1}|{2}' -f $_.FullName, $_.LastWriteTimeUtc.Ticks, $(if ($_.PSIsContainer) { -1 } else { $_.Length }) } | Sort-Object)
+                @(Get-ChildItem -LiteralPath $script:FxRoot -Force -Recurse | ForEach-Object {
+                        # Folder timestamps can move on their own under Windows; folders are compared by name only.
+                        if ($_.PSIsContainer) { '{0}|folder' -f $_.FullName } else { '{0}|{1}|{2}' -f $_.FullName, $_.LastWriteTimeUtc.Ticks, $_.Length }
+                    } | Sort-Object)
             }
             $before = & $snapshot
             $null = Test-SwProtectedPath -Path $file
