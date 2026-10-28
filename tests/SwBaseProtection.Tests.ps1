@@ -1430,6 +1430,22 @@ Describe 'ConvertFrom-SwListEntry' {
         # An undefined variable stays literal and is not a rooted path, so no search path comes out of it.
         @($entries | Where-Object { $_ -match '^(?:[A-Za-z]:\\|\\\\[^\\])' }).Count | Should -Be 1
     }
+
+    It 'B-29 emits the lines one by one so they can be piped into ConvertFrom-SwListEntry and its old name' {
+        $uuml = [string][char]0xDC
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes('C:\Projekte\' + $uuml + 'bersicht' + "`r`n" + 'D:\Zwei' + "`r`n")
+        foreach ($pair in @(@('ConvertFrom-SwListBytes', 'ConvertFrom-SwListEntry'), @('ConvertFrom-SweeprListBytes', 'ConvertFrom-SweeprListEntry'))) {
+            $decode = $pair[0]
+            $convert = $pair[1]
+            $entries = @(& $decode -Bytes $bytes | ForEach-Object { & $convert -Line $_ } | Where-Object { $_ })
+            $entries.Count | Should -Be 2 -Because $decode
+            $entries[0] | Should -BeExactly ('C:\Projekte\' + $uuml + 'bersicht')
+            $entries[1] | Should -BeExactly 'D:\Zwei'
+        }
+        @(ConvertFrom-SwListBytes -Bytes ([byte[]]@())).Count | Should -Be 0
+        @(ConvertFrom-SweeprListEntry -Line '%SWTEST_D%\x' -IncludeRaw).Count | Should -Be 2
+        @(ConvertFrom-SwListEntry -Line '%SWTEST_D%\x' -IncludeRaw).Count | Should -Be 2
+    }
 }
 
 # ============================================================================

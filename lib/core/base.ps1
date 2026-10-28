@@ -865,7 +865,9 @@ function ConvertFrom-SwListBytes {
         try { $text = [System.Text.UTF8Encoding]::new($false, $true).GetString($Bytes) }
         catch { $text = [System.Text.Encoding]::Default.GetString($Bytes) }
     }
-    return , ([string[]][regex]::Split($text, "\r\n|\r|\n"))
+    # One line per pipeline output, so the result can be piped on; empty input gives no output.
+    if ($text.Length -eq 0) { return }
+    return [string[]][regex]::Split($text, "\r\n|\r|\n")
 }
 
 function ConvertFrom-SwListEntry {
@@ -919,7 +921,7 @@ function ConvertFrom-SwListEntry {
 
         $expanded = $expanded.Replace('/', '\')
         if ([regex]::IsMatch($expanded, '\A(?:[A-Za-z]:\\|\\\\[^\\])')) {
-            if ($IncludeRaw) { return , ([string[]]@($expanded, $entry)) }
+            if ($IncludeRaw) { return @($expanded, $entry) }
             return $expanded
         }
         if ($IncludeRaw) { return $entry }
@@ -1025,7 +1027,7 @@ function Get-SwWhitelistState {
             foreach ($line in @($lines)) {
                 if ($null -eq $line) { continue }
                 if (([string]$line).IndexOf([char]0) -ge 0) { throw 'The whitelist file contains NUL characters.' }
-                # Assigned first: the result is one string, two strings as one array, or nothing.
+                # Assigned first: the result is nothing, one string or two strings.
                 $converted = ConvertFrom-SwListEntry -Line ([string]$line) -IncludeRaw
                 foreach ($pattern in @($converted)) {
                     if ($null -ne $pattern) { Add-SwBaseWhitelistRow -Rows $rows -Pattern ([string]$pattern) -Literal $false }
