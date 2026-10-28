@@ -130,10 +130,11 @@ type explorerModel struct {
 
 	// runMu guards the state that the goroutines of the moves share with the
 	// goroutine that waits for them when the program ends.
-	runMu    sync.Mutex
-	runCond  *sync.Cond
-	running  int  // moves whose Recycle Bin work has started
-	quitting bool // no move may start any more
+	runMu      sync.Mutex
+	runCond    *sync.Cond
+	running    int                // moves whose Recycle Bin work has started
+	quitting   bool               // no move may start any more
+	moveCancel context.CancelFunc // ends the entries of the current move
 
 	rowCache []listRow
 	dirty    bool
@@ -998,6 +999,9 @@ func (m *explorerModel) confirm() tea.Cmd {
 	m.cancelOperation()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.opCancel = cancel
+	m.runMu.Lock()
+	m.moveCancel = cancel
+	m.runMu.Unlock()
 	id := m.opID
 	m.mode = modeMoving
 	m.say("Moving to the Recycle Bin... (only Q and Ctrl+C work meanwhile)", false)
@@ -1057,13 +1061,19 @@ func (m *explorerModel) onMove(r moveMsg) tea.Cmd {
 	return m.startFolderScan(m.root)
 }
 
-// waitIdle blocks until the moves that have started have returned. A call to
-// the Recycle Bin that has begun cannot be taken back, so the program waits for
-// it instead of ending in the middle; the entries after it are not started
-// once the program is quitting, and nothing is logged for an interrupted run.
+// waitIdle ends the moves and blocks until the ones that have started have
+// returned. It runs when the display has ended, however it ended: a move that
+// was confirmed but has not begun must not begin now, and the entries after
+// the one in progress are not started. A call to the Recycle Bin that has
+// begun cannot be taken back, so the program waits for it instead of ending in
+// the middle; nothing is logged for an interrupted run.
 func (m *explorerModel) waitIdle() {
 	m.runMu.Lock()
 	defer m.runMu.Unlock()
+	m.quitting = true
+	if m.moveCancel != nil {
+		m.moveCancel()
+	}
 	for m.running > 0 {
 		m.runCond.Wait()
 	}

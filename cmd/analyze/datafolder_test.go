@@ -6,6 +6,7 @@ package main
 // ends during a move.
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -304,5 +305,41 @@ func TestRunWaitsForAStartedRecycleCallWhenTheDisplayEnds(t *testing.T) {
 	}
 	if got := tstReadLog(t, logFile); got != "" {
 		t.Errorf("the interrupted call was logged: %q", got)
+	}
+}
+
+func TestRunStartsNoConfirmedMoveAfterTheDisplayEndedWithAnError(t *testing.T) {
+	rr := newDataRig()
+	env, logFile := tstLogEnv(t, tstWinEnv())
+	var pending tea.Cmd
+	d := rr.deps()
+	d.StartUI = func(m tea.Model) error {
+		p := newTstPump(t, m)
+		p.size = tstSize(100, 30)
+		p.start(m.Init())
+		p.feed(p.size)
+		if !p.settle(func() bool { return strings.Contains(tstStrip(p.m.View()), "%") }) {
+			t.Error("the folder was not measured")
+		}
+		p.feed(tstKeyMsg("delete"))
+		// The move is confirmed, but its command is not run: the display ends first.
+		_, pending = m.Update(tstKeyMsg("enter"))
+		return errors.New("the display failed")
+	}
+	var out, errOut strings.Builder
+	if code := Run([]string{`C:\Data`}, env, &out, &errOut, true, d); code != 1 {
+		t.Errorf("exit code %d, want 1", code)
+	}
+	if pending == nil {
+		t.Fatal("the confirmation produced no command")
+	}
+	if msg := pending(); msg != nil {
+		t.Errorf("the move ran after the display ended: %v", msg)
+	}
+	if calls := rr.rec.recorded(); len(calls) != 0 {
+		t.Errorf("recycler calls = %q, want none", calls)
+	}
+	if got := tstReadLog(t, logFile); got != "" {
+		t.Errorf("the log was written: %q", got)
 	}
 }
