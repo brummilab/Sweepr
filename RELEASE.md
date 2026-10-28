@@ -28,16 +28,16 @@ A release goes through two steps: CI builds the assets into a draft release, and
 ## 2. Tag
 
 ```powershell
-git tag V0.1.0-windows
-git push origin V0.1.0-windows
+git tag V0.2.0-windows
+git push origin V0.2.0-windows
 ```
 
-`.github/workflows/release-windows.yml` runs the tests, runs `scripts/build-release.ps1`, and creates a **draft** release with the unsigned assets.
+`.github/workflows/release-windows.yml` runs the tests and `scripts/build-release.ps1` in a build job with read-only access. A second job, the only one with write access, checks the files against `SHA256SUMS.txt` and creates a **draft** release with the unsigned assets. The version comes from the tag and must match `VERSION`.
 
 ## 3. Publish
 
 ```powershell
-gh release edit V0.1.0-windows --repo brummilab/sweepr --title "V0.1.0-windows" --draft=false
+gh release edit V0.2.0-windows --repo brummilab/sweepr --title "V0.2.0-windows" --draft=false
 ```
 
 Then check that a downloaded asset matches `SHA256SUMS.txt`. Releases are not code-signed; the checksums protect the TUI downloads.
