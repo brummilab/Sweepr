@@ -661,9 +661,11 @@ function Resolve-SwSafePath {
 # ============================================================================
 
 function Add-SwBaseEntryForms {
-    # Adds the comparison forms of one list entry: as written and, when the entry exists and the file
-    # system spells it differently (link, short name), the final spelling too. An empty entry or one
-    # that cannot be normalized protects nothing and is skipped.
+    # Adds the comparison forms of one list entry: as written (when it has a drive or UNC root), as
+    # normalized and, when the entry exists and the file system spells it differently (link, short
+    # name), the final spelling too. Candidates are normalized the same way before they are
+    # compared, so every spelling a caller can produce meets one of these forms. An empty entry or
+    # one that cannot be normalized protects nothing and is skipped.
     param([System.Collections.Generic.List[string]]$Target, [string]$Entry)
 
     $full = Get-SwBaseFullPath -Path $Entry
@@ -672,10 +674,16 @@ function Add-SwBaseEntryForms {
     if ($typed.Length -eq 0) { return }
     $Target.Add($typed)
 
+    $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
+    if ([regex]::IsMatch($Entry, '\A\s*(?:[A-Za-z]:[\\/]|\\\\[^\\])')) {
+        $written = ConvertTo-SwBaseCmp $Entry.Trim()
+        if ($written.Length -gt 0 -and -not $written.Equals($typed, $ignoreCase)) { $Target.Add($written) }
+    }
+
     $info = Get-SwBaseFinalPathInfo -FullPath $full
     if ([string]$info.Status -ne 'Resolved') { return }
     $final = ConvertTo-SwBaseCmp ([string]$info.Path)
-    if ($final.Length -gt 0 -and -not $final.Equals($typed, [System.StringComparison]::OrdinalIgnoreCase)) { $Target.Add($final) }
+    if ($final.Length -gt 0 -and -not $final.Equals($typed, $ignoreCase)) { $Target.Add($final) }
 }
 
 function Get-SwBaseProtectionLists {
@@ -973,10 +981,12 @@ function Add-SwBaseWhitelistRow {
     $Rows.Add($row)
 
     if ($hasWildcard) { return }
-    # A single leading slash marks a path of another platform. It stays a literal row with its own
-    # text; resolving it would turn it into a folder of the current drive or working directory.
-    if ($root[0] -eq [char]47 -and ($root.Length -eq 1 -or $root[1] -ne [char]47)) { return }
-    $absolute = [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')
+    # A single leading slash marks a path of another platform. On Windows it stays a literal row with
+    # its own text: resolving it would turn it into a folder of the current drive or working
+    # directory. Elsewhere it is an ordinary absolute path.
+    $slashRooted = ($root[0] -eq [char]47 -and ($root.Length -eq 1 -or $root[1] -ne [char]47))
+    if ($slashRooted -and (Test-SwBaseWindows)) { return }
+    $absolute = $slashRooted -or [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')
     if (-not $absolute -and -not $ResolveRelative) { return }
     # A bare drive (C:) would mean the current folder of that drive: nothing to resolve.
     if (-not $absolute -and [regex]::IsMatch($root, '\A[A-Za-z]:\z')) { return }
@@ -1013,21 +1023,37 @@ function Add-SwBaseWhitelistRow {
     }
     catch { $null = $_ }
 
-    # Trailing separators only: other hosts keep their own separator, and candidates are compared as given.
+    # Every spelling that differs from the written text becomes a literal row: the normalized full
+    # path (the system may already have spelled out a short name there, and callers compare
+    # candidates in that form) and the final spelling (links, short names). The comparison ignores
+    # case and trailing separators. For a relative text only an existing item adds rows.
+    $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
     $trim = [char[]]@('\', '/')
+    $known = [System.Collections.Generic.List[string]]::new()
+    $known.Add((ConvertTo-SwBaseCmp $root))
     foreach ($full in $fulls) {
         try {
             $info = Get-SwBaseFinalPathInfo -FullPath $full
+            $status = [string]$info.Status
             $final = $null
-            if ([string]$info.Status -eq 'Resolved') { $final = ([string]$info.Path).TrimEnd($trim) }
-            elseif ([string]$info.Status -eq 'NoApi' -and -not $absolute) {
-                # No Windows file API: the full path is the final spelling, if the item exists.
-                if ([System.IO.Directory]::Exists($full) -or [System.IO.File]::Exists($full)) { $final = $full.TrimEnd($trim) }
+            if ($status -eq 'Resolved') { $final = ([string]$info.Path).TrimEnd($trim) }
+            $exists = ($status -eq 'Resolved') -or ($status -eq 'Unresolvable')
+            if ($status -eq 'NoApi') {
+                # No Windows file API: the full path is also the final spelling.
+                $exists = [System.IO.Directory]::Exists($full) -or [System.IO.File]::Exists($full)
             }
-            if ($null -eq $final -or $final.Length -eq 0) { continue }
-            # An absolute text that the system spells the same adds nothing; a relative one always does.
-            if ($absolute -and (ConvertTo-SwBaseCmp $final).Equals((ConvertTo-SwBaseCmp $full), [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-            $Rows.Add(@{ Root = $final; RootSlash = $final + '\'; Wild = $null; WildChild = $null })
+            $spellings = [System.Collections.Generic.List[string]]::new()
+            if ($absolute -or $exists) { $spellings.Add($full.TrimEnd($trim)) }
+            if ($null -ne $final) { $spellings.Add($final) }
+            foreach ($spelling in $spellings) {
+                if ($spelling.Length -eq 0) { continue }
+                $form = ConvertTo-SwBaseCmp $spelling
+                $seen = $false
+                foreach ($other in $known) { if ($form.Equals($other, $ignoreCase)) { $seen = $true; break } }
+                if ($seen) { continue }
+                $known.Add($form)
+                $Rows.Add(@{ Root = $spelling; RootSlash = $spelling + '\'; Wild = $null; WildChild = $null })
+            }
         }
         catch {
             # Not resolvable: the written spelling stays the only one.
