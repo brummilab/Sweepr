@@ -491,8 +491,8 @@ Describe 'Review regressions: owner log and summary' {
         Set-DryRunMode -Enabled $false
         Mock Get-SweeprOwnerCachePath { 'C:\cache' }
         Mock Test-SafePath { $true }
-        Mock Get-SweeprPathSnapshot { @{ Path = 'C:\cache' } }
-        Mock Test-SweeprPathSnapshot { $true }
+        Mock Get-SwPathSnapshot { @{ Path = 'C:\cache' } }
+        Mock Test-SwPathSnapshot { $true }
         Mock Get-SafeDirectoryTreeItems { @{ Success = $true; Items = @() } }
         Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
         Mock Write-SweeprOperation { }

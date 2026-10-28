@@ -136,8 +136,8 @@ Describe 'Get-SweeprCleanPreview' {
         Reset-CleanupStats
 
         # Identity checks use Win32 file IDs; the paths themselves stay real.
-        Mock Get-SweeprPathSnapshot { [pscustomobject]@{ Path = $Path } }
-        Mock Test-SweeprPathSnapshot { $true }
+        Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
+        Mock Test-SwPathSnapshot { $true }
         Mock Test-IsAdmin { $false }
         foreach ($name in $script:ChangingCommands) { Mock $name ([scriptblock]::Create("throw '$name must not run in a preview'")) }
 

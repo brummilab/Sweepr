@@ -130,8 +130,8 @@ Describe 'sw clean console output in a dry run' {
         $script:StartCleanupParameters = @{ IsDryRun = $true; IncludeSystem = $false; IncludeGameMedia = $false; IncludeGpuShaders = $false }
 
         Set-DryRunMode -Enabled $false
-        Mock Get-SweeprPathSnapshot { [pscustomobject]@{ Path = $Path } }
-        Mock Test-SweeprPathSnapshot { $true }
+        Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
+        Mock Test-SwPathSnapshot { $true }
         Mock Test-IsAdmin { $false }
         Mock Clear-Host {}
         Mock Get-WindowsVersion { [pscustomobject]@{ Name = 'Example OS' } }
@@ -195,8 +195,8 @@ Describe 'sw purge discovery result' {
         Write-Bytes -Path (Join-Path $script:Base 'app/node_modules/a.js') -Count 1500
         Write-Bytes -Path (Join-Path $script:Base 'py/requirements.txt') -Count 10
         Write-Bytes -Path (Join-Path $script:Base 'py/.venv/bin/python') -Count 3000
-        Mock Get-SweeprPathSnapshot { [pscustomobject]@{ Path = $Path } }
-        Mock Test-SweeprPathSnapshot { $true }
+        Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
+        Mock Test-SwPathSnapshot { $true }
         Mock Write-Progress {}
         Mock Remove-Item { throw 'Remove-Item must not run in a discovery' }
     }

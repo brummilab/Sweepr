@@ -156,7 +156,7 @@ Describe 'Tree walk snapshots' {
     It 'Binds the root once and each child from its parent instead of reopening every ancestor' {
         $script:RealSnapshot = ${function:Get-SweeprPathSnapshot}
         $script:SnapshotCalls = 0
-        Mock Get-SweeprPathSnapshot {
+        Mock Get-SwPathSnapshot {
             $script:SnapshotCalls++
             & $script:RealSnapshot -Path $Path -AllowLeafLink:$AllowLeafLink
         }
