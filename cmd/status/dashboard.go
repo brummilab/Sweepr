@@ -148,11 +148,17 @@ func (m *dashboardModel) View() string {
 	})
 }
 
+// useColor tells whether the display may use color: not when NO_COLOR is set
+// to a non-empty value.
+func useColor(env map[string]string) bool {
+	return lookupEnv(env, "NO_COLOR") == ""
+}
+
 // runDashboard runs the display on the alternate screen until the user quits.
 func runDashboard(cfg DashboardConfig) int {
 	m := newDashboardModel(cfg.Sources, cfg.Clock, cfg.Prefs)
 	m.sysDrive = lookupEnv(cfg.Env, "SystemDrive")
-	m.color = lookupEnv(cfg.Env, "NO_COLOR") == ""
+	m.color = useColor(cfg.Env)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(cfg.Stdout))
 	if _, err := p.Run(); err != nil && !errors.Is(err, tea.ErrInterrupted) {
 		fmt.Fprintf(cfg.Stderr, "status: cannot run the display: %v\n", err)

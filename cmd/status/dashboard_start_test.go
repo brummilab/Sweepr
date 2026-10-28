@@ -98,3 +98,21 @@ func TestRunDoesNotStartTheDisplayInTheOtherModes(t *testing.T) {
 		})
 	}
 }
+
+func TestUseColorFollowsNoColor(t *testing.T) {
+	cases := []struct {
+		env  map[string]string
+		want bool
+	}{
+		{map[string]string{}, true},
+		{map[string]string{"NO_COLOR": ""}, true},
+		{map[string]string{"NO_COLOR": "1"}, false},
+		{map[string]string{"NO_COLOR": "0"}, false},
+		{map[string]string{"NO_COLOR": "anything"}, false},
+	}
+	for _, c := range cases {
+		if got := useColor(c.env); got != c.want {
+			t.Errorf("useColor(%v) = %v, want %v", c.env, got, c.want)
+		}
+	}
+}

@@ -919,6 +919,7 @@ function Get-SweeprInstallNestedFiles {
         "cmd\status\render.go"
         "cmd\status\render_test.go"
         "cmd\status\run_test.go"
+        "cmd\status\safety_test.go"
         "cmd\status\sampler.go"
         "cmd\status\sampler_test.go"
         "cmd\status\schema_test.go"

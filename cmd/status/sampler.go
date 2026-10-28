@@ -497,15 +497,17 @@ func topProcesses(prev, cur []ProcessReading, secs float64, logical int) []Proce
 	return out
 }
 
-// processName is the program file name without directory and without the
-// .exe extension. The system process has no image name.
+// processName is the program file name without directory and without a
+// trailing ".exe". The system process (PID 4) has no image name and is
+// called System.
 func processName(p ProcessReading) string {
-	name := p.Name
-	if i := strings.LastIndexAny(name, `\/`); i >= 0 {
-		name = name[i+1:]
+	parts := strings.FieldsFunc(p.Name, func(r rune) bool { return r == '\\' || r == '/' })
+	name := ""
+	if len(parts) > 0 {
+		name = parts[len(parts)-1]
 	}
-	if len(name) > 4 && strings.EqualFold(name[len(name)-4:], ".exe") {
-		name = name[:len(name)-4]
+	if n := len(name); n > 4 && strings.ToLower(name[n-4:]) == ".exe" {
+		name = name[:n-4]
 	}
 	if name == "" && p.PID == 4 {
 		return "System"

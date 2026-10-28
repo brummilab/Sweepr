@@ -165,8 +165,8 @@ func TestSamplerSourcesFailIndependently(t *testing.T) {
 		skip  []string // areas that may legitimately be affected
 	}{
 		// Process load is relative to the processor count, which the CPU
-		// source reports; the process list may fall back to null with it.
-		{"cpu", func(w *fakeWorld) { w.cpuErr = errFakeUnavailable }, [][]string{{"cpu"}}, []string{"top_processes"}},
+		// source reports; without it the process list is null as well.
+		{"cpu", func(w *fakeWorld) { w.cpuErr = errFakeUnavailable }, [][]string{{"cpu"}, {"top_processes"}}, nil},
 		{"memory", func(w *fakeWorld) { w.memErr = errFakeUnavailable }, [][]string{{"memory"}}, nil},
 		{"swap", func(w *fakeWorld) { w.swapErr = errFakeUnavailable }, [][]string{{"memory", "swap_used"}, {"memory", "swap_total"}}, nil},
 		{"drives", func(w *fakeWorld) { w.drivesErr = errFakeUnavailable }, [][]string{{"disks"}}, nil},

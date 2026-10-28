@@ -26,8 +26,6 @@ var (
 )
 
 func nativeSources() Sources {
-	// A drive without media must not raise the system's "insert a disk" dialog.
-	windows.SetErrorMode(windows.SEM_FAILCRITICALERRORS)
 	return Sources{
 		CPU:         readCPU,
 		Memory:      readMemory,
@@ -145,8 +143,8 @@ func readSwap() (SwapReading, error) {
 // Drives
 
 // readDrives lists fixed and removable drives with a letter. Network and
-// optical drives are skipped without asking for their size, because a
-// disconnected network drive would stall the call.
+// optical drives are skipped before any size query: asking an unreachable
+// network drive for its size can block for a long time.
 func readDrives() ([]DriveReading, error) {
 	mask, err := windows.GetLogicalDrives()
 	if mask == 0 {
@@ -233,9 +231,9 @@ type adapterInfo struct {
 // queryAdapters lists the adapters that are in service and no loopback
 // adapter, in the order of the system.
 func queryAdapters() ([]adapterInfo, error) {
-	const flags = windows.GAA_FLAG_INCLUDE_GATEWAYS | windows.GAA_FLAG_SKIP_ANYCAST |
-		windows.GAA_FLAG_SKIP_MULTICAST | windows.GAA_FLAG_SKIP_DNS_SERVER
-	size := uint32(16 * 1024)
+	// Only the gateway addresses are needed besides the defaults.
+	const flags = windows.GAA_FLAG_INCLUDE_GATEWAYS
+	size := uint32(32 * 1024)
 	for try := 0; try < 6; try++ {
 		buf := make([]byte, size)
 		first := (*windows.IpAdapterAddresses)(unsafe.Pointer(&buf[0]))
@@ -273,7 +271,7 @@ func queryAdapters() ([]adapterInfo, error) {
 		runtime.KeepAlive(buf)
 		return out, nil
 	}
-	return nil, errors.New("adapter list kept changing")
+	return nil, errors.New("network adapter list changed during every read attempt")
 }
 
 // ipv4Of returns the text of an IPv4 socket address.
@@ -319,7 +317,7 @@ func readNetCounters() ([]NetCounterReading, error) {
 		if a.luid == 0 {
 			row.InterfaceIndex = a.index
 		}
-		if err := windows.GetIfEntry2Ex(windows.MibIfTableNormal, &row); err != nil {
+		if err := windows.GetIfEntry2Ex(windows.MibIfEntryNormal, &row); err != nil {
 			continue
 		}
 		out = append(out, NetCounterReading{Name: a.name, RxBytes: row.InOctets, TxBytes: row.OutOctets})
@@ -330,8 +328,9 @@ func readNetCounters() ([]NetCounterReading, error) {
 // ---------------------------------------------------------------------------
 // Processes
 
-// readProcesses reads the whole process table in one call. It needs no handle
-// per process, so protected processes are included without elevation.
+// readProcesses reads the whole process table with one query. No handle is
+// opened per process, so processes that an ordinary user cannot open are
+// listed as well.
 func readProcesses() ([]ProcessReading, error) {
 	size := uint32(1 << 20)
 	var buf []byte
@@ -346,8 +345,9 @@ func readProcesses() ([]ProcessReading, error) {
 		if err != windows.STATUS_INFO_LENGTH_MISMATCH || try >= 8 {
 			return nil, err
 		}
-		// The table grows between the calls; leave room for new processes.
-		size = returned + 256*1024
+		// Processes may start between two calls, and the reported size can be 0:
+		// grow to the reported size plus headroom, but at least double.
+		size = max(returned+256*1024, 2*size)
 	}
 
 	var out []ProcessReading
