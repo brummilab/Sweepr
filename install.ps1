@@ -996,6 +996,8 @@ function Get-SweeprInstallNestedFiles {
         "tests\Recycle.Tests.ps1"
         "tests\Release.Tests.ps1"
         "tests\Router.Tests.ps1"
+        "tests\SwBasePaths.Tests.ps1"
+        "tests\SwBaseProtection.Tests.ps1"
         "tests\SwCommon.Tests.ps1"
         "tests\SwUi.Tests.ps1"
         "tests\SwUpdateCheck.Tests.ps1"
