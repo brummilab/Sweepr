@@ -119,6 +119,18 @@ jobs:
           }
         shell: pwsh
 
+      - name: Check status JSON
+        run: |
+          $out = & bin/status.exe --json
+          if ($LASTEXITCODE -ne 0) { Write-Host "status.exe --json exited with $LASTEXITCODE"; exit 1 }
+          $doc = ($out -join "`n") | ConvertFrom-Json
+          foreach ($key in 'collected_at', 'platform', 'uptime_seconds', 'procs', 'cpu', 'memory', 'disks', 'disk_io', 'network', 'network_total', 'top_processes') {
+            if ($doc.PSObject.Properties.Name -notcontains $key) { Write-Host "missing key: $key"; exit 1 }
+          }
+          if ($null -eq $doc.cpu -or $null -eq $doc.memory -or $null -eq $doc.disks) { Write-Host "cpu, memory or disks not measured"; exit 1 }
+          Write-Host "status.exe --json returned all keys"
+        shell: pwsh
+
   security:
     name: Security Checks
     runs-on: windows-latest
