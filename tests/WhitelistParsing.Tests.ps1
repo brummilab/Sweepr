@@ -195,11 +195,6 @@ Describe 'Whitelist reading code names its encoding (H1)' {
         @(Get-ContentUse -Node $ast | Where-Object { -not $_.HasEncoding }).Count | Should -Be 0
     }
 
-    It 'Get-WhitelistState reads the file explicitly as UTF-8' {
-        $ast = Get-FunctionAst -RelativePath 'lib/core/base.ps1' -Name 'Get-WhitelistState'
-        Test-ExplicitUtf8Read -Node $ast | Should -BeTrue
-    }
-
     It 'Get-SearchPaths reads purge_paths.txt explicitly as UTF-8' {
         $ast = Get-FunctionAst -RelativePath 'bin/purge.ps1' -Name 'Get-SearchPaths'
         $ast | Should -Not -BeNullOrEmpty

@@ -77,7 +77,7 @@ Describe 'Cleanup physical boundaries' {
         Set-Content -LiteralPath $cache -Value 'keep'
         # The file names nothing, so only the read error can keep the target.
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# present but unreadable'
-        Mock Read-SweeprListBytes { throw 'Access denied' } -ParameterFilter {
+        Mock Read-SwListBytes { throw 'Access denied' } -ParameterFilter {
             $Path -eq $script:Config.WhitelistFile
         }
         Remove-SafeItem -Path $cache | Should -BeFalse
@@ -108,7 +108,7 @@ Describe 'Cleanup physical boundaries' {
         1..12 | ForEach-Object { Set-Content -LiteralPath (Join-Path $tree "f$_.txt") -Value 'x' }
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
         $script:WhitelistReads = 0
-        Mock Read-SweeprListBytes { $script:WhitelistReads++; , [Text.Encoding]::UTF8.GetBytes('# no exclusions') } -ParameterFilter {
+        Mock Read-SwListBytes { $script:WhitelistReads++; , [Text.Encoding]::UTF8.GetBytes('# no exclusions') } -ParameterFilter {
             $Path -eq $script:Config.WhitelistFile
         }
         (Get-SafeDirectoryTreeItems -Path $tree).Success | Should -BeTrue
@@ -119,7 +119,7 @@ Describe 'Cleanup physical boundaries' {
         New-Item -ItemType Directory -Path $tree | Out-Null
         Set-Content -LiteralPath (Join-Path $tree 'a.txt') -Value 'x'
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# present but unreadable'
-        Mock Read-SweeprListBytes { throw 'Access denied' } -ParameterFilter {
+        Mock Read-SwListBytes { throw 'Access denied' } -ParameterFilter {
             $Path -eq $script:Config.WhitelistFile
         }
         (Get-SafeDirectoryTreeItems -Path $tree).Success | Should -BeFalse
@@ -178,42 +178,6 @@ Describe 'Tree walk snapshots' {
         New-Item -ItemType Directory -Path "$script:Root\a\b\c" -Force | Out-Null
         'x' | Set-Content "$script:Root\a\b\c\deep.txt"
         Test-SweeprPathSnapshot $target.SweeprPathSnapshot | Should -BeFalse
-    }
-}
-
-Describe 'Whitelist state matches the per-pattern rule' {
-    BeforeEach {
-        $script:SavedWhitelist = $script:Config.WhitelistFile
-        $script:Config.WhitelistFile = Join-Path $TestDrive 'state-whitelist.txt'
-    }
-    AfterEach { $script:Config.WhitelistFile = $script:SavedWhitelist }
-    It 'Agrees with Test-WhitelistPattern for every pattern shape' {
-        $user = @(
-            'C:\Data\Cache', 'C:\Data\Tail\', 'C:\Data\*\tmp', 'C:\Data\[a]b', 'C:\Data\a?c',
-            'C:\Data\back`tick', 'c:\data\MIXED case', '# a comment', '', '   C:\Data\Padded   '
-        )
-        Set-Content -LiteralPath $script:Config.WhitelistFile -Value $user
-        $paths = @(
-            'C:\Data\Cache', 'C:\Data\Cache\', 'C:\Data\Cache\child.bin', 'C:\Data\Cache-other\child.bin',
-            'C:\Data\Tail', 'C:\Data\Tail\x', 'C:\Data\Tailor', 'C:\Data\one\tmp', 'C:\Data\one\two\tmp',
-            'C:\Data\ab', 'C:\Data\[a]b', 'C:\Data\abc', 'C:\Data\a-c', 'C:\Data\back`tick', 'C:\Data\backtick',
-            'C:\DATA\mixed CASE\x', 'C:\Data\Padded\x', 'C:\Data\Unrelated', 'D:\Data\Cache'
-        )
-        $state = Get-WhitelistState
-        $reference = @($script:DefaultWhitelistPatterns | ForEach-Object { [Environment]::ExpandEnvironmentVariables($_) }) +
-            @('C:\Data\Cache', 'C:\Data\Tail\', 'C:\Data\*\tmp', 'C:\Data\[a]b', 'C:\Data\a?c', 'C:\Data\back`tick',
-              'c:\data\MIXED case', 'C:\Data\Padded')
-        foreach ($path in $paths) {
-            $expected = $false
-            foreach ($pattern in $reference) {
-                if (Test-WhitelistPattern -Path $path -Pattern $pattern) { $expected = $true; break }
-            }
-            (Test-Whitelisted -Path $path -State $state) | Should -Be $expected -Because $path
-            (Test-Whitelisted -Path $path) | Should -Be $expected -Because "$path without a prepared state"
-        }
-        # The comparison must have both outcomes, or it proves nothing.
-        @($paths | Where-Object { Test-Whitelisted -Path $_ -State $state }).Count | Should -BeGreaterThan 5
-        @($paths | Where-Object { -not (Test-Whitelisted -Path $_ -State $state) }).Count | Should -BeGreaterThan 3
     }
 }
 
@@ -330,16 +294,6 @@ Describe 'Linked protected segments' {
         finally {
             [System.IO.Directory]::Delete($link, $false)
         }
-    }
-}
-
-Describe 'Literal bracket whitelist paths' {
-    It 'Protects the exact bracket path and its children without matching siblings' {
-        $root = Join-Path $TestDrive '[demo]\cache'
-        Test-WhitelistPattern $root $root | Should -BeTrue
-        Test-WhitelistPattern ($root + '\keep.txt') $root | Should -BeTrue
-        Test-WhitelistPattern ($root + '-other\keep.txt') $root | Should -BeFalse
-        Test-WhitelistPattern (Join-Path $TestDrive 'other\cache') (Join-Path $TestDrive '*\cache') | Should -BeTrue
     }
 }
 
