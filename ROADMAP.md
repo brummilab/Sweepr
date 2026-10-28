@@ -15,11 +15,12 @@ Planned work. The order may change. Please report wishes and bugs as an [issue](
   them back
 - **Check a PC once** (`sw check`): read-only, with an HTML report, no installation
 - Launcher `sw.exe`, notice about new versions
+- Leaner `sw analyze` and `sw status`; `sw analyze` shows OneDrive folders without deleting in them
 
 ## Next
 
 - **New release** with prebuilt `analyze` and `status` tools, so both run without Go again
-- **Fix known bugs:** release workflow, paths with special characters, `sw analyze` with OneDrive folders, smaller bugs from
+- **Fix known bugs:** release workflow, paths with special characters, smaller bugs from
   the last review
 - **Rework the core:** rebuild history (`sw history`), protection and deletion logic, log and command dispatch, each with
   tests first
@@ -28,7 +29,6 @@ Planned work. The order may change. Please report wishes and bugs as an [issue](
 ## After that
 
 - Commands `clean`, `purge`, `optimize`, `uninstall` and installation and update on the reworked core
-- Leaner `sw analyze` and `sw status`
 - Polish for `sw features` and the `sw check` report, one health check for all commands
 - Clean up leftovers of older installations on update
 - All Go and PowerShell tests fully in CI

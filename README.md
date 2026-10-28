@@ -180,6 +180,7 @@ Sweepr can delete files, so paths are validated and system and profile folders a
 
 - Look at `clean`, `uninstall` and `purge` with `--dry-run` first, add `--debug` when needed
 - `clean` and `purge` delete permanently; verified `uninstall` leftovers and files deleted in `sw analyze` go to the Recycle Bin
+- `sw analyze` shows OneDrive and other cloud folders but never deletes in them; files that are only online count as 0 bytes on the disk and appear as "online". Links, protected folders and Sweepr's data folders cannot be deleted there either. `sw analyze` does not read the whitelist yet
 - Run as a normal user; system steps run only in an administrator PowerShell
 - Protect paths with `sw clean --whitelist`. Entries may be in quotes (like "Copy as path"), contain `/` instead of `\` and use `%VAR%` and `~` (profile folder). Entries with `*` or `?` also protect all subfolders. The file is written as UTF-8 (with BOM); non-ASCII characters work. The same spellings apply to `purge_paths.txt`.
 - Activity is logged in `%USERPROFILE%\.config\sweepr\operations.log` (portable: `data\config\operations.log`; `sw history`; turn off with `SWEEPR_NO_OPLOG=1`)

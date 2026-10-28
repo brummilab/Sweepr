@@ -38,7 +38,7 @@ On physical Windows, keep the isolated temporary root short: fixture GUIDs plus 
 
 ## Asynchronous Analyze actions
 
-Two scans can target the same path and still represent different requests. Establish request identity before dispatch, then validate both identity and path when accepting results. Separately test that busy deletion rejects action keys and still permits quit. [lifecycle_test.go](../cmd/analyze/lifecycle_test.go) covers these boundaries; path equality alone or a busy rendering state does not enforce them.
+Two scans can target the same path and still represent different requests. Establish request identity before dispatch, then validate both identity and path when accepting results. Separately test that busy deletion rejects action keys and still permits quit. [explorer_scan_test.go](../cmd/analyze/explorer_scan_test.go) and [explorer_delete_test.go](../cmd/analyze/explorer_delete_test.go) cover these boundaries; path equality alone or a busy rendering state does not enforce them.
 
 ## Native evidence and release evidence
 

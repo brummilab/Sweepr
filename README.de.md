@@ -180,6 +180,7 @@ Sweepr kann Dateien löschen, deshalb werden Pfade validiert und System- sowie P
 
 - `clean`, `uninstall` und `purge` zuerst mit `--dry-run` ansehen, bei Bedarf `--debug` dazu
 - `clean` und `purge` löschen endgültig; verifizierte `uninstall`-Reste und in `sw analyze` gelöschte Dateien gehen in den Papierkorb
+- `sw analyze` zeigt OneDrive- und andere Cloud-Ordner, löscht dort aber nie; Dateien, die nur online liegen, zählen auf dem Datenträger mit 0 Byte und erscheinen als „online“. Links, geschützte Ordner und die Datenordner von Sweepr lassen sich dort ebenfalls nicht löschen. Die Whitelist liest `sw analyze` noch nicht
 - Als normaler Benutzer ausführen; System-Schritte laufen nur in einer Administrator-PowerShell
 - Pfade schützen mit `sw clean --whitelist`. Einträge dürfen in Anführungszeichen stehen (wie "Als Pfad kopieren"), `/` statt `\` enthalten sowie `%VAR%` und `~` (Profilordner) nutzen. Einträge mit `*` oder `?` schützen auch alle Unterordner. Die Datei wird als UTF-8 (mit BOM) geschrieben; Umlaute sind möglich. Für `purge_paths.txt` gelten dieselben Schreibweisen.
 - Aktivitäten werden in `%USERPROFILE%\.config\sweepr\operations.log` protokolliert (portabel: `data\config\operations.log`; `sw history`; abschalten mit `SWEEPR_NO_OPLOG=1`)

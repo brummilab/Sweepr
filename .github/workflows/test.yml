@@ -131,6 +131,28 @@ jobs:
           Write-Host "status.exe --json returned all keys"
         shell: pwsh
 
+      - name: Check analyze JSON
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'analyze-fixture'
+          New-Item -ItemType Directory -Path (Join-Path $root 'folder') -Force | Out-Null
+          [System.IO.File]::WriteAllBytes((Join-Path $root 'folder\data.bin'), (New-Object byte[] 2048))
+          [System.IO.File]::WriteAllBytes((Join-Path $root 'top.bin'), (New-Object byte[] 512))
+          New-Item -ItemType Junction -Path (Join-Path $root 'link') -Target (Join-Path $root 'folder') | Out-Null
+          $out = & bin/analyze.exe --json $root
+          if ($LASTEXITCODE -ne 0) { Write-Host "analyze.exe --json exited with $LASTEXITCODE"; exit 1 }
+          $doc = ($out -join "`n") | ConvertFrom-Json
+          foreach ($key in 'scan_status', 'path', 'overview', 'entries', 'large_files', 'total_size', 'total_online_size', 'total_files') {
+            if ($doc.PSObject.Properties.Name -notcontains $key) { Write-Host "missing key: $key"; exit 1 }
+          }
+          $byName = @{}
+          foreach ($entry in $doc.entries) { $byName[$entry.name] = $entry }
+          if ($byName['folder'].size -ne 2048) { Write-Host "folder size: $($byName['folder'].size)"; exit 1 }
+          if ($byName['top.bin'].size -ne 512) { Write-Host "file size: $($byName['top.bin'].size)"; exit 1 }
+          if (-not $byName['link'].is_link -or $byName['link'].size -ne 0) { Write-Host "junction was not reported as an unmeasured link"; exit 1 }
+          if ($doc.total_size -ne 2560) { Write-Host "total size: $($doc.total_size)"; exit 1 }
+          Write-Host "analyze.exe --json measured the fixture and did not follow the junction"
+        shell: pwsh
+
   security:
     name: Security Checks
     runs-on: windows-latest

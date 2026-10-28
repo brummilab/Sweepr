@@ -16,11 +16,12 @@ Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bit
   `--restore` zum Zurückholen
 - **PC einmal prüfen** (`sw check`): nur lesend, mit HTML-Bericht, ohne Installation
 - Launcher `sw.exe`, Hinweis auf neue Versionen
+- `sw analyze` und `sw status` schlanker; `sw analyze` zeigt OneDrive-Ordner, ohne dort zu löschen
 
 ## Als Nächstes
 
 - **Neues Release** mit fertigen `analyze`- und `status`-Programmen, damit beide wieder ohne Go laufen
-- **Bekannte Fehler beheben:** Release-Workflow, Pfade mit Sonderzeichen, `sw analyze` mit OneDrive-Ordnern, kleinere
+- **Bekannte Fehler beheben:** Release-Workflow, Pfade mit Sonderzeichen, kleinere
   Fehler aus der letzten Prüfung
 - **Kern überarbeiten:** Verlauf (`sw history`), Schutz- und Löschlogik, Protokoll und Befehlsaufruf neu aufbauen,
   jeweils zuerst mit Tests
@@ -29,7 +30,6 @@ Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bit
 ## Danach
 
 - Befehle `clean`, `purge`, `optimize`, `uninstall` sowie Installation und Update im überarbeiteten Kern
-- `sw analyze` und `sw status` schlanker
 - Feinschliff für `sw features` und den `sw check`-Bericht, einheitliche Gesundheitsprüfung
 - Reste älterer Installationen beim Update sauber aufräumen
 - Alle Go- und PowerShell-Tests vollständig in der CI
