@@ -1,38 +1,39 @@
 # Roadmap
 
-Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bitte als
-[Issue](https://github.com/brummilab/Sweepr/issues) melden.
+[Deutsch](ROADMAP.de.md) · **English**
 
-## Erledigt
+Planned work. The order may change. Please report wishes and bugs as an [issue](https://github.com/brummilab/Sweepr/issues).
 
-- **Grundfunktionen:** `sw clean`, `sw uninstall`, `sw optimize`, `sw purge`, Disk-Explorer `sw analyze` und Systemmonitor
+## Done
+
+- **Core features:** `sw clean`, `sw uninstall`, `sw optimize`, `sw purge`, disk explorer `sw analyze` and system monitor
   `sw status`
-- **Sicherheit:** geschützte System- und Profilordner, Whitelist, `--dry-run` für alles, was löscht, Papierkorb für
-  Deinstallationsreste, Protokoll `operations.log` mit `sw history`
-- **Portable Version** (läuft z. B. vom USB-Stick, Daten bleiben im Programmordner) und **Installation mit Komponentenauswahl**
-- **Windows entschlacken** (`sw features`): geprüfte Liste vorinstallierter Apps und optionaler Features, mit
-  `--restore` zum Zurückholen
-- **PC einmal prüfen** (`sw check`): nur lesend, mit HTML-Bericht, ohne Installation
-- Launcher `sw.exe`, Hinweis auf neue Versionen
+- **Safety:** protected system and profile folders, whitelist, `--dry-run` for everything that deletes, Recycle Bin for
+  uninstall leftovers, log `operations.log` with `sw history`
+- **Portable version** (runs from a USB stick, for example; data stays in the program folder) and **installation with component selection**
+- **Debloat Windows** (`sw features`): reviewed list of preinstalled apps and optional features, with `--restore` to bring
+  them back
+- **Check a PC once** (`sw check`): read-only, with an HTML report, no installation
+- Launcher `sw.exe`, notice about new versions
 
-## Als Nächstes
+## Next
 
-- **Neues Release** mit fertigen `analyze`- und `status`-Programmen, damit beide wieder ohne Go laufen
-- **Bekannte Fehler beheben:** Release-Workflow, Pfade mit Sonderzeichen, `sw analyze` mit OneDrive-Ordnern, kleinere
-  Fehler aus der letzten Prüfung
-- **Kern überarbeiten:** Verlauf (`sw history`), Schutz- und Löschlogik, Protokoll und Befehlsaufruf neu aufbauen,
-  jeweils zuerst mit Tests
-- **Abnahme auf echten Windows-10- und -11-PCs** (Installation, Portable, `sw features`, `sw check`)
+- **New release** with prebuilt `analyze` and `status` tools, so both run without Go again
+- **Fix known bugs:** release workflow, paths with special characters, `sw analyze` with OneDrive folders, smaller bugs from
+  the last review
+- **Rework the core:** rebuild history (`sw history`), protection and deletion logic, log and command dispatch, each with
+  tests first
+- **Acceptance on real Windows 10 and 11 PCs** (installation, portable, `sw features`, `sw check`)
 
-## Danach
+## After that
 
-- Befehle `clean`, `purge`, `optimize`, `uninstall` sowie Installation und Update im überarbeiteten Kern
-- `sw analyze` und `sw status` schlanker
-- Feinschliff für `sw features` und den `sw check`-Bericht, einheitliche Gesundheitsprüfung
-- Reste älterer Installationen beim Update sauber aufräumen
-- Alle Go- und PowerShell-Tests vollständig in der CI
+- Commands `clean`, `purge`, `optimize`, `uninstall` and installation and update on the reworked core
+- Leaner `sw analyze` and `sw status`
+- Polish for `sw features` and the `sw check` report, one health check for all commands
+- Clean up leftovers of older installations on update
+- All Go and PowerShell tests fully in CI
 
-## Später
+## Later
 
-- Installation über **winget** und **Scoop**
-- Vorstellung auf Reddit
+- Installation through **winget** and **Scoop**
+- Introduction on Reddit

@@ -1,29 +1,31 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sweepr – Windows aufräumen per Kommandozeile</title>
-  <meta name="description" content="Sweepr ist ein freies Open-Source-Kommandozeilen-Tool für Windows: aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen. Sicher, mit Vorschau für alles, was löscht.">
-  <meta property="og:title" content="Sweepr – Windows aufräumen per Kommandozeile">
-  <meta property="og:description" content="Freies Open-Source-CLI für Windows 10 und 11: aufräumen, deinstallieren, optimieren, analysieren.">
+  <title>Sweepr – Clean up Windows from the command line</title>
+  <meta name="description" content="Sweepr is a free and open-source command-line tool for Windows: clean up, uninstall apps, optimize, analyze disk usage, monitor the system. Every deleting command has a preview.">
+  <meta property="og:title" content="Sweepr – Clean up Windows from the command line">
+  <meta property="og:description" content="Free and open-source CLI for Windows 10 and 11: clean up, uninstall, optimize, analyze.">
   <meta property="og:image" content="img/social-preview.png">
   <meta property="og:type" content="website">
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <link rel="alternate" hreflang="de" href="https://brummilab.github.io/Sweepr/de/">
 </head>
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
-      <a class="brand" href="#top" aria-label="Sweepr Startseite">
+      <a class="brand" href="#top" aria-label="Sweepr home">
         <img src="img/logo.svg" alt="" width="32" height="32">
         <span>Sweepr</span>
       </a>
-      <nav aria-label="Hauptnavigation">
-        <a href="#funktionen">Funktionen</a>
-        <a href="#sicherheit">Sicherheit</a>
+      <nav aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#safety">Safety</a>
         <a href="#installation">Installation</a>
         <a href="#roadmap">Roadmap</a>
+        <a class="nav-lang" href="de/" hreflang="de" lang="de">Deutsch</a>
         <a class="nav-gh" href="https://github.com/brummilab/Sweepr">GitHub</a>
       </nav>
     </div>
@@ -36,65 +38,65 @@
           <source media="(prefers-color-scheme: dark)" srcset="img/logo-wordmark-dark.svg">
           <img class="wordmark" src="img/logo-wordmark-light.svg" alt="Sweepr" width="480" height="128">
         </picture>
-        <h1>Mehr Platz, weniger Ballast.</h1>
-        <p class="lead">Kommandozeilen-Tool für Windows 10 und 11. Leert Caches, deinstalliert Apps samt Resten, zeigt, was
-          Platz belegt. Jeder löschende Befehl hat eine Vorschau.</p>
+        <h1>More space, less clutter.</h1>
+        <p class="lead">Command-line tool for Windows 10 and 11. Clears caches, uninstalls apps with their leftovers, shows what
+          takes up space. Every deleting command has a preview.</p>
         <div class="cta">
-          <a class="btn btn-primary" href="#installation">Installieren</a>
-          <a class="btn" href="https://github.com/brummilab/Sweepr">Quellcode auf GitHub</a>
+          <a class="btn btn-primary" href="#installation">Install</a>
+          <a class="btn" href="https://github.com/brummilab/Sweepr">Source on GitHub</a>
         </div>
         <p class="meta">Windows 10 / 11 · Windows PowerShell 5.1 · GPL-3.0</p>
       </div>
     </section>
 
-    <section id="funktionen" class="section">
+    <section id="features" class="section">
       <div class="wrap">
-        <h2>Funktionen</h2>
-        <p class="section-lead">Alle Befehle laufen über <code>sw</code>; ohne Argument öffnet sich ein Menü.</p>
+        <h2>Features</h2>
+        <p class="section-lead">All commands run through <code>sw</code>; without an argument it opens a menu.</p>
         <div class="grid">
           <article class="card">
             <h3>Deep Clean</h3>
-            <p>Temp-Dateien, Caches, Logs und Browser-Reste entfernen.</p>
+            <p>Remove temp files, caches, logs and browser leftovers.</p>
             <code>sw clean</code>
           </article>
           <article class="card">
-            <h3>Deinstallieren</h3>
-            <p>Apps mit ihrem eigenen Uninstaller entfernen, geprüfte Reste in den Papierkorb.</p>
+            <h3>Uninstall</h3>
+            <p>Remove apps with their own uninstaller; verified leftovers go to the Recycle Bin.</p>
             <code>sw uninstall</code>
           </article>
           <article class="card">
-            <h3>Optimieren</h3>
-            <p>DNS leeren, Systemlaufwerk optimieren, Datenträgerzustand prüfen.</p>
+            <h3>Optimize</h3>
+            <p>Flush DNS, optimize the system drive, check disk health.</p>
             <code>sw optimize</code>
           </article>
           <article class="card">
-            <h3>Speicheranalyse</h3>
-            <p>Zeigt im Terminal, welche Ordner und Dateien Platz belegen.</p>
+            <h3>Disk analysis</h3>
+            <p>Shows in the terminal which folders and files take up space.</p>
             <code>sw analyze</code>
           </article>
           <article class="card">
-            <h3>Live-Monitoring</h3>
-            <p>CPU, RAM, Datenträger, Netzwerk und Prozesse in Echtzeit.</p>
+            <h3>Live monitoring</h3>
+            <p>CPU, RAM, disks, network and processes in real time.</p>
             <code>sw status</code>
           </article>
           <article class="card">
-            <h3>Projekt-Purge</h3>
-            <p>Alte Build-Artefakte wie <code>node_modules</code> oder <code>bin/obj</code> entfernen.</p>
+            <h3>Project purge</h3>
+            <p>Remove old build artifacts such as <code>node_modules</code> or <code>bin/obj</code>.</p>
             <code>sw purge</code>
           </article>
           <article class="card">
-            <h3>Windows entschlacken</h3>
-            <p>Vorinstallierte Apps und optionale Features aus einer geprüften Liste entfernen; <code>--restore</code> holt sie zurück.</p>
+            <h3>Debloat Windows</h3>
+            <p>Remove preinstalled apps and optional features from a reviewed list; <code>--restore</code> brings them back.</p>
             <code>sw features</code>
           </article>
           <article class="card">
-            <h3>PC einmal prüfen</h3>
-            <p>Nur lesend, ohne Installation; Ergebnis als HTML-Bericht.</p>
+            <h3>Check a PC once</h3>
+            <p>Read-only, no installation; the result is an HTML report.</p>
             <code>sw check</code>
           </article>
           <article class="card">
-            <h3>Verlauf</h3>
-            <p>Zeigt, was wann entfernt wurde, auch als JSON.</p>
+            <h3>History</h3>
+            <p>Shows what was removed and when, also as JSON.</p>
             <code>sw history</code>
           </article>
         </div>
@@ -104,10 +106,10 @@
     <section class="section section-alt">
       <div class="wrap split">
         <div>
-          <h2>Erst ansehen, dann löschen</h2>
-          <p><code>--dry-run</code> zeigt, was entfernt würde, und ändert nichts. Bei <code>sw features</code> stehen dort
-            die exakten Windows-Befehle.</p>
-          <p><code>--debug</code> schreibt zusätzlich ein Detail-Log.</p>
+          <h2>Look first, then delete</h2>
+          <p><code>--dry-run</code> shows what would be removed and changes nothing. For <code>sw features</code> it lists
+            the exact Windows commands.</p>
+          <p><code>--debug</code> also writes a detailed log.</p>
         </div>
         <div class="terminal">
           <div class="terminal-bar"><span></span><span></span><span></span></div>
@@ -121,22 +123,22 @@
       </div>
     </section>
 
-    <section id="sicherheit" class="section">
+    <section id="safety" class="section">
       <div class="wrap">
-        <h2>Sicherheit</h2>
-        <p class="section-lead">Was nicht nachweislich sicher entfernt werden kann, bleibt liegen.</p>
+        <h2>Safety</h2>
+        <p class="section-lead">What cannot be shown to be safe to remove stays where it is.</p>
         <ul class="checks">
-          <li><strong>Geschützte Ordner:</strong> <code>C:\Windows</code>, <code>C:\Program Files</code>, Windows Defender und
-            das Profil-Stammverzeichnis werden nie angefasst, ebenso Schlüssel- und Anmeldedaten.</li>
-          <li><strong>Whitelist:</strong> eigene Pfade schützen mit <code>sw clean --whitelist</code>.</li>
-          <li><strong>Papierkorb:</strong> Deinstallationsreste und in <code>sw analyze</code> gelöschte Dateien gehen in den
-            Papierkorb.</li>
-          <li><strong>Protokoll:</strong> jede Änderung steht in <code>operations.log</code>, lesbar mit
+          <li><strong>Protected folders:</strong> <code>C:\Windows</code>, <code>C:\Program Files</code>, Windows Defender and the
+            profile root are never touched, nor are keys and credentials.</li>
+          <li><strong>Whitelist:</strong> protect your own paths with <code>sw clean --whitelist</code>.</li>
+          <li><strong>Recycle Bin:</strong> uninstall leftovers and files deleted in <code>sw analyze</code> go to the
+            Recycle Bin.</li>
+          <li><strong>Log:</strong> every change is recorded in <code>operations.log</code>, readable with
             <code>sw history</code>.</li>
-          <li><strong>Normale Rechte:</strong> läuft als normaler Benutzer; System-Schritte nur in einer
-            Administrator-PowerShell, Sweepr fordert nie selbst Rechte an.</li>
-          <li><strong>Nachfragen:</strong> <code>uninstall</code>, <code>purge</code> und <code>remove</code> fragen vor dem
-            Entfernen.</li>
+          <li><strong>Normal rights:</strong> runs as a normal user; system steps only in an administrator PowerShell,
+            Sweepr never requests rights itself.</li>
+          <li><strong>Confirmation:</strong> <code>uninstall</code>, <code>purge</code> and <code>remove</code> ask before
+            removing.</li>
         </ul>
       </div>
     </section>
@@ -147,65 +149,65 @@
         <div class="grid grid-3">
           <article class="card">
             <h3>Portable</h3>
-            <p>Nichts installieren: das portable ZIP aus den
-              <a href="https://github.com/brummilab/Sweepr/releases">Releases</a> entpacken, z. B. auf einen USB-Stick, und
-              <code>sw.exe</code> starten. Alle Daten bleiben im Ordner.</p>
+            <p>Install nothing: unzip the portable ZIP from the
+              <a href="https://github.com/brummilab/Sweepr/releases">releases</a>, for example to a USB stick, and run
+              <code>sw.exe</code>. All data stays in the folder.</p>
           </article>
           <article class="card">
-            <h3>Install-ZIP</h3>
-            <p>Release-ZIP entpacken und den Installer starten. Braucht weder Git noch Go.</p>
-            <div class="copy"><pre><code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath</code></pre><button type="button" data-copy>Kopieren</button></div>
+            <h3>Install ZIP</h3>
+            <p>Unzip the release ZIP and run the installer. Needs neither Git nor Go.</p>
+            <div class="copy"><pre><code>powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath</code></pre><button type="button" data-copy>Copy</button></div>
           </article>
           <article class="card">
-            <h3>Quick-Install</h3>
-            <p>Installiert aus dem Quellcode und lässt sich mit <code>sw update</code> aktualisieren. Braucht Git.</p>
-            <div class="copy"><pre><code>iwr -useb https://raw.githubusercontent.com/brummilab/Sweepr/main/quick-install.ps1 | iex</code></pre><button type="button" data-copy>Kopieren</button></div>
+            <h3>Quick install</h3>
+            <p>Installs from source and updates with <code>sw update</code>. Needs Git.</p>
+            <div class="copy"><pre><code>iwr -useb https://raw.githubusercontent.com/brummilab/Sweepr/main/quick-install.ps1 | iex</code></pre><button type="button" data-copy>Copy</button></div>
           </article>
         </div>
-        <p class="note">Releases sind nicht code-signiert; jedes Release enthält <code>SHA256SUMS.txt</code> zum Prüfen der
-          Downloads. Entfernen mit <code>sw remove</code>.</p>
+        <p class="note">Releases are not code-signed; every release includes <code>SHA256SUMS.txt</code> to check the
+          downloads. Remove with <code>sw remove</code>.</p>
       </div>
     </section>
 
     <section id="roadmap" class="section">
       <div class="wrap">
         <h2>Roadmap</h2>
-        <p class="section-lead">Ausführlich in
+        <p class="section-lead">In detail in
           <a href="https://github.com/brummilab/Sweepr/blob/main/ROADMAP.md">ROADMAP.md</a>.</p>
         <ol class="roadmap">
           <li class="done">
-            <h3>Erledigt</h3>
+            <h3>Done</h3>
             <ul>
               <li>Clean, Uninstall, Optimize, Purge, Analyze, Status</li>
-              <li>Schutzregeln, Vorschau, Papierkorb, Protokoll</li>
-              <li>Portable Version, Komponentenauswahl</li>
-              <li><code>sw features</code> mit Wiederherstellung</li>
-              <li><code>sw check</code> mit HTML-Bericht</li>
+              <li>Protection rules, preview, Recycle Bin, log</li>
+              <li>Portable version, component selection</li>
+              <li><code>sw features</code> with restore</li>
+              <li><code>sw check</code> with HTML report</li>
             </ul>
           </li>
           <li class="now">
-            <h3>Als Nächstes</h3>
+            <h3>Next</h3>
             <ul>
-              <li>Neues Release mit fertigen Analyse- und Monitor-Programmen</li>
-              <li>Bekannte Fehler beheben</li>
-              <li>Kern überarbeiten, Tests zuerst</li>
-              <li>Abnahme auf echten Windows-PCs</li>
+              <li>New release with prebuilt analysis and monitor tools</li>
+              <li>Fix known bugs</li>
+              <li>Rework the core, tests first</li>
+              <li>Acceptance on real Windows PCs</li>
             </ul>
           </li>
           <li>
-            <h3>Danach</h3>
+            <h3>After that</h3>
             <ul>
-              <li>Alle Befehle im überarbeiteten Kern</li>
-              <li>Schlankere Analyse und Monitor</li>
-              <li>Feinschliff für Features und Bericht</li>
-              <li>Vollständige Tests in der CI</li>
+              <li>All commands on the reworked core</li>
+              <li>Leaner analysis and monitor</li>
+              <li>Polish for features and report</li>
+              <li>Full tests in CI</li>
             </ul>
           </li>
           <li>
-            <h3>Später</h3>
+            <h3>Later</h3>
             <ul>
-              <li>winget und Scoop</li>
-              <li>Vorstellung auf Reddit</li>
+              <li>winget and Scoop</li>
+              <li>Introduction on Reddit</li>
             </ul>
           </li>
         </ol>
@@ -215,13 +217,13 @@
 
   <footer class="footer">
     <div class="wrap footer-inner">
-      <p>Sweepr ist freie Software unter der
+      <p>Sweepr is free software under the
         <a href="https://github.com/brummilab/Sweepr/blob/main/LICENSE">GPL-3.0</a>.</p>
       <p>
         <a href="https://github.com/brummilab/Sweepr">GitHub</a> ·
         <a href="https://github.com/brummilab/Sweepr/releases">Releases</a> ·
         <a href="https://github.com/brummilab/Sweepr/issues">Issues</a> ·
-        <a href="https://github.com/brummilab/Sweepr/security/advisories/new">Sicherheitslücke melden</a>
+        <a href="https://github.com/brummilab/Sweepr/security/advisories/new">Report a security issue</a>
       </p>
     </div>
   </footer>
@@ -231,8 +233,8 @@
       button.addEventListener('click', function () {
         var text = button.parentElement.querySelector('code').textContent;
         var done = function () {
-          button.textContent = 'Kopiert';
-          setTimeout(function () { button.textContent = 'Kopieren'; }, 1600);
+          button.textContent = 'Copied';
+          setTimeout(function () { button.textContent = 'Copy'; }, 1600);
         };
         if (navigator.clipboard) {
           navigator.clipboard.writeText(text).then(done, function () {});

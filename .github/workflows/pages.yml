@@ -26,8 +26,9 @@ jobs:
       - name: Assemble site
         # The logos live once in docs/img and are copied next to the page.
         run: |
-          mkdir -p _site/img
+          mkdir -p _site/img _site/de
           cp site/index.html site/style.css _site/
+          cp site/de/index.html _site/de/
           cp docs/img/logo.svg docs/img/logo-wordmark-light.svg docs/img/logo-wordmark-dark.svg docs/img/social-preview.png _site/img/
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

@@ -3,49 +3,50 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo-wordmark-dark.svg">
     <img src="docs/img/logo-wordmark-light.svg" alt="Sweepr" width="480">
   </picture>
-  <p><b>Windows-PC aufräumen, Apps deinstallieren, optimieren, Speicher analysieren, System überwachen. Freies Open-Source-CLI.</b></p>
+  <p><b>Clean up a Windows PC, uninstall apps, optimize, analyze disk usage, monitor the system. Free and open-source CLI.</b></p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL_v3-blue.svg?style=flat-square" alt="License"></a>
-  <p><a href="https://brummilab.github.io/Sweepr/">Projektseite</a> · <a href="ROADMAP.md">Roadmap</a></p>
+  <p><a href="README.de.md">Deutsch</a> · <b>English</b></p>
+  <p><a href="https://brummilab.github.io/Sweepr/">Project page</a> · <a href="ROADMAP.md">Roadmap</a></p>
 </div>
 
-## Funktionen
+## Features
 
-- **Deep Clean** (`sw clean`): Temp-Dateien, Caches, Logs und Browser-Reste entfernen
-- **Deinstallieren** (`sw uninstall`): Apps mit ihrem eigenen Uninstaller entfernen und Reste-Ordner aufräumen
-- **Optimieren** (`sw optimize`): DNS leeren, Systemlaufwerk optimieren, Datenträgerzustand prüfen
-- **Speicheranalyse** (`sw analyze`): interaktiver Disk-Explorer (TUI), große Dateien finden
-- **Live-Monitoring** (`sw status`): CPU, RAM, Disk, Netzwerk, Prozesse in Echtzeit
-- **Projekt-Purge** (`sw purge`): alte Build-Artefakte (`node_modules`, `bin/obj`, …) entfernen
-- **Windows entschlacken** (`sw features`): vorinstallierte Microsoft-Apps und optionale Windows-Features aus einer geprüften Liste entfernen bzw. abschalten
+- **Deep clean** (`sw clean`): remove temp files, caches, logs and browser leftovers
+- **Uninstall** (`sw uninstall`): remove apps with their own uninstaller and clean up leftover folders
+- **Optimize** (`sw optimize`): flush DNS, optimize the system drive, check disk health
+- **Disk analysis** (`sw analyze`): interactive disk explorer (TUI), find large files
+- **Live monitoring** (`sw status`): CPU, RAM, disk, network and processes in real time
+- **Project purge** (`sw purge`): remove old build artifacts (`node_modules`, `bin/obj`, ...)
+- **Debloat Windows** (`sw features`): remove or turn off preinstalled Microsoft apps and optional Windows features from a reviewed list
 
-## Schnellstart
+## Quick start
 
-Sweepr läuft auf Windows 10 und 11 mit dem eingebauten Windows PowerShell 5.1. Die Release-Dateien liegen unter [github.com/brummilab/Sweepr/releases](https://github.com/brummilab/Sweepr/releases):
+Sweepr runs on Windows 10 and 11 with the built-in Windows PowerShell 5.1. Release files are at [github.com/brummilab/Sweepr/releases](https://github.com/brummilab/Sweepr/releases):
 
-| Datei | Zweck |
+| File | Purpose |
 | --- | --- |
-| `sweepr-<version>-x64.zip` | Programmdateien mit `install.ps1`, `sw.exe` und den fertigen TUI-Tools; normale Installation |
-| `sweepr-<version>-x64-portable.zip` | dasselbe plus Markierungsdatei `sweepr.portable`; läuft ohne Installation, siehe [Portable Version](#portable-version) |
-| `analyze-windows-x64.exe`, `status-windows-x64.exe` | die beiden TUI-Tools einzeln; Sweepr lädt sie bei Bedarf selbst nach und prüft sie gegen `SHA256SUMS.txt` |
-| `SHA256SUMS.txt` | SHA-256-Prüfsummen der beiden ZIPs und der beiden TUI-Tools |
+| `sweepr-<version>-x64.zip` | Program files with `install.ps1`, `sw.exe` and the prebuilt TUI tools; regular installation |
+| `sweepr-<version>-x64-portable.zip` | The same plus the marker file `sweepr.portable`; runs without installation, see [Portable version](#portable-version) |
+| `analyze-windows-x64.exe`, `status-windows-x64.exe` | The two TUI tools on their own; Sweepr downloads them when needed and checks them against `SHA256SUMS.txt` |
+| `SHA256SUMS.txt` | SHA-256 checksums of both ZIPs and both TUI tools |
 
-Drei Wege, Sweepr zu bekommen:
+Three ways to get Sweepr:
 
-1. **Portable ZIP** – nichts installieren, Ordner entpacken und `sw.exe` starten ([Details](#portable-version)).
-2. **Install-ZIP** – `sweepr-<version>-x64.zip` entpacken und darin den Installer starten. Braucht weder Git noch Go, weil die TUI-Tools im ZIP liegen:
+1. **Portable ZIP**: install nothing, unzip the folder and run `sw.exe` ([details](#portable-version)).
+2. **Install ZIP**: unzip `sweepr-<version>-x64.zip` and run the installer in it. Needs neither Git nor Go, because the TUI tools are in the ZIP:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install.ps1 -AddToPath
    ```
 
-   Installiert wird nach `%LOCALAPPDATA%\Programs\sweepr-cli`. Eine so installierte Kopie hat kein `.git`; `sw update` kann sie nicht aktualisieren und verweist auf eine Neuinstallation (Ordner entfernen oder umbenennen, dann Quick-Install oder ein neues Release-ZIP mit anderem `-InstallDir`).
-3. **Quick-Install aus dem Quellcode** – klont `main` nach `%LOCALAPPDATA%\Programs\sweepr-cli` und startet den Installer. Braucht **Git**. Für `analyze.exe` und `status.exe` nutzt der Installer die geprüfte Release-Binärdatei nur, wenn der geklonte Quellstand dem Release-Tag entspricht; sonst baut er sie mit **Go**. Ohne Go bleibt das jeweilige Tool zunächst aus (der Installer warnt).
+   It installs to `%LOCALAPPDATA%\Programs\sweepr-cli`. A copy installed this way has no `.git`; `sw update` cannot update it and points to a reinstall (remove or rename the folder, then use Quick install or a new release ZIP with a different `-InstallDir`).
+3. **Quick install from source**: clones `main` to `%LOCALAPPDATA%\Programs\sweepr-cli` and runs the installer. Needs **Git**. For `analyze.exe` and `status.exe` the installer uses the verified release binary only when the cloned source matches the release tag; otherwise it builds them with **Go**. Without Go the tool stays unavailable for now (the installer warns).
 
    ```powershell
    iwr -useb https://raw.githubusercontent.com/brummilab/Sweepr/main/quick-install.ps1 | iex
    ```
 
-   Oder den Code vorher prüfen und lokal installieren (behält `.git`, damit `sw update` funktioniert):
+   Or review the code first and install locally (keeps `.git`, so `sw update` works):
 
    ```powershell
    $installDir = "$env:LOCALAPPDATA\Programs\sweepr-cli"
@@ -53,179 +54,179 @@ Drei Wege, Sweepr zu bekommen:
    powershell -ExecutionPolicy Bypass -File "$installDir\install.ps1" -InstallDir $installDir -AddToPath
    ```
 
-Bei Install-ZIP und Quick-Install landen `sw` und `sweepr` im Benutzer-PATH, wenn die Komponente `path` gewählt ist (siehe [Installation mit Komponentenauswahl](#installation-mit-komponentenauswahl)). Ein Startmenü-Eintrag ist die Komponente `shortcut`. Entfernen mit `sw remove`.
+With the install ZIP and Quick install, `sw` and `sweepr` go on the user PATH when the component `path` is selected (see [Installation with component selection](#installation-with-component-selection)). A Start menu entry is the component `shortcut`. Remove with `sw remove`.
 
-Prüfsumme eines Downloads vergleichen:
+Compare the checksum of a download:
 
 ```powershell
-Get-FileHash .\sweepr-<version>-x64.zip -Algorithm SHA256   # mit SHA256SUMS.txt vergleichen
+Get-FileHash .\sweepr-<version>-x64.zip -Algorithm SHA256   # compare with SHA256SUMS.txt
 ```
 
-## Installation mit Komponentenauswahl
+## Installation with component selection
 
-`install.ps1` kennt vier wählbare Komponenten; der Kern (Programmdateien, `sw.cmd`, `sweepr.cmd`) wird immer installiert:
+`install.ps1` has four selectable components; the core (program files, `sw.cmd`, `sweepr.cmd`) is always installed:
 
-| Komponente | Wirkung |
+| Component | Effect |
 | --- | --- |
-| `path` | Installationsordner in den Benutzer-PATH eintragen |
-| `shortcut` | Startmenü-Eintrag „Sweepr CLI“ anlegen |
-| `analyze` | `analyze.exe` bei der Installation bereitstellen |
-| `status` | `status.exe` bei der Installation bereitstellen |
+| `path` | Add the install folder to the user PATH |
+| `shortcut` | Create the Start menu entry "Sweepr CLI" |
+| `analyze` | Provide `analyze.exe` during installation |
+| `status` | Provide `status.exe` during installation |
 
-Die Auswahl von `analyze` und `status` wirkt bei Quell-Installationen: Nicht gewählte TUI-Tools werden nicht vorab bereitgestellt, sondern beim ersten `sw analyze` bzw. `sw status` nachgeladen oder gebaut. Install-ZIP und portables ZIP bringen beide Tools in `bin\` schon mit; der Installer kopiert sie in jedem Fall mit.
+Selecting `analyze` and `status` matters for source installs: TUI tools that are not selected are not provided up front, but downloaded or built on the first `sw analyze` or `sw status`. The install ZIP and the portable ZIP already carry both tools in `bin\`; the installer copies them in any case.
 
-Die Auswahl entscheidet die erste zutreffende Regel:
+The first matching rule decides the selection:
 
-1. `-Components path,shortcut,analyze,status` (kommagetrennt, Groß-/Kleinschreibung egal): genau diese Komponenten.
-2. Umgebungsvariable `SWEEPR_COMPONENTS` (gleiches Format): genau diese Komponenten. Bei Regel 1 und 2 zählen `-AddToPath` und `-CreateShortcut` nicht.
-3. Echte Konsole (Ein- und Ausgabe nicht umgeleitet) und kein `-NoPrompt`: ein Menü. Pfeil hoch/runter bewegt, Leertaste schaltet um, Enter installiert, Esc oder Q bricht ab (Meldung „Installation cancelled“, nichts wird installiert, Exit-Code 3).
-4. Sonst der Standard: `analyze` und `status`, dazu `path` mit `-AddToPath` und `shortcut` mit `-CreateShortcut`.
+1. `-Components path,shortcut,analyze,status` (comma-separated, case-insensitive): exactly these components.
+2. Environment variable `SWEEPR_COMPONENTS` (same format): exactly these components. With rules 1 and 2, `-AddToPath` and `-CreateShortcut` do not count.
+3. A real console (input and output not redirected) and no `-NoPrompt`: a menu. Up/Down moves, Space toggles, Enter installs, Esc or Q cancels (message "Installation cancelled", nothing is installed, exit code 3).
+4. Otherwise the default: `analyze` and `status`, plus `path` with `-AddToPath` and `shortcut` with `-CreateShortcut`.
 
-Das Menü startet mit demselben Standard wie Regel 4 vorausgewählt. Weil `quick-install.ps1` den Installer mit `-AddToPath` aufruft, sind dort `path`, `analyze` und `status` vorausgewählt. Ein unbekannter Komponentenname bricht mit Exit-Code 2 ab, bevor etwas kopiert wird.
+The menu starts with the same default as rule 4 preselected. Because `quick-install.ps1` calls the installer with `-AddToPath`, `path`, `analyze` and `status` are preselected there. An unknown component name stops with exit code 2 before anything is copied.
 
 ```powershell
-# Ohne Menü: nur PATH und das Status-Tool
+# Without a menu: only PATH and the status tool
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Components path,status -NoPrompt
 
-# Dasselbe über die Umgebung (z. B. für Skripte)
+# The same through the environment (for scripts)
 $env:SWEEPR_COMPONENTS = "path,status"
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Die Auswahl wird nicht gespeichert. `sw update` startet den Installer mit `-NoPrompt` (nie ein Menü) und behält den PATH-Eintrag, wenn der Ordner schon im Benutzer-PATH steht. Bricht man in `quick-install.ps1` das Menü ab, meldet es „Installation cancelled“ (Exit-Code 1) und entfernt den in diesem Lauf frisch geklonten Ordner wieder; ein schon vorhandener Ordner wird nicht gelöscht. Eine vorhandene Quell-Installation wurde allerdings schon vor dem Installer per `git fetch` und `git pull --ff-only` aktualisiert.
+The selection is not saved. `sw update` runs the installer with `-NoPrompt` (never a menu) and keeps the PATH entry when the folder is already on the user PATH. Cancelling the menu in `quick-install.ps1` reports "Installation cancelled" (exit code 1) and removes the folder cloned in this run; an existing folder is not deleted. An existing source install has, however, already been updated with `git fetch` and `git pull --ff-only` before the installer runs.
 
-## Portable Version
+## Portable version
 
-Die portable Version braucht keine Installation. Sie legt ihre eigenen Dateien weder im Benutzerprofil ab noch ändert sie den PATH oder das Startmenü.
+The portable version needs no installation. It stores none of its own files in the user profile and does not change PATH or the Start menu.
 
-1. `sweepr-<version>-x64-portable.zip` aus den [Releases](https://github.com/brummilab/Sweepr/releases) in einen beschreibbaren Ordner entpacken (z. B. auf einen USB-Stick).
-2. `sw.exe` in diesem Ordner starten (`.\sw.exe`, `.\sw.exe clean --dry-run`, …). Es startet `sweepr.ps1` aus demselben Ordner.
+1. Unzip `sweepr-<version>-x64-portable.zip` from the [releases](https://github.com/brummilab/Sweepr/releases) into a writable folder (for example on a USB stick).
+2. Run `sw.exe` in that folder (`.\sw.exe`, `.\sw.exe clean --dry-run`, ...). It starts `sweepr.ps1` from the same folder.
 
-Erkannt wird der Portable-Modus an der Datei `sweepr.portable` neben `sweepr.ps1`. Alle Sweepr-eigenen Dateien liegen dann im Unterordner `data` des Programmordners: Einstellungen, Whitelist und das Protokoll `operations.log` in `data\config`, Zwischenspeicher (Update-Prüfung, App-Scan-Cache) in `data\cache`. Das Protokoll wandert also mit dem Ordner; `sw history` zeigt es an, `SWEEPR_NO_OPLOG=1` schaltet es ab. Die Update-Prüfung läuft wie sonst und weist auf neue Versionen hin.
+Portable mode is recognized by the file `sweepr.portable` next to `sweepr.ps1`. All of Sweepr's own files then live in the `data` subfolder of the program folder: settings, whitelist and the log `operations.log` in `data\config`, caches (update check, app scan cache) in `data\cache`. The log therefore moves with the folder; `sw history` shows it, `SWEEPR_NO_OPLOG=1` turns it off. The update check runs as usual and points out new versions.
 
-- **Update:** `sw update` aktualisiert nichts, sondern nennt den Download (`sweepr-<version>-x64-portable.zip`) und beendet sich mit Exit-Code 1. Neues ZIP laden, die Programmdateien ersetzen und den Ordner `data` behalten.
-- **Entfernen:** `sw remove` löscht nichts und beendet sich mit Exit-Code 1. Zum Entfernen den Ordner selbst löschen; die eigenen Daten liegen in `data`. `install.ps1 -Uninstall` verweigert einen portablen Ordner ebenfalls.
-- **Nicht beschreibbarer Ort:** Kann Sweepr den Datenordner nicht anlegen oder beschreiben, endet es mit der Meldung `Sweepr data folder is not writable: <Pfad>. Sweepr does not fall back to your user profile.` und Exit-Code 1. Es weicht nie ins Benutzerprofil aus.
-- **Anderer Datenordner:** Mit der Umgebungsvariable `SWEEPR_DATA_DIR` (auch ohne Portable-ZIP nutzbar) legt man den Datenordner selbst fest; siehe [Ordner](#ordner). Sie hat Vorrang vor `data`.
+- **Update:** `sw update` updates nothing; it names the download (`sweepr-<version>-x64-portable.zip`) and exits with code 1. Download the new ZIP, replace the program files and keep the `data` folder.
+- **Remove:** `sw remove` deletes nothing and exits with code 1. To remove, delete the folder itself; your own data is in `data`. `install.ps1 -Uninstall` refuses a portable folder as well.
+- **Folder not writable:** If Sweepr cannot create or write its data folder, it stops with the message `Sweepr data folder is not writable: <path>. Sweepr does not fall back to your user profile.` and exit code 1. It never falls back to the user profile.
+- **Other data folder:** The environment variable `SWEEPR_DATA_DIR` (also usable without the portable ZIP) sets the data folder; see [Folders](#folders). It takes precedence over `data`.
 
-Die Bereinigungsziele von `sw clean` & Co. sind unabhängig davon weiterhin die Ordner des Windows-Profils; portabel sind nur Sweeprs eigene Daten.
+The cleanup targets of `sw clean` and the other commands are still the folders of the Windows profile; only Sweepr's own data is portable.
 
-## PC einmal prüfen (`sw check`)
+## Check a PC once (`sw check`)
 
-Einen fremden PC nur ansehen, ohne etwas zu installieren oder zu ändern:
+Look at someone else's PC without installing or changing anything:
 
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; iwr -useb https://raw.githubusercontent.com/brummilab/Sweepr/main/check.ps1 | iex
 ```
 
-`check.ps1` lädt das neueste portable Release in einen eigenen Ordner unter `%TEMP%`, prüft es gegen `SHA256SUMS.txt` (bei Abweichung läuft nichts), startet darin `sw check --report` (nur lesend, nichts wird gelöscht) und entfernt den Ordner danach wieder. Übrig bleibt nur der HTML-Bericht in `%TEMP%`. Im Constrained Language Mode oder wenn eine Gruppenrichtlinie die Ausführungsrichtlinie auf `Restricted` oder `AllSigned` setzt, bricht es vor dem Download mit einer Meldung ab. Braucht Sweepr 0.2 oder neuer.
+`check.ps1` downloads the latest portable release into its own folder under `%TEMP%`, checks it against `SHA256SUMS.txt` (nothing runs on a mismatch), runs `sw check --report` in it (read-only, nothing is deleted) and then removes the folder. Only the HTML report remains in `%TEMP%`. In Constrained Language Mode, or when a group policy sets the execution policy to `Restricted` or `AllSigned`, it stops before the download with a message. Needs Sweepr 0.2 or later.
 
-## Befehle
+## Commands
 
 ```powershell
-sw                           # Interaktives Menü
-sw clean                     # Aufräumen
-sw uninstall                 # Apps + Reste entfernen
-sw optimize                  # Caches & Dienste auffrischen
-sw analyze                   # Disk-Explorer
-sw status                    # Live-Systemmonitor
-sw purge                     # Projekt-Build-Artefakte entfernen
-sw features                  # Vorinstallierte Apps / Windows-Features entfernen
+sw                           # Interactive menu
+sw clean                     # Clean up
+sw uninstall                 # Remove apps and leftovers
+sw optimize                  # Refresh caches and services
+sw analyze                   # Disk explorer
+sw status                    # Live system monitor
+sw purge                     # Remove project build artifacts
+sw features                  # Remove preinstalled apps / Windows features
 
-sw update                    # Quell-Installation aktualisieren (git pull vom main-Branch)
-sw remove                    # Sweepr vom PC entfernen (portabel: löscht nichts)
-sw --help                    # Hilfe
+sw update                    # Update a source install (git pull from main)
+sw remove                    # Remove Sweepr from the PC (portable: deletes nothing)
+sw --help                    # Help
 sw --version                 # Version
 ```
 
-**Erst ansehen, dann löschen**
+**Look first, then delete**
 
 ```powershell
 sw clean --dry-run
 sw uninstall --dry-run
 sw optimize --dry-run
 sw purge --dry-run
-sw features --dry-run        # Zeigt die exakten Befehle, ändert nichts
-sw features --list           # Nur auflisten (JSON, wenn umgeleitet)
-sw features --restore        # Früher Entferntes wiederherstellen (mit --dry-run nur Vorschau)
-sw history                   # Was wurde wann entfernt?
+sw features --dry-run        # Shows the exact commands, changes nothing
+sw features --list           # List only (JSON when redirected)
+sw features --restore        # Restore what was removed earlier (preview only with --dry-run)
+sw history                   # What was removed, and when?
 sw history --json
 
-sw clean --dry-run --debug   # Vorschau + Detail-Log
-sw clean --whitelist         # Geschützte Pfade verwalten
-sw clean --system            # Inkl. System-Bereinigung (als Administrator)
-sw purge --paths             # Projekt-Suchordner festlegen
-sw analyze D:\               # Anderes Laufwerk analysieren
-sw uninstall --list          # Installierte Apps auflisten (JSON, wenn umgeleitet)
-sw analyze --json D:\        # Disk-Report als JSON
+sw clean --dry-run --debug   # Preview plus detailed log
+sw clean --whitelist         # Manage protected paths
+sw clean --system            # Include system cleanup (as administrator)
+sw purge --paths             # Set project search folders
+sw analyze D:\               # Analyze another drive
+sw uninstall --list          # List installed apps (JSON when redirected)
+sw analyze --json D:\        # Disk report as JSON
 ```
 
-## Windows entschlacken (`sw features`)
+## Debloat Windows (`sw features`)
 
-`sw features` bietet nur Einträge aus einer **geprüften Liste** an (vorinstallierte Microsoft-Apps wie Wetter, News, Solitaire, Xbox-Apps sowie optionale Features wie PowerShell 2.0, XPS-Dienste, Internet Explorer 11, Windows Media Player). Was Windows zum Laufen braucht (Store, App Installer, Sicherheit, Edge, WebView2, Laufzeiten, Hyper-V, WSL, SMB, .NET), wird nie angeboten.
+`sw features` offers only entries from a **reviewed list** (preinstalled Microsoft apps such as Weather, News, Solitaire, Xbox apps, and optional features such as PowerShell 2.0, XPS services, Internet Explorer 11, Windows Media Player). What Windows needs to run (Store, App Installer, security, Edge, WebView2, runtimes, Hyper-V, WSL, SMB, .NET) is never offered.
 
-- Menü mit Pfeiltasten, Leertaste wählt, Enter bestätigt, Esc/Q bricht ab. **Nichts ist vorausgewählt**; vor dem Entfernen fragt Sweepr `(y/N)`.
-- Apps werden für den aktuellen Benutzer entfernt (ohne Administrator). `--all-users-future` entfernt sie zusätzlich für künftige Benutzer (Administrator nötig).
-- Optionale Features werden nur abgeschaltet (nicht gelöscht) und brauchen eine Administrator-PowerShell. Sweepr fordert keine Rechte an und startet nie neu; braucht Windows einen Neustart, steht am Ende „Restart Windows to finish.“
-- Direkt vor dem Entfernen wird jeder Eintrag noch einmal geprüft; jede Aktion steht im Protokoll (`sw history`).
-- Rückgängig mit `sw features --restore`: Vor jedem Entfernen speichert Sweepr einen Eintrag in `features-removed.json` im Datenordner (Profil, portabel oder `SWEEPR_DATA_DIR`). Lässt sich die Liste nicht lesen oder speichern, wird nichts entfernt; `sw remove` behält die Datei wie `operations.log`. `--restore` zeigt die gespeicherten Einträge im Menü (nichts vorausgewählt), `--restore --dry-run` zeigt die exakten Befehle, danach fragt Sweepr `(y/N)`.
-  - Optionale Features: `Enable-WindowsOptionalFeature -Online -FeatureName <Name> -NoRestart` (Administrator-PowerShell nötig; ein Neustart wird nur gemeldet, nie ausgeführt).
-  - Apps: `winget install --id <Store-ID> --source msstore`; ohne bekannte Store-ID oder ohne winget nennt Sweepr den Microsoft Store. Ist die App schon installiert, wird nur der Eintrag entfernt.
-  - Erfolgreich Wiederhergestelltes verschwindet aus der Liste; Fehlgeschlagenes bleibt für einen neuen Versuch. `--restore` lässt sich nicht mit `--list` oder `--all-users-future` kombinieren.
+- Menu with arrow keys, Space selects, Enter confirms, Esc/Q cancels. **Nothing is preselected**; Sweepr asks `(y/N)` before removing.
+- Apps are removed for the current user (no administrator needed). `--all-users-future` also removes them for future users (administrator needed).
+- Optional features are only turned off (not deleted) and need an administrator PowerShell. Sweepr does not request rights and never restarts; when Windows needs a restart, the last line reads "Restart Windows to finish."
+- Each entry is checked again right before removal; every action is in the log (`sw history`).
+- Undo with `sw features --restore`: before each removal Sweepr saves an entry in `features-removed.json` in the data folder (profile, portable or `SWEEPR_DATA_DIR`). If the list cannot be read or saved, nothing is removed; `sw remove` keeps the file like `operations.log`. `--restore` shows the saved entries in the menu (nothing preselected), `--restore --dry-run` shows the exact commands, then Sweepr asks `(y/N)`.
+  - Optional features: `Enable-WindowsOptionalFeature -Online -FeatureName <Name> -NoRestart` (needs an administrator PowerShell; a restart is only reported, never performed).
+  - Apps: `winget install --id <Store ID> --source msstore`; without a known Store ID or without winget, Sweepr names the Microsoft Store. If the app is already installed, only the entry is removed.
+  - Entries restored successfully leave the list; failed ones stay for another attempt. `--restore` cannot be combined with `--list` or `--all-users-future`.
 
-## Sicherheit
+## Safety
 
-Sweepr kann Dateien löschen, deshalb werden Pfade validiert und System- sowie Profilordner geschützt. `uninstall`, `purge` und `remove` fragen vor dem Entfernen nach. Was nicht nachweislich sicher ist, wird übersprungen.
+Sweepr can delete files, so paths are validated and system and profile folders are protected. `uninstall`, `purge` and `remove` ask before removing. Whatever is not shown to be safe is skipped.
 
-- `clean`, `uninstall` und `purge` zuerst mit `--dry-run` ansehen, bei Bedarf `--debug` dazu
-- `clean` und `purge` löschen endgültig; verifizierte `uninstall`-Reste und in `sw analyze` gelöschte Dateien gehen in den Papierkorb
-- Als normaler Benutzer ausführen; System-Schritte laufen nur in einer Administrator-PowerShell
-- Pfade schützen mit `sw clean --whitelist`. Einträge dürfen in Anführungszeichen stehen (wie "Als Pfad kopieren"), `/` statt `\` enthalten sowie `%VAR%` und `~` (Profilordner) nutzen. Einträge mit `*` oder `?` schützen auch alle Unterordner. Die Datei wird als UTF-8 (mit BOM) geschrieben; Umlaute sind möglich. Für `purge_paths.txt` gelten dieselben Schreibweisen.
-- Aktivitäten werden in `%USERPROFILE%\.config\sweepr\operations.log` protokolliert (portabel: `data\config\operations.log`; `sw history`; abschalten mit `SWEEPR_NO_OPLOG=1`)
-- `C:\Windows`, `C:\Program Files`, Windows-Defender-Ordner und das Profil-Stammverzeichnis werden nie angefasst
+- Look at `clean`, `uninstall` and `purge` with `--dry-run` first, add `--debug` when needed
+- `clean` and `purge` delete permanently; verified `uninstall` leftovers and files deleted in `sw analyze` go to the Recycle Bin
+- Run as a normal user; system steps run only in an administrator PowerShell
+- Protect paths with `sw clean --whitelist`. Entries may be in quotes (like "Copy as path"), contain `/` instead of `\` and use `%VAR%` and `~` (profile folder). Entries with `*` or `?` also protect all subfolders. The file is written as UTF-8 (with BOM); non-ASCII characters work. The same spellings apply to `purge_paths.txt`.
+- Activity is logged in `%USERPROFILE%\.config\sweepr\operations.log` (portable: `data\config\operations.log`; `sw history`; turn off with `SWEEPR_NO_OPLOG=1`)
+- `C:\Windows`, `C:\Program Files`, Windows Defender folders and the profile root are never touched
 
-Sicherheitslücken bitte privat über [GitHub Security Advisories](https://github.com/brummilab/Sweepr/security/advisories/new) melden, nicht als öffentliches Issue. Details: [SECURITY.md](SECURITY.md).
+Please report security issues privately through [GitHub Security Advisories](https://github.com/brummilab/Sweepr/security/advisories/new), not as a public issue. Details: [SECURITY.md](SECURITY.md).
 
-## Ordner
+## Folders
 
-| | Installiert (Standard) | Portable | mit `SWEEPR_DATA_DIR=<Ordner>` |
+| | Installed (default) | Portable | with `SWEEPR_DATA_DIR=<folder>` |
 | --- | --- | --- | --- |
-| Befehl | `sw`, `sweepr` | `sw.exe` im Programmordner | wie die Installation |
-| Programme (inkl. TUI-Tools in `bin\`) | `%LOCALAPPDATA%\Programs\sweepr-cli` | der entpackte Ordner | wie die Installation |
-| Konfiguration und Protokoll | `%USERPROFILE%\.config\sweepr` | `<Programmordner>\data\config` | `<Ordner>\config` |
-| Cache | `%USERPROFILE%\.cache\sweepr` | `<Programmordner>\data\cache` | `<Ordner>\cache` |
-| Update-Quelle | `brummilab/Sweepr`, Branch `main` (Quell-Installation) | neues ZIP aus den Releases | wie die Installation |
+| Command | `sw`, `sweepr` | `sw.exe` in the program folder | as installed |
+| Programs (incl. TUI tools in `bin\`) | `%LOCALAPPDATA%\Programs\sweepr-cli` | the unzipped folder | as installed |
+| Configuration and log | `%USERPROFILE%\.config\sweepr` | `<program folder>\data\config` | `<folder>\config` |
+| Cache | `%USERPROFILE%\.cache\sweepr` | `<program folder>\data\cache` | `<folder>\cache` |
+| Update source | `brummilab/Sweepr`, branch `main` (source install) | new ZIP from the releases | as installed |
 
-- **Konfiguration und Protokoll** enthalten Whitelist (`whitelist.txt`), `operations.log`, die Suchordner von `sw purge` (`purge_paths.txt`), die Liste des letzten `sw clean` (`clean-list.txt`), das Debug-Protokoll (`--debug`) und die Einstellungen von `sw status`.
-- **Cache** enthält den App-Scan-Cache von `sw uninstall` und die Daten der Update-Prüfung. Die TUI-Tools `analyze.exe` und `status.exe` liegen nicht hier, sondern im Programmordner unter `bin\`.
-- **`SWEEPR_DATA_DIR`** gilt vor dem Portable-Modus und vor dem Profil. Ein relativer Pfad wird gegen das aktuelle Verzeichnis aufgelöst. Ist der Ordner nicht beschreibbar, bricht Sweepr ab, statt ins Profil auszuweichen. `sw remove` und `install.ps1 -Uninstall` entfernen nur die Installation, nennen den Datenordner und löschen ihn nie.
-- Der aktive Daten- und Cache-Ordner steht automatisch unter dem Schutz der Whitelist, auch wenn er in einem Bereinigungsziel liegt.
+- **Configuration and log** hold the whitelist (`whitelist.txt`), `operations.log`, the search folders of `sw purge` (`purge_paths.txt`), the list of the last `sw clean` (`clean-list.txt`), the debug log (`--debug`) and the settings of `sw status`.
+- **Cache** holds the app scan cache of `sw uninstall` and the update check data. The TUI tools `analyze.exe` and `status.exe` are not here but in the program folder under `bin\`.
+- **`SWEEPR_DATA_DIR`** takes precedence over portable mode and the profile. A relative path is resolved against the current folder. If the folder is not writable, Sweepr stops instead of falling back to the profile. `sw remove` and `install.ps1 -Uninstall` remove only the installation, name the data folder and never delete it.
+- The active data and cache folder is always protected like a whitelist entry, even when it lies inside a cleanup target.
 
-Sweepr ist noch nicht über winget oder Scoop erhältlich. Die Releases sind nicht code-signiert.
+Sweepr is not yet available through winget or Scoop. Releases are not code-signed.
 
-## Entwicklung
+## Development
 
 ```powershell
-.\scripts\test.ps1                 # Pester- und Go-Tests
-Invoke-Pester -Path .\tests        # Nur PowerShell-Tests
-go test ./cmd/...                  # Nur Go-Tests
+.\scripts\test.ps1                 # Pester and Go tests
+Invoke-Pester -Path .\tests        # PowerShell tests only
+go test ./cmd/...                  # Go tests only
 go build -o bin\analyze.exe .\cmd\analyze
 go build -o bin\status.exe .\cmd\status
 .\sweepr.ps1 clean --dry-run
 ```
 
-Jeder Push und jeder Pull-Request auf `main` startet die GitHub-Actions-Workflows **Validation** (Pester unter PowerShell 5.1 und 7, Go-Tests, Windows-Builds) und **Check** auf `windows-latest`, dazu das Gate unter Linux.
+Every push and pull request to `main` runs the GitHub Actions workflows **Validation** (Pester under PowerShell 5.1 and 7, Go tests, Windows builds) and **Check** on `windows-latest`, plus the gate on Linux.
 
-Vor jedem Merge muss das Gate grün sein:
+The gate must be green before every merge:
 
 ```bash
-./scripts/gate.sh                  # gofmt, go vet/test, Windows-Build, PowerShell-Syntax, Pester
+./scripts/gate.sh                  # gofmt, go vet/test, Windows build, PowerShell syntax, Pester
 ```
 
-Unter Windows (Git Bash) laufen dabei alle Pester-Tests, sonst die plattformneutralen.
+On Windows (Git Bash) all Pester tests run; elsewhere the full suite runs and only the known Windows-only failures are allowed.
 
-Regeln für Änderungen (Sicherheit, Kompatibilität, CI, Release): [docs/engineering-rules.md](docs/engineering-rules.md). Geplante Entwicklung: [ROADMAP.md](ROADMAP.md). Die Projektseite (GitHub Pages) liegt in `site/` und wird bei Änderungen dort automatisch veröffentlicht.
+Rules for changes (safety, compatibility, CI, release): [docs/engineering-rules.md](docs/engineering-rules.md). Planned work: [ROADMAP.md](ROADMAP.md). The project page (GitHub Pages) lives in `site/` and is published automatically when it changes.
 
-## Lizenz
+## License
 
-GPL-3.0 – siehe [LICENSE](LICENSE).
+GPL-3.0, see [LICENSE](LICENSE).

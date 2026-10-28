@@ -828,7 +828,7 @@ function Get-SweeprInstallEntries {
     return @(
         ".editorconfig", ".git", ".gitattributes", ".github", ".gitignore", ".golangci.yml", ".shellcheckrc",
         "CONTRIBUTING.md", "LICENSE", "Makefile", "NOTICE.md",
-        "README.md", "RELEASE.md", "ROADMAP.md", "SECURITY.md", "VERSION", "check.ps1",
+        "README.de.md", "README.md", "RELEASE.md", "ROADMAP.de.md", "ROADMAP.md", "SECURITY.md", "VERSION", "check.ps1",
         "bin", "cmd", "go.mod", "go.sum", "install.ps1", "lib", "sw.cmd", "sw.exe", "sweepr.cmd", "sweepr.ps1",
         "packaging", "quick-install.ps1", "scripts", "tests"
     )
@@ -959,6 +959,7 @@ function Get-SweeprInstallNestedFiles {
         "scripts\provenance.py"
         "scripts\test.ps1"
         "scripts\write-checksums.ps1"
+        "site\de\index.html"
         "site\index.html"
         "site\style.css"
         "tests\CheckBootstrap.Tests.ps1"

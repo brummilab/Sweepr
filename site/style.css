@@ -68,6 +68,7 @@ nav { display: flex; gap: 18px; flex-wrap: wrap; }
 nav a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
 nav a:hover { color: var(--text); }
 .nav-gh { color: var(--accent) !important; font-weight: 600; }
+.nav-lang { border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; }
 
 /* Hero */
 .hero {
@@ -151,7 +152,7 @@ nav a:hover { color: var(--text); }
 .footer p { margin: 0; }
 
 @media (max-width: 640px) {
-  nav a:not(.nav-gh) { display: none; }
+  nav a:not(.nav-gh):not(.nav-lang) { display: none; }
   .section { padding: 48px 0; }
   .hero { padding: 48px 0; }
 }

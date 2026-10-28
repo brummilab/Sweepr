@@ -75,7 +75,7 @@ Describe "new-release-zip.ps1" {
         $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
         try {
             $english = [System.IO.File]::ReadAllText((Join-Path $projectRoot "README.md"))
-            $languages = @([regex]::Matches($english, 'href="(README_[A-Z]+\.md)"') | ForEach-Object { $_.Groups[1].Value })
+            $languages = @([regex]::Matches($english, 'href="(README(?:_[A-Z]+|\.[a-z]{2})\.md)"') | ForEach-Object { $_.Groups[1].Value })
             foreach ($name in @("README.md") + $languages) {
                 $entry = $archive.GetEntry($name)
                 $entry | Should -Not -BeNullOrEmpty -Because "$name must ship with its language link"

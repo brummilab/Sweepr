@@ -8,7 +8,7 @@ Sweepr is a free, open-source, terminal-first Windows maintenance CLI: PowerShel
 
 - Commands: `sw` and `sweepr` (`sw.exe`, `sw.cmd`, `sweepr.cmd`). Folders: `%LOCALAPPDATA%\Programs\sweepr-cli`, `~\.config\sweepr`, `~\.cache\sweepr`. Updates come from `brummilab/sweepr`, branch `main`.
 - `main` is the only long-lived branch. Push directly to `main`; CI runs on every push and PR to `main`.
-- `README.md` is German and is updated with every change. The CLI itself, code comments and the other docs stay English. There are no translated README copies.
+- `README.md` (English) and `README.de.md` (German) are updated together with every change, as are `ROADMAP.md`/`ROADMAP.de.md` and the project page (`site/index.html`, `site/de/index.html`). The CLI itself, code comments and the other docs stay English.
 
 ## Development notes
 
