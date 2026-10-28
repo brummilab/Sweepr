@@ -935,16 +935,20 @@ function ConvertFrom-SwListEntry {
 # ============================================================================
 
 function Add-SwBaseWhitelistRow {
-    # Adds one protected folder or pattern to the rows of a whitelist state. A literal row (data
-    # folders) never has wildcard meaning. For other rows the text is also a pattern when it holds
-    # * ? [ or a backtick; a pattern without [ and backtick also protects what lies below its
-    # matches. A pattern that is not a valid wildcard pattern is an error, which makes the whole
-    # state keep every path. When the written folder exists and the file system spells it
-    # differently (junction, symbolic link, short name), the final spelling is added as a literal
-    # row. With ResolveRelative (lines typed by the user) a text without drive or UNC root is
-    # resolved the same way against the working directory of the process; default patterns built
-    # from an empty environment value stay relative and without effect. Rows are independent of each
-    # other, so the order of the lines never matters.
+    # Adds one protected folder or pattern to the rows of a whitelist state.
+    #  - A literal row (data folders) never has wildcard meaning. For other rows the text is also a
+    #    pattern when it holds * ? [ or a backtick; a pattern without [ and backtick also protects
+    #    what lies below its matches. A pattern that is not a valid wildcard pattern is an error,
+    #    which makes the whole state keep every path.
+    #  - When the written folder exists and the file system spells it differently (junction, symbolic
+    #    link, short name), its final spelling is added as a literal row.
+    #  - With ResolveRelative (lines typed by the user) a text without drive or UNC root (relative,
+    #    root-relative or drive-relative such as C:folder) is resolved the same way against the
+    #    working directory of the process and against the PowerShell location, which can differ;
+    #    each place where the item exists adds a row. A bare drive (C:) and a text with a single
+    #    leading slash (a path of another platform) are never resolved and stay as written. Default
+    #    patterns built from an empty environment value stay relative and without effect.
+    #  - Rows are independent of each other, so the order of the lines never matters.
     param([System.Collections.Generic.List[object]]$Rows, [string]$Pattern, [bool]$Literal, [bool]$ResolveRelative = $false)
 
     if ([string]::IsNullOrWhiteSpace($Pattern)) { return }
@@ -969,6 +973,9 @@ function Add-SwBaseWhitelistRow {
     $Rows.Add($row)
 
     if ($hasWildcard) { return }
+    # A single leading slash marks a path of another platform. It stays a literal row with its own
+    # text; resolving it would turn it into a folder of the current drive or working directory.
+    if ($root[0] -eq [char]47 -and ($root.Length -eq 1 -or $root[1] -ne [char]47)) { return }
     $absolute = [regex]::IsMatch($root, '\A(?:[A-Za-z]:[\\/]|\\\\[^\\])')
     if (-not $absolute -and -not $ResolveRelative) { return }
     # A bare drive (C:) would mean the current folder of that drive: nothing to resolve.

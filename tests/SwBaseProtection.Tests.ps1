@@ -1900,6 +1900,29 @@ Describe 'Whitelist' {
         }
         finally { Pop-Location }
     }
+
+    It 'B-22 never resolves a whitelist line with a single leading slash, against either working folder' {
+        $name = 'slash-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+        $processFolder = [System.IO.Path]::Combine($script:Case, 'process-slash')
+        $shellFolder = [System.IO.Path]::Combine($script:Case, 'shell-slash')
+        foreach ($dir in [System.IO.Path]::Combine($processFolder, $name), [System.IO.Path]::Combine($shellFolder, $name)) { [void][System.IO.Directory]::CreateDirectory($dir) }
+        $underProcess = Resolve-SwSafePath -Path ([System.IO.Path]::Combine($processFolder, $name))
+        $underShell = Resolve-SwSafePath -Path ([System.IO.Path]::Combine($shellFolder, $name))
+        Push-Location -LiteralPath $shellFolder
+        try {
+            Use-ProcessDirectory $processFolder {
+                Set-WlLines @('/' + $name)
+                Assert-Result (Test-Wl ($underShell + '\f')) $false 'below the folder under the PowerShell location'
+                Assert-Result (Test-Wl ($underProcess + '\f')) $false 'below the folder under the process directory'
+                Assert-Result (Test-Wl ('/' + $name + '\f')) $true 'the text as written stays protected'
+                if ($script:OnWindows) {
+                    $drive = [System.IO.Path]::GetPathRoot($underShell).Substring(0, 2)
+                    Assert-Result (Test-Wl ($drive + '\' + $name + '\f')) $false 'the same name at the root of the current drive'
+                }
+            }
+        }
+        finally { Pop-Location }
+    }
 }
 
 # ============================================================================
