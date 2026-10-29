@@ -13,7 +13,7 @@
 #     New mockable helpers (top-level functions):
 #       Test-FeaturesWingetAvailable                 -> [bool], true when winget can be run
 #       Invoke-FeaturesWinget -Arguments <string[]>  -> [int] exit code; the only place that runs winget
-#   sweepr.ps1: --restore resolves to -Restore (no more "Unknown option"), Show-MainHelp lists
+#   sweepr.ps1: --restore resolves to -Restore (no more "Unknown option"), Show-SwHelp lists
 #     "sw features --restore".
 #   lib\core\history.ps1: RESTORED is counted as its own action `restored` ("restored N" in the text,
 #     sessions[].actions.restored in JSON), not under `other`.
@@ -94,6 +94,9 @@ BeforeAll {
     $script:SweeprFile = Join-Path $script:WindowsDir "sweepr.ps1"
     $script:InstallFile = Join-Path $script:WindowsDir "install.ps1"
 
+    # Dot-sourcing the router loads its functions and modules and returns without running a command.
+    . $script:SweeprFile
+
     . "$script:LibDir\core\base.ps1"
     . "$script:LibDir\core\log.ps1"
     . "$script:LibDir\core\ui.ps1"
@@ -138,19 +141,6 @@ BeforeAll {
         }
         return $ast
     }
-    function script:Import-ScriptFunction {
-        param([string]$Script, [string[]]$Names)
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
-        foreach ($name in $Names) {
-            $definition = $ast.Find({
-                    param($node)
-                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
-                }, $true)
-            if (-not $definition) { throw "$name not found in $Script" }
-            . ([scriptblock]::Create($definition.Extent.Text))
-            Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
-        }
-    }
 
     $script:FeaturesAst = $null
     if (Test-Path -LiteralPath $script:BinFile) {
@@ -164,7 +154,6 @@ BeforeAll {
     if (-not (Test-Path -Path 'function:Test-FeaturesWingetAvailable')) { function script:Test-FeaturesWingetAvailable { throw 'bin\features.ps1 is missing Test-FeaturesWingetAvailable' } }
     if (-not (Test-Path -Path 'function:Invoke-FeaturesWinget')) { function script:Invoke-FeaturesWinget { param([string[]]$Arguments) throw 'bin\features.ps1 is missing Invoke-FeaturesWinget' } }
     $script:RealInventory = (Get-Command -Name Get-SweeprFeatureInventory -CommandType Function).ScriptBlock
-    Import-ScriptFunction -Script $script:SweeprFile -Names @("Resolve-CommandParameterName", "Invoke-SweeprCommand", "Show-MainHelp")
 
     # ---- fixtures -------------------------------------------------------------------------------
 
@@ -495,7 +484,7 @@ Describe "sw features --restore files, router and help" {
 
     It "Maps the flag --restore to the parameter Restore" {
         $declared = (Get-Command -Name $script:BinFile -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag 'restore' | Should -Be 'Restore'
+        Resolve-SwCommandParameter -Parameters $declared -Flag 'restore' | Should -Be 'Restore'
     }
 
     It "Documents --restore in the features help" {
@@ -506,7 +495,7 @@ Describe "sw features --restore files, router and help" {
     }
 
     It "Lists sw features --restore in the main help" {
-        Show-MainHelp
+        Show-SwHelp
         ($script:Transcript -join "`n") | Should -Match 'sw features --restore'
     }
 
@@ -1136,7 +1125,7 @@ Describe "sw features --restore run" {
         $script:Calls.Count | Should -Be 3
         @(Get-RemovedIds) | Should -Be @('app.other', 'app.third', 'feature.legacy')
         $result.Text | Should -Match 'enable boom'
-        $result.Exit | Should -Be 0
+        $result.Exit | Should -Be 1
     }
 
     It "Treats a winget exit code other than 0 as a failure and keeps the record" {

@@ -92,6 +92,9 @@ BeforeAll {
     $script:SweeprFile = Join-Path $script:WindowsDir "sweepr.ps1"
     $script:InstallFile = Join-Path $script:WindowsDir "install.ps1"
 
+    # Dot-sourcing the router loads its functions and modules and returns without running a command.
+    . $script:SweeprFile
+
     . "$script:LibDir\core\base.ps1"
     . "$script:LibDir\core\log.ps1"
     . "$script:LibDir\core\ui.ps1"
@@ -136,19 +139,6 @@ BeforeAll {
         }
         return $ast
     }
-    function script:Import-ScriptFunction {
-        param([string]$Script, [string[]]$Names)
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
-        foreach ($name in $Names) {
-            $definition = $ast.Find({
-                    param($node)
-                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
-                }, $true)
-            if (-not $definition) { throw "$name not found in $Script" }
-            . ([scriptblock]::Create($definition.Extent.Text))
-            Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
-        }
-    }
 
     $script:FeaturesAst = $null
     if (Test-Path -LiteralPath $script:BinFile) {
@@ -160,7 +150,6 @@ BeforeAll {
     if (-not (Test-Path -Path 'function:Get-FeaturesWindowHeight')) { function script:Get-FeaturesWindowHeight { throw 'bin\features.ps1 is missing Get-FeaturesWindowHeight' } }
     # The real inventory, so a spy Mock can call through and record how it was called.
     $script:RealInventory = (Get-Command -Name Get-SweeprFeatureInventory -CommandType Function).ScriptBlock
-    Import-ScriptFunction -Script $script:SweeprFile -Names @("Resolve-CommandParameterName", "Invoke-SweeprCommand", "Show-MainHelp")
 
     # ---- fixtures -------------------------------------------------------------------------------
 
@@ -490,13 +479,12 @@ Describe "sw features router and help" {
     BeforeEach { Initialize-FeatureEnvironment }
     AfterEach { Restore-FeatureEnvironment }
 
-    It "Lists features in the router's validCommands" {
-        $text = Get-Content -LiteralPath $script:SweeprFile -Raw
-        $text | Should -Match '\$validCommands\s*=\s*@\([^)]*"features"[^)]*\)'
+    It "Lists features among the commands of the router" {
+        $script:SwCommands | Should -Contain 'features'
     }
 
     It "Shows sw features in the main help" {
-        Show-MainHelp
+        Show-SwHelp
         $help = $script:Transcript -join "`n"
         $help | Should -Match 'sw features\s+\S'
         $help | Should -Match 'sw features --restore'
@@ -512,7 +500,7 @@ Describe "sw features router and help" {
         @{ Flag = 'debug'; Parameter = 'DebugMode' }
     ) {
         $declared = (Get-Command -Name $script:BinFile -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag $Flag | Should -Be $Parameter
+        Resolve-SwCommandParameter -Parameters $declared -Flag $Flag | Should -Be $Parameter
     }
 
     It "Prints the features help through sweepr.ps1 with exit code 0" {
