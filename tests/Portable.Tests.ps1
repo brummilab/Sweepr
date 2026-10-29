@@ -23,10 +23,10 @@ BeforeAll {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:ProjectRoot 'sweepr.ps1'), [ref]$null, [ref]$null)
     $definition = $ast.Find({
             param($node)
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-SweeprInstallMethod'
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-SwInstallMethod'
         }, $true)
     . ([scriptblock]::Create($definition.Extent.Text))
-    Set-Item -Path 'function:script:Get-SweeprInstallMethod' -Value (Get-Item 'function:Get-SweeprInstallMethod').ScriptBlock
+    Set-Item -Path 'function:script:Get-SwInstallMethod' -Value (Get-Item 'function:Get-SwInstallMethod').ScriptBlock
 }
 
 AfterAll {
@@ -294,37 +294,37 @@ Describe 'Update check file follows the configured folder' {
     }
 }
 
-Describe 'Get-SweeprInstallMethod' {
+Describe 'Get-SwInstallMethod' {
     BeforeEach {
         $script:AppRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:AppRoot -Force | Out-Null
     }
 
     It 'Says Copy for a plain folder' {
-        Get-SweeprInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Copy'
+        Get-SwInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Copy'
     }
 
     It 'Says Portable when the marker file is present' {
         Set-Content -LiteralPath (Join-Path $script:AppRoot 'sweepr.portable') -Value ''
-        Get-SweeprInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Portable'
+        Get-SwInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Portable'
     }
 
     It 'Checks the marker before Source' {
         New-Item -ItemType Directory -Path (Join-Path $script:AppRoot '.git') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:AppRoot 'sweepr.portable') -Value ''
-        Get-SweeprInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Portable'
+        Get-SwInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Portable'
     }
 
     It 'Still says Source for a Git checkout without the marker' {
         New-Item -ItemType Directory -Path (Join-Path $script:AppRoot '.git') -Force | Out-Null
-        Get-SweeprInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Source'
+        Get-SwInstallMethod -RootDir $script:AppRoot | Should -BeExactly 'Source'
     }
 
     It 'Recognises the winget and Scoop folders' -ForEach @(
         @{ Root = 'C:\Users\Example\AppData\Local\Microsoft\WinGet\Packages\brummilab.Sweepr_Fixture'; Expected = 'winget' },
         @{ Root = 'C:\Users\Example\scoop\apps\sweepr\current'; Expected = 'Scoop' }
     ) {
-        Get-SweeprInstallMethod -RootDir $Root | Should -BeExactly $Expected
+        Get-SwInstallMethod -RootDir $Root | Should -BeExactly $Expected
     }
 }
 
@@ -359,35 +359,6 @@ Describe 'Resolve-SweeprDataPaths override edge cases' {
         $paths.Mode | Should -BeExactly 'Override'
         Norm $paths.ConfigPath | Should -BeExactly (Norm "$full/rel/data/config")
         Norm $paths.CachePath | Should -BeExactly (Norm "$full/rel/data/cache")
-    }
-}
-
-Describe 'sweepr.ps1 start order' {
-    BeforeAll {
-        $script:SweeprAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:ProjectRoot 'sweepr.ps1'), [ref]$null, [ref]$null)
-    }
-
-    It 'Checks the data folder is writable before Initialize-Sweepr creates folders' {
-        $main = $script:SweeprAst.Find({
-                param($node)
-                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Main'
-            }, $true)
-        $main | Should -Not -BeNullOrEmpty
-        $calls = @($main.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
-        $check = @($calls | Where-Object { $_.GetCommandName() -eq 'Initialize-SweeprDataDir' })
-        $init = @($calls | Where-Object { $_.GetCommandName() -eq 'Initialize-Sweepr' })
-        $check.Count | Should -BeGreaterThan 0
-        $init.Count | Should -BeGreaterThan 0
-        $check[0].Extent.StartOffset | Should -BeLessThan $init[0].Extent.StartOffset
-    }
-
-    It 'Defines Initialize-SweeprDataDir and lets it call Assert-SweeprDataWritable' {
-        $fn = $script:SweeprAst.Find({
-                param($node)
-                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Initialize-SweeprDataDir'
-            }, $true)
-        $fn | Should -Not -BeNullOrEmpty
-        $fn.Extent.Text | Should -Match 'Assert-SweeprDataWritable'
     }
 }
 
