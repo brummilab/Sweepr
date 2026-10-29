@@ -1103,7 +1103,7 @@ Describe "sw uninstall --list" {
         Mock Invoke-SweeprUninstallProcess { throw "--list must not start a process" }
         Mock Remove-AppxPackage { throw "--list must not remove a package" }
         Mock Write-SweeprOperation { throw "--list must not write operations.log" }
-        Mock Add-SweeprOperationText { throw "--list must not write operations.log" }
+        Mock Add-SwOperationText { throw "--list must not write operations.log" }
     }
 
     It "Prints the inventory as a JSON array when output is redirected" {
@@ -1207,7 +1207,7 @@ Describe "sw uninstall --list" {
         Should -Invoke Show-AppSelectionMenu -Times 0 -Exactly
         Should -Invoke Read-Host -Times 0 -Exactly
         Should -Invoke Write-SweeprOperation -Times 0 -Exactly
-        Should -Invoke Add-SweeprOperationText -Times 0 -Exactly
+        Should -Invoke Add-SwOperationText -Times 0 -Exactly
     }
 }
 
