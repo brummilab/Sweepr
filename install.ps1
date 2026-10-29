@@ -1011,7 +1011,6 @@ function Get-SweeprInstallNestedFiles {
         "tests\SwUpdateCheck.Tests.ps1"
         "tests\SwVersion.Tests.ps1"
         "tests\TestRunner.Tests.ps1"
-        "tests\UI.Tests.ps1"
         "tests\Uninstall.Tests.ps1"
         "tests\UninstallWait.Tests.ps1"
         "tests\WhitelistParsing.Tests.ps1"

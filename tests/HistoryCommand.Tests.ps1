@@ -909,13 +909,13 @@ Describe 'Read-SwHistory: one file only, read only, no lock (H-1, H-2, H-12, S1,
         . ([System.IO.Path]::Combine($script:CoreDir, 'base.ps1'))
         . ([System.IO.Path]::Combine($script:CoreDir, 'log.ps1'))
         Mock Write-SweeprOperation { }
-        Mock Add-SweeprOperationText { }
+        Mock Add-SwOperationText { }
         $path = New-LogFile (Get-ExampleLines)
         $h = Read-SwHistory -Path $path
         $null = Get-HistoryJson -History $h -LogPath $path
         $null = Get-HistoryText -History $h -LogPath $path
         Should -Invoke Write-SweeprOperation -Exactly -Times 0 -Scope It
-        Should -Invoke Add-SweeprOperationText -Exactly -Times 0 -Scope It
+        Should -Invoke Add-SwOperationText -Exactly -Times 0 -Scope It
     }
 
     It 'H-12 throws, and names a real error, when the log path is a folder' {

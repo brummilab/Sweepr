@@ -54,8 +54,6 @@ Application cache boundaries.Removes only old crash dumps across user and system
 Application cache boundaries.Uses Firefox local caches and keeps its roaming profile stores
 Assert-SwDataWritable.A-15 [W] stops with the message for a folder on a drive that does not exist
 Assert-SwDataWritable.A-15 [W] stops with the message when the ACL denies writing
-Background loading lifecycle.animates while the calling thread waits and stops before returning
-Background loading lifecycle.writes Unicode frames directly to a console buffer regardless of its legacy code page
 Base Module.Color Definitions.Should expose the full icon table in Windows PowerShell
 Base Module.Get-FreeSpace.Should return free space string
 Base Module.Test-IsAdmin.Should return a boolean
@@ -173,6 +171,7 @@ Leftover install folder ownership.Rechecks ownership in the final removal guard
 Leftover install folder ownership.Retains game content that appears at the final removal boundary
 Linked protected segments.Refuses a child of a protected segment that is a junction elsewhere
 Load contract.G-4 [W] loads in a fresh Windows PowerShell 5.1 process and gives 15 icons without output
+Loading log.ps1.LG-1 [W] builds the path on a drive that does not exist without asking the drive
 Logging Module.Debug session log.Writes a command script's own lines when the router already set SWEEPR_DEBUG
 Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through Command
 Machine-readable output through installed launcher call shapes.Keeps analyze --json --debug stdout to the analyzer's output through File
@@ -284,6 +283,7 @@ Store package eligibility at the removal boundary.Retains a stale Store selectio
 Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is system
 Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is unreadable
 Store package eligibility at the removal boundary.Still removes an exactly matched ordinary Store app
+Sweepr.SwSpinner.LG-39 [W] writes the Braille characters to the standard output handle of a real console buffer and keeps the code page
 System Cleanup Module.Admin Requirements.Should check for admin when needed
 Test runner exit status.passes when the native Go checks pass
 Test runner exit status.passes when two Go installs are on PATH
@@ -338,6 +338,9 @@ Whitelist junction roots [W].B-28 protects a candidate in the typed and in the f
 Whitelist junction roots [W].B-28 protects the final spelling of a junction used as the data folder
 Whitelist junction roots [W].S-B11 keeps protecting both spellings when more lines are added in any order
 Whitelisted junction roots.Keeps a child of a whitelisted junction by original and final spelling
+Write-SwOperation: rotation of a large log.LG-14 [W] throws when the file cannot be moved because another process holds it (Move-SwOperationLogAside)
+Write-SwOperation: two processes append at the same time.S-8 [W] keeps every record exactly once, none overwritten by the other process
+Write-SwOperation: two processes append at the same time.S-8 [W] leaves only whole lines in the file
 install.ps1 -Uninstall.Keeps a linked install directory and the files outside it
 install.ps1 -Uninstall.Keeps config behind a junction at .config
 install.ps1 -Uninstall.Keeps config behind a junction at sweepr

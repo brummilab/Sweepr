@@ -356,12 +356,12 @@ Describe "File Operations Module" {
             $held = [System.IO.File]::Open($script:SweeprOperationsLogFile, 'OpenOrCreate', 'ReadWrite', 'None')
             try {
                 Mock Start-Sleep { }
-                Mock Write-Debug { }
+                Mock Write-SwDebug { }
                 Write-SweeprOperation -Action "REMOVED" -Path "C:\held\file.txt"
                 Should -Invoke Start-Sleep -Times 4 -Exactly
             }
             finally { $held.Dispose() }
-            Should -Invoke Write-Debug -Times 1 -Exactly -ParameterFilter { $Message -like "operations.log not written: *" }
+            Should -Invoke Write-SwDebug -Times 1 -Exactly -ParameterFilter { $Message -like "operations.log not written: *" }
         }
 
         It "Records why a folder was refused before anything was removed" {
