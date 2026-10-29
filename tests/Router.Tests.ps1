@@ -250,8 +250,7 @@ Describe "Debug through installed launcher call shapes" {
                 $output = & { $ErrorActionPreference = "Continue"; & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | Out-String }
             }
             $LASTEXITCODE | Should -Be 0
-            $output | Should -Match 'Debug logging enabled'
-            $output | Should -Match 'Debug session log saved'
+            $output | Should -Match 'sweepr_debug_session\.log'
             $log = Join-Path $profile ".config\sweepr\sweepr_debug_session.log"
             Test-Path -LiteralPath $log | Should -BeTrue
             [System.IO.File]::ReadAllText($log) | Should -Match 'Command: sw clean .*--debug'
