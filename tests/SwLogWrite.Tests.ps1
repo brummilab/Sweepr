@@ -749,6 +749,19 @@ Describe 'Write-SwOperation: rotation of a large log' {
         $script:Messages[0] | Should -Match '(?i)rotat|\.old|move'
     }
 
+    It 'LG-16 reports one message naming both reasons when the rotation and the append both fail' {
+        Mock Move-SwOperationLogAside { throw 'cannot move' }
+        Mock Add-SwOperationText { throw 'disk full' }
+        Write-FileBytes $script:LogPath (New-Bytes 64 65)
+        $script:SweeprOperationsLogMaxBytes = 16
+        { Write-SwOperation -Action 'REMOVED' -Path 'C:\x' -Detail '1KB' } | Should -Not -Throw
+        $script:Messages.Count | Should -Be 1
+        $script:Messages[0] | Should -BeLike 'operations.log not written: *'
+        $script:Messages[0] | Should -Match 'cannot move'
+        $script:Messages[0] | Should -Match 'disk full'
+        $script:SweeprOperationsLogStarted | Should -BeFalse
+    }
+
     It 'LG-14 replaces an existing .old file' {
         Write-FileBytes $script:Old ([System.Text.Encoding]::ASCII.GetBytes('previous generation, longer than the new one is not'))
         Write-FileBytes $script:LogPath (New-Bytes 64 66)
@@ -1248,6 +1261,14 @@ Describe 'Write-SwOperation: no side effects and only its own files' {
             (Get-Listing $probe) -join '|' | Should -BeExactly ''
         }
         finally { [System.Environment]::CurrentDirectory = $previous }
+    }
+
+    It 'S-5 leaves exactly operations.log and operations.log.old in the folder after a rotation' {
+        Write-FileBytes $script:LogPath (New-Bytes 64 65)
+        $script:SweeprOperationsLogMaxBytes = 16
+        Write-SwOperation -Action 'REMOVED' -Path 'C:\x' -Detail '1KB'
+        $names = @(Get-ChildItem -LiteralPath $script:Dir -Force | ForEach-Object { $_.Name } | Sort-Object)
+        ($names -join '|') | Should -BeExactly 'operations.log|operations.log.old'
     }
 
     It 'S-5 leaves the other files of the folder as they are' {

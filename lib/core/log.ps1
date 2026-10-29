@@ -179,32 +179,34 @@ function ConvertTo-SwLogValue {
 # Files: appending text, and moving a large log aside
 # ============================================================================
 
-function Add-SwLogBytesAtomic {
-    # Windows: appends with the right to append and no other write right. The system then puts the data
-    # at the current end of the file, whatever another process wrote since the open (a plain write
-    # behind a file pointer would overwrite a line that was added in between, for example by analyze.exe).
-    # Gives $false when this host cannot open the file that way, whatever the reason; the caller then
-    # uses the plain open, which reports the real error (a sharing violation, a missing folder) itself.
-    param([string]$File, [byte[]]$Bytes)
+function Open-SwLogAppendOnly {
+    # Windows: opens the file with the right to append and no other write right. The system then puts
+    # every write at the current end of the file, whatever another process wrote since the open (a plain
+    # write behind a file pointer would overwrite a line that was added in between, for example by
+    # analyze.exe). Gives $null when this host cannot open the file that way, whatever the reason; the
+    # caller then uses the plain open, which reports the real error (a sharing violation, a missing
+    # folder) itself. Only the open is judged here: what happens to the stream afterwards is not.
+    param([string]$File)
 
     try {
         $mode = [System.IO.FileMode]::OpenOrCreate
         $rights = [System.Security.AccessControl.FileSystemRights]::AppendData
         $share = [System.IO.FileShare]::ReadWrite
         $options = [System.IO.FileOptions]::None
-        # PowerShell 7 reaches the rights through an extension method, Windows PowerShell through the
-        # constructor of the framework.
-        $extension = 'System.IO.FileSystemAclExtensions' -as [type]
-        if ($null -ne $extension) { $stream = $extension::Create([System.IO.FileInfo]::new($File), $mode, $rights, $share, 4096, $options, $null) }
-        else { $stream = [System.IO.FileStream]::new($File, $mode, $rights, $share, 4096, $options) }
-        try {
-            $stream.Write($Bytes, 0, $Bytes.Length)
-            $stream.Flush()
+        if ($PSVersionTable.PSEdition -eq 'Desktop') {
+            # Windows PowerShell: the constructor of the .NET Framework takes the rights.
+            return [System.IO.FileStream]::new($File, $mode, $rights, $share, 4096, $options)
         }
-        finally { $stream.Dispose() }
-        return $true
+        # PowerShell 7: an extension method takes them. The exact overload is looked up, because an
+        # older assembly loaded by another module may lack it.
+        $extension = 'System.IO.FileSystemAclExtensions' -as [type]
+        if ($null -eq $extension) { return $null }
+        $signature = [type[]]@([System.IO.FileInfo], [System.IO.FileMode], [System.Security.AccessControl.FileSystemRights],
+            [System.IO.FileShare], [int], [System.IO.FileOptions], [System.Security.AccessControl.FileSecurity])
+        if ($null -eq $extension.GetMethod('Create', $signature)) { return $null }
+        return $extension::Create([System.IO.FileInfo]::new($File), $mode, $rights, $share, 4096, $options, $null)
     }
-    catch { return $false }
+    catch { return $null }
 }
 
 function Write-SwLogFileText {
@@ -216,7 +218,19 @@ function Write-SwLogFileText {
 
     # A character that cannot be encoded (a lone surrogate) becomes a replacement character.
     $bytes = ([System.Text.UTF8Encoding]::new($false)).GetBytes($Text)
-    if (-not $Replace -and (Test-SwBaseWindows) -and (Add-SwLogBytesAtomic -File $File -Bytes $bytes)) { return }
+
+    if (-not $Replace -and (Test-SwBaseWindows)) {
+        $stream = Open-SwLogAppendOnly -File $File
+        if ($null -ne $stream) {
+            # An error from here on is passed on, so the caller's retry runs and a line is never written twice.
+            try {
+                $stream.Write($bytes, 0, $bytes.Length)
+                $stream.Flush()
+            }
+            finally { $stream.Dispose() }
+            return
+        }
+    }
 
     if ($Replace) { $mode = [System.IO.FileMode]::Create }
     else { $mode = [System.IO.FileMode]::Append }
@@ -307,6 +321,7 @@ function Write-SwOperation {
     param([string]$Action, [string]$Path, [string]$Detail = '')
 
     $file = ''
+    $rotationNote = ''
     try {
         if ((Get-SwLogEnv 'SWEEPR_NO_OPLOG') -ceq '1') { return }
         if ([string]::IsNullOrEmpty($Path)) { return }
@@ -349,7 +364,7 @@ function Write-SwOperation {
             try { $limit = [long]$script:SweeprOperationsLogMaxBytes } catch { $limit = [long]5242880 }
             if ([System.IO.File]::Exists($file) -and ([System.IO.FileInfo]::new($file)).Length -gt $limit) {
                 try { Move-SwOperationLogAside -File $file }
-                catch { Write-SwOperationLoss -File $file -Reason ('log rotation to .old failed, the line goes to the existing file: ' + (Get-SwLogErrorText $_)) }
+                catch { $rotationNote = 'log rotation to .old failed: ' + (Get-SwLogErrorText $_) }
             }
 
             $text = $crlf + '# ========== ' + $label + ' session started at ' + $stamp + ' ==========' + $crlf + $text
@@ -357,8 +372,14 @@ function Write-SwOperation {
 
         $null = Add-SwOperationText -File $file -Text $text
         $script:SweeprOperationsLogStarted = $true
+        # One note per record: the line was written, only the rotation did not happen.
+        if ($rotationNote.Length -gt 0) { Write-SwOperationLoss -File $file -Reason ($rotationNote + '; the line went to the existing file') }
     }
-    catch { Write-SwOperationLoss -File $file -Reason (Get-SwLogErrorText $_) }
+    catch {
+        $reason = Get-SwLogErrorText $_
+        if ($rotationNote.Length -gt 0) { $reason = $reason + '; ' + $rotationNote }
+        Write-SwOperationLoss -File $file -Reason $reason
+    }
 }
 
 # ============================================================================
