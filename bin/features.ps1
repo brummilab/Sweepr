@@ -465,7 +465,10 @@ function Invoke-FeaturesWinget {
 
     $global:LASTEXITCODE = 0
     & winget @Arguments | Out-Host
-    return [int]$global:LASTEXITCODE
+    $exitCode = [int]$global:LASTEXITCODE
+    # winget's code is returned, not left behind: a stale code would end up as the exit code of the command.
+    $global:LASTEXITCODE = 0
+    return $exitCode
 }
 
 # An app counts as installed when exactly one package carries the exact name from the saved
@@ -575,6 +578,7 @@ function Invoke-FeaturesRestoreRun {
         }
         catch { $failure = $_.Exception.Message }
         if ($failure) {
+            $script:FeaturesExitCode = 1
             Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail $failure
             Write-Host "failed ($failure)" -ForegroundColor Red
             continue
@@ -613,6 +617,7 @@ function Invoke-FeaturesRestoreRun {
             }
             if (-not $failure -and $exitCode -ne 0) { $failure = "exit code $exitCode" }
             if ($failure) {
+                $script:FeaturesExitCode = 1
                 Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$command failed: $failure"
                 Write-Host "failed ($failure)" -ForegroundColor Red
                 continue
@@ -644,6 +649,7 @@ function Invoke-FeaturesRestoreRun {
         }
         catch {
             $failure = Get-FeaturesErrorText $_
+            $script:FeaturesExitCode = 1
             Write-SweeprOperation -Action "FAILED" -Path $logPath -Detail "$command failed: $failure"
             Write-Host "failed ($failure)" -ForegroundColor Red
             continue
