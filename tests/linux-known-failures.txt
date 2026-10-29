@@ -152,10 +152,12 @@ Get-SwFreeSpace.A-17 [W] gives the free space of the default drive as number and
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter and colon as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter only as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter, colon and backslash as number and unit in the size format
+Get-SwNativeArchitecture (RT-18).[W] Takes the machine architecture from the system-wide registry value, not from the process
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives Success true and no items for a root that is a junction to a folder with content
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives the snapshot of the root that a fresh Get-SwPathSnapshot -AllowLeafLink gives
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a protected folder inside a tree below the 8.3 spelling of the temp folder
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a tree with a junction whose target is protected (the final spelling of the link counts)
+Get-SwToolPath (TB-13, S7).[W] Returns only a .exe: a .cmd or .bat of that name is not used
 Get-SwTreeItems.F-12 [W] gives every entry the snapshot a fresh Get-SwPathSnapshot -AllowLeafLink gives, and links appear once without content
 Get-SwTreeItems.F-12 [W] needs 1 + d calls of Get-SwPathSnapshot for a tree with d entered folders
 Get-SwTreeItems.F-13 [W] throws when an entered folder is replaced during the walk
@@ -250,6 +252,7 @@ Resolve-SwDataPaths.A-10 [W] gives Override and the paths as text for a drive th
 Resolve-SwDataPaths.A-10 [W] trims and normalizes a drive-letter SWEEPR_DATA_DIR
 Resolve-SwSafePath.B-13 [W] gives the drive root form C:\ for a drive root
 Resolve-SwSafePath.B-13 [W] gives the on-disk spelling of the case of an existing folder
+Restore-SwTuiRelease.download, verification and installation (TB-9, S5, S8).[W] Returns unavailable and keeps the old program when the destination is locked
 Safety invariants of the removal paths.S-14 [W] never removes a file inside the data folders
 Scanning installed apps.Does not reuse the v5 inventory with lost install identities and Game Bar
 Scanning installed apps.Hides system components, updates and child entries
@@ -303,6 +306,7 @@ Test-SwSafePath on Windows file names [W].F-3 [W] keeps a whitelisted junction r
 Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path below a junction to a protected folder
 Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path with a trailing dot in a segment of a protected folder
 Test-SwSafePath on Windows file names [W].F-3 [W] refuses the 8.3 spelling of an existing protected folder and of its child
+The module search path (RT-2).[W] Leaves only Windows PowerShell 5.1 module folders after loading in Windows PowerShell with an inherited PowerShell 7 module path
 Tree walk snapshots.Binds every item to the same chain a fresh snapshot of its path would
 Tree walk snapshots.Binds the root once and each child from its parent instead of reopening every ancestor
 Tree walk snapshots.Fails the recheck when a directory is replaced after the walk
