@@ -589,6 +589,27 @@ Describe 'Sw update check' {
             finally { [System.Net.ServicePointManager]::SecurityProtocol = $saved }
         }
 
+        It 'Leaves the protocols alone under Windows PowerShell when the system chooses them' -Skip:($PSVersionTable.PSEdition -ne 'Desktop') {
+            $saved = [System.Net.ServicePointManager]::SecurityProtocol
+            try {
+                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::SystemDefault
+                $null = Invoke-ProbeAndLookup -Method 'Source'
+                [int][System.Net.ServicePointManager]::SecurityProtocol | Should -Be 0
+            }
+            finally { [System.Net.ServicePointManager]::SecurityProtocol = $saved }
+        }
+
+        It 'Adds TLS 1.2 to an explicit list of older protocols under Windows PowerShell' -Skip:($PSVersionTable.PSEdition -ne 'Desktop') {
+            $saved = [System.Net.ServicePointManager]::SecurityProtocol
+            $older = [System.Net.SecurityProtocolType]::Ssl3 -bor [System.Net.SecurityProtocolType]::Tls
+            try {
+                [System.Net.ServicePointManager]::SecurityProtocol = $older
+                $null = Invoke-ProbeAndLookup -Method 'Source'
+                [System.Net.ServicePointManager]::SecurityProtocol | Should -Be ($older -bor [System.Net.SecurityProtocolType]::Tls12)
+            }
+            finally { [System.Net.ServicePointManager]::SecurityProtocol = $saved }
+        }
+
         It 'Stores a found version for one day (V-17, V-21)' {
             $t0 = $script:Now
             $ctx = Invoke-ProbeAndLookup -Version '1.0.0' -Method 'Scoop'

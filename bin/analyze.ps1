@@ -20,7 +20,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Show-AnalyzeHelp {
+function Write-AnalyzeUsageText {
     Write-Host 'Usage: sw analyze [options] [path]'
     Write-Host ''
     Write-Host 'Disk explorer: see which folders and files take the space, and move entries to the'
@@ -39,7 +39,7 @@ function Show-AnalyzeHelp {
     Write-Host '  Space                Mark or unmark an entry'
     Write-Host '  Delete               Move the marked entries to the Recycle Bin (asks first)'
     Write-Host '  T                    Show the largest files'
-    Write-Host '  R                    Measure again'
+    Write-Host '  R                    Rescan the current folder'
     Write-Host '  Esc                  Go back; in the overview, quit'
     Write-Host '  Q                    Quit'
 }
@@ -54,7 +54,7 @@ function Set-AnalyzeVariable {
 }
 
 if ($ShowHelp) {
-    Show-AnalyzeHelp
+    Write-AnalyzeUsageText
     return
 }
 

@@ -201,6 +201,35 @@ Describe 'Restore-SwTuiRelease' {
             finally { [System.Net.ServicePointManager]::SecurityProtocol = $original }
         }
 
+        It 'Leaves the protocols alone when the system chooses them (SystemDefault)' {
+            $original = [System.Net.ServicePointManager]::SecurityProtocol
+            $set = $true
+            try { [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::SystemDefault }
+            catch { $set = $false }
+            if (-not $set) { Set-ItResult -Skipped -Because 'the host does not let a test set the protocols'; return }
+            try {
+                Add-Release 'V9.9.9-windows' @{ 'status-windows-x64.exe' = $script:Program }
+                $null = Restore-SwTuiRelease -Name 'status' -WindowsDir $script:Root -DestinationPath $script:Dest -Version '9.9.9'
+                [int][System.Net.ServicePointManager]::SecurityProtocol | Should -Be 0
+            }
+            finally { [System.Net.ServicePointManager]::SecurityProtocol = $original }
+        }
+
+        It 'Adds TLS 1.2 to an explicit list of older protocols' {
+            $original = [System.Net.ServicePointManager]::SecurityProtocol
+            $older = [System.Net.SecurityProtocolType]::Ssl3 -bor [System.Net.SecurityProtocolType]::Tls
+            $set = $true
+            try { [System.Net.ServicePointManager]::SecurityProtocol = $older }
+            catch { $set = $false }
+            if (-not $set) { Set-ItResult -Skipped -Because 'the host does not let a test set the protocols'; return }
+            try {
+                Add-Release 'V9.9.9-windows' @{ 'status-windows-x64.exe' = $script:Program }
+                $null = Restore-SwTuiRelease -Name 'status' -WindowsDir $script:Root -DestinationPath $script:Dest -Version '9.9.9'
+                [System.Net.ServicePointManager]::SecurityProtocol | Should -Be ($older -bor [System.Net.SecurityProtocolType]::Tls12)
+            }
+            finally { [System.Net.ServicePointManager]::SecurityProtocol = $original }
+        }
+
         It 'Suppresses the progress display during the requests and restores the previous value' {
             Add-Release 'V9.9.9-windows' @{ 'status-windows-x64.exe' = $script:Program }
             $global:ProgressPreference = 'Continue'

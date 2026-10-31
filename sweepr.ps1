@@ -525,6 +525,8 @@ function Get-SwScriptParameters {
     $tokens = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$errors)
     if (@($errors).Count -gt 0) { throw ('The script has a syntax error: ' + [string]@($errors)[0].Message) }
+    # A dynamicparam block runs while the parameters are read, which must not start any of the script.
+    if ($null -ne $ast.DynamicParamBlock) { throw 'The script has a dynamicparam block.' }
 
     $probe = 'SwProbe' + [guid]::NewGuid().ToString('N')
     Set-Item -LiteralPath ('Function:\' + $probe) -Value $ast.GetScriptBlock()
@@ -683,7 +685,8 @@ function Invoke-SwCommand {
 
         The code is the value of an explicit exit statement of the script and otherwise 0. A native
         program that the script started and the old value of $LASTEXITCODE do not count: the code is set
-        to 0 before the call and read from $? right after it, which is false after a non-zero exit.
+        to 0 before the call and read after it. A false $? with a code of 0 (a script whose last
+        statement wrote a non-terminating error) is still 0.
     #>
     param(
         [string]$CommandName,
@@ -725,9 +728,8 @@ function Invoke-SwCommand {
         & $scriptPath @splat @words
         $succeeded = $?
         $last = [int]$global:LASTEXITCODE
-        if ($succeeded) { $script:SweeprExitCode = 0 }
-        elseif ($last -ne 0) { $script:SweeprExitCode = $last }
-        else { $script:SweeprExitCode = 1 }
+        $script:SweeprExitCode = 0
+        if (-not $succeeded -and $last -ne 0) { $script:SweeprExitCode = $last }
     }
     finally {
         if ($session) { Complete-SwDebugSession }

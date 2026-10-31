@@ -18,7 +18,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Show-StatusHelp {
+function Write-StatusUsageText {
     Write-Host 'Usage: sw status [options]'
     Write-Host ''
     Write-Host 'Show CPU, memory, disks, network and the busiest processes of this computer.'
@@ -36,7 +36,7 @@ function Show-StatusHelp {
 }
 
 if ($ShowHelp) {
-    Show-StatusHelp
+    Write-StatusUsageText
     return
 }
 

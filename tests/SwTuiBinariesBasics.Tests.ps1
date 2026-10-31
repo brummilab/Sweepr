@@ -529,6 +529,33 @@ Describe 'Get-SwToolPath (TB-13, S7)' {
         Get-SwToolPath -Name 'go' | Should -BeExactly $second
     }
 
+    It 'Ignores a relative PATH entry, also when the program is found below the working folder' {
+        $go = New-FakeTool (Join-Path $script:Tools 'rel/bin') 'go'
+        $env:PATH = (Join-Path 'rel' 'bin')
+        Set-TestLocation $script:Tools
+        $null -eq (Get-SwToolPath -Name 'go') | Should -BeTrue
+        # The same folder as an absolute entry is accepted.
+        $env:PATH = (Join-Path 'rel' 'bin'), (Join-Path $script:Tools 'rel/bin') -join [System.IO.Path]::PathSeparator
+        Set-TestLocation $script:Elsewhere
+        [System.IO.Path]::GetFullPath((Get-SwToolPath -Name 'go')) | Should -BeExactly ([System.IO.Path]::GetFullPath($go))
+    }
+
+    It 'Accepts a program outside the files of a drive root given as the installation root' {
+        $go = New-FakeTool (Join-Path $script:Tools 'bin') 'go'
+        $env:PATH = (Join-Path $script:Tools 'bin')
+        Set-TestLocation $script:Elsewhere
+        $driveRoot = [System.IO.Path]::GetPathRoot($script:Tools)
+        Get-SwToolPath -Name 'go' -RootDir $driveRoot | Should -BeExactly $go
+    }
+
+    It 'Still excludes the subtree of an installation folder that is not a drive root' {
+        $root = New-Dir (Join-Path $script:Tools 'sweepr')
+        New-FakeTool (Join-Path $root 'deep/er') 'go' | Out-Null
+        $env:PATH = (Join-Path $root 'deep/er')
+        Set-TestLocation $script:Elsewhere
+        $null -eq (Get-SwToolPath -Name 'go' -RootDir $root) | Should -BeTrue
+    }
+
     It '[W] Returns only a .exe: a .cmd or .bat of that name is not used' {
         $folder = New-Dir (Join-Path $script:Tools 'cmdonly')
         [System.IO.File]::WriteAllText((Join-Path $folder 'go.cmd'), "@exit /b 0`r`n")

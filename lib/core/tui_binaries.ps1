@@ -239,7 +239,8 @@ function Get-SwToolPath {
         Windows starts a program given without a path from the folder of the caller, then the working
         folder, before it looks in PATH. So the tool is always started by the absolute path found here,
         and a match in the working folder or in the installation folder (RootDir, also below it) is not
-        accepted: whatever sits there is not the developer tool the user installed. On Windows only a
+        accepted: whatever sits there is not the developer tool the user installed. A drive root as
+        RootDir covers only the files directly in it. PATH entries that are not absolute are ignored. On Windows only a
         .exe counts, since cmd.exe takes .cmd and .bat apart in its own way. Never throws.
     #>
     param([string]$Name, [string]$RootDir)
@@ -248,33 +249,63 @@ function Get-SwToolPath {
         if ($Name -cne 'go' -and $Name -cne 'git') { return $null }
         $onWindows = ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
         $comparison = [System.StringComparison]::Ordinal
-        if ($onWindows) { $comparison = [System.StringComparison]::OrdinalIgnoreCase }
-        $trim = [char[]]@('\', '/')
+        $comparer = [System.StringComparer]::Ordinal
+        if ($onWindows) {
+            $comparison = [System.StringComparison]::OrdinalIgnoreCase
+            $comparer = [System.StringComparer]::OrdinalIgnoreCase
+        }
+        $separator = [string][System.IO.Path]::DirectorySeparatorChar
+
+        # A folder as a full path with one closing separator, so that a prefix test compares whole segments.
+        $normalize = {
+            param([string]$Folder)
+            $full = [System.IO.Path]::GetFullPath($Folder)
+            if ($full.EndsWith($separator, [System.StringComparison]::Ordinal)) { return $full }
+            return ($full + $separator)
+        }
 
         $working = New-Object System.Collections.Generic.List[string]
-        $working.Add([System.IO.Path]::GetFullPath([System.Environment]::CurrentDirectory).TrimEnd($trim))
-        try { $working.Add([System.IO.Path]::GetFullPath((Get-Location -PSProvider FileSystem).ProviderPath).TrimEnd($trim)) }
+        $working.Add((& $normalize ([System.Environment]::CurrentDirectory)))
+        try { $working.Add((& $normalize ((Get-Location -PSProvider FileSystem).ProviderPath))) }
         catch { $null = $_ }
 
+        # Only an absolute PATH entry counts: a relative one means a different folder whenever the working
+        # folder changes. Drive-relative (C:tools) and rooted-without-drive (\tools) entries are relative too.
+        $absolute = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList $comparer
+        foreach ($entry in @(([string][System.Environment]::GetEnvironmentVariable('PATH')).Split([System.IO.Path]::PathSeparator))) {
+            $entry = $entry.Trim().Trim('"')
+            if ($entry.Length -eq 0) { continue }
+            if ($onWindows) { if (-not [regex]::IsMatch($entry, '\A(?:[A-Za-z]:[\\/]|\\\\|//)')) { continue } }
+            elseif (-not $entry.StartsWith('/', [System.StringComparison]::Ordinal)) { continue }
+            try { [void]$absolute.Add((& $normalize $entry)) }
+            catch { $null = $_ }
+        }
+
         $root = ''
-        if (-not [string]::IsNullOrWhiteSpace($RootDir)) { $root = [System.IO.Path]::GetFullPath($RootDir).TrimEnd($trim) }
+        $rootIsDrive = $false
+        if (-not [string]::IsNullOrWhiteSpace($RootDir)) {
+            $root = & $normalize $RootDir
+            $rootIsDrive = [string]::Equals([System.IO.Path]::GetPathRoot($root), $root, $comparison)
+        }
 
         foreach ($command in @(Get-Command -Name $Name -CommandType Application -All -ErrorAction SilentlyContinue)) {
             $source = [string]$command.Source
             if ([string]::IsNullOrWhiteSpace($source)) { continue }
-            if (-not [System.IO.Path]::IsPathRooted($source)) { $source = [System.IO.Path]::GetFullPath($source) }
+            if (-not [System.IO.Path]::IsPathRooted($source)) { continue }
             if (-not [System.IO.File]::Exists($source)) { continue }
             if ($onWindows -and -not [string]::Equals([System.IO.Path]::GetExtension($source), '.exe', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
 
-            $folder = [System.IO.Path]::GetFullPath([System.IO.Path]::GetDirectoryName($source)).TrimEnd($trim)
+            $folder = & $normalize ([System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($source)))
+            if (-not $absolute.Contains($folder)) { continue }
             $skip = $false
             foreach ($current in $working) {
                 if ([string]::Equals($folder, $current, $comparison)) { $skip = $true }
             }
             if ($root.Length -gt 0) {
+                # A drive root as installation folder only covers the files directly in it: everything else on
+                # the drive is not part of the installation.
                 if ([string]::Equals($folder, $root, $comparison)) { $skip = $true }
-                elseif ($folder.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar, $comparison)) { $skip = $true }
-                elseif ($folder.StartsWith($root + [System.IO.Path]::AltDirectorySeparatorChar, $comparison)) { $skip = $true }
+                elseif (-not $rootIsDrive -and $folder.StartsWith($root, $comparison)) { $skip = $true }
             }
             if ($skip) { continue }
             return $source
@@ -447,8 +478,12 @@ function Restore-SwTuiRelease {
     $global:ProgressPreference = 'SilentlyContinue'
     try {
         # Older Windows PowerShell does not offer TLS 1.2 by itself; add it, never take a protocol away.
+        # SystemDefault (0) lets the system choose, and adding a flag would replace that choice.
         try {
-            [System.Net.ServicePointManager]::SecurityProtocol = ([System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12)
+            $protocol = [System.Net.ServicePointManager]::SecurityProtocol
+            if ([int]$protocol -ne 0) {
+                [System.Net.ServicePointManager]::SecurityProtocol = ($protocol -bor [System.Net.SecurityProtocolType]::Tls12)
+            }
         }
         catch { $null = $_ }
 
@@ -594,7 +629,7 @@ function Test-SwSourceMatchesRelease {
     .DESCRIPTION
         Only then may a source installation take the verified release file instead of building. True
         requires a .git folder or file, a git program, none of the git variables that move the repository,
-        no change and no new file below cmd/<name> or in go.mod and go.sum, and an empty difference to the
+        no change and no new or ignored file below cmd/<name> or in go.mod and go.sum, and an empty difference to the
         tag V<version>-windows or v<version>-windows. Anything else, an error, an unusable version and a
         git that fails or times out included, is false. Git only reads here and is limited to 30 seconds
         per call.
@@ -616,7 +651,7 @@ function Test-SwSourceMatchesRelease {
         # No optional locks: the status must not rewrite the index of the installation.
         $prefix = @('-C', $WindowsDir, '-c', 'core.fsmonitor=false', '--no-optional-locks')
 
-        $status = Invoke-SwNativeTool -FilePath $git -ArgumentList ($prefix + @('status', '--porcelain=v1', '--untracked-files=all', '--') + $paths) -WorkingDirectory $WindowsDir -TimeoutSeconds 30
+        $status = Invoke-SwNativeTool -FilePath $git -ArgumentList ($prefix + @('status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching', '--') + $paths) -WorkingDirectory $WindowsDir -TimeoutSeconds 30
         if ($status.TimedOut -or [int]$status.ExitCode -ne 0) { return $false }
         if (-not [string]::IsNullOrWhiteSpace([string]$status.StdOut)) { return $false }
 

@@ -942,6 +942,13 @@ Describe 'Test-SwSourceMatchesRelease (TB-12, S7)' {
             Test-SwSourceMatchesRelease -WindowsDir $script:Fixture -Name 'analyze' -Version '9.9.9' | Should -BeFalse
         }
 
+        It 'Returns false when an ignored file was added to the program folder' {
+            Write-RepoFile $script:Fixture '.gitignore' "extra.go`n"
+            Write-RepoFile $script:Fixture 'cmd/analyze/extra.go' "package main`n"
+            Invoke-Git $script:Fixture @('status', '--porcelain', '--ignored=matching', '--', 'cmd/analyze') | Should -Match 'extra\.go'
+            Test-SwSourceMatchesRelease -WindowsDir $script:Fixture -Name 'analyze' -Version '9.9.9' | Should -BeFalse
+        }
+
         It 'Looks only at the folder of the asked program' {
             Write-RepoFile $script:Fixture 'cmd/status/main.go' "package main // changed`n"
             Test-SwSourceMatchesRelease -WindowsDir $script:Fixture -Name 'analyze' -Version '9.9.9' | Should -BeTrue

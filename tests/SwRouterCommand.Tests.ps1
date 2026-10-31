@@ -96,6 +96,8 @@ param(
     $script:Scripts['lastfeature'] = $script:Standard + "`n`$global:LASTEXITCODE = -1978335189`n'done'`n"
     $script:Scripts['update'] = $script:Standard + "`n'FAILING'`nexit 1`n"
     $script:Scripts['remove'] = $script:Standard + "`n'FAILING'`nexit 1`n"
+    $script:Scripts['writeerror'] = $script:Standard + "`n`$ErrorActionPreference = 'Continue'`n'before'`n`$PSCmdlet.WriteError([System.Management.Automation.ErrorRecord]::new([System.Exception]::new('soft'), 'Soft', 'NotSpecified', `$null))`n"
+    $script:Scripts['dynparam'] = $script:Standard + "`ndynamicparam {`n    [System.IO.File]::WriteAllText(`$env:SW_TEST_MARKER, 'dynamicparam ran')`n}`nprocess { [System.IO.File]::WriteAllText(`$env:SW_TEST_MARKER, 'ran') }`n"
     $script:Scripts['thrower'] = $script:Standard + "`nthrow 'boom'`n"
     $script:Scripts['setenv'] = $script:Standard + @'
 
@@ -251,6 +253,18 @@ Describe 'Invoke-SwCommand' {
             $result.Thrown | Should -BeNullOrEmpty
             $script:SweeprExitCode | Should -Be 1
             $script:Errors[0] | Should -Match 'fake'
+        }
+
+        It 'Reports a damaged installation and runs nothing, not even a dynamicparam block, when the script has one' {
+            $marker = Join-Path $TestDrive 'dynparam-marker.txt'
+            $env:SW_TEST_MARKER = $marker
+            $result = Invoke-Cmd 'dynparam' @('--help')
+            $result.Thrown | Should -BeNullOrEmpty
+            $script:SweeprExitCode | Should -Be 1
+            $script:Errors.Count | Should -BeGreaterThan 0
+            $script:Errors[0] | Should -Match 'dynparam'
+            [System.IO.File]::Exists($marker) | Should -BeFalse
+            @($result.Output).Count | Should -Be 0
         }
 
         It 'Reads $script:SWEEPR_BIN at every call' {
@@ -419,6 +433,11 @@ Describe 'Invoke-SwCommand' {
             @{ Script = 'fake' }
         ) {
             $null = Invoke-Cmd $Script
+            $script:SweeprExitCode | Should -Be 0
+        }
+
+        It 'Gives 0 when the last statement wrote a non-terminating error and no program set a code' {
+            $null = Invoke-Cmd 'writeerror' 2>&1
             $script:SweeprExitCode | Should -Be 0
         }
 
