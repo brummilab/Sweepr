@@ -353,3 +353,20 @@ Describe 'The module search path (RT-2)' {
         $entries | Should -Contain 'C:\Windows\system32\WindowsPowerShell\v1.0\Modules'
     }
 }
+
+Describe 'The text of a start error' {
+    It 'Writes no control character of a folder name to standard error' {
+        # An escape character in a folder name is possible on Linux only; Windows does not allow it.
+        if ($PSVersionTable['PSEdition'] -ne 'Core' -or [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { Set-ItResult -Skipped -Because 'Windows folder names cannot hold control characters'; return }
+        $esc = [string][char]27
+        $root = New-FakeInstall ('start-error' + $esc + '[31m') '1.0.0'
+        # A folder in place of VERSION makes version.ps1 throw a message that holds the path.
+        [System.IO.File]::Delete((Join-Path $root 'VERSION'))
+        [void][System.IO.Directory]::CreateDirectory((Join-Path $root 'VERSION'))
+        $run = Invoke-ChildPowerShell -Script ("& " + (ConvertTo-TestLiteral (Join-Path $root 'sweepr.ps1')) + " --version; exit `$LASTEXITCODE")
+        $run.ExitCode | Should -Be 1
+        $run.Err | Should -Match 'Sweepr cannot start'
+        $run.Err | Should -Match 'start-error'
+        $run.Err.Contains($esc) | Should -BeFalse
+    }
+}

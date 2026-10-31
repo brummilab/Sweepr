@@ -98,7 +98,9 @@ try {
 }
 catch {
     if ($script:SwDotSourced) { throw }
-    [Console]::Error.WriteLine('Sweepr cannot start: ' + $_.Exception.Message)
+    # The modules that sanitise console text may not be loaded yet, so the same characters are replaced here:
+    # a folder name with an escape character must not be able to send a terminal sequence.
+    [Console]::Error.WriteLine([regex]::Replace('Sweepr cannot start: ' + $_.Exception.Message, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', ' '))
     exit 1
 }
 

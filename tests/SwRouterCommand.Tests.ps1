@@ -691,6 +691,13 @@ Describe 'Get-SwPathCollision and Assert-SwPathUsable (folders with [ ] * ? unde
         Get-SwPathCollision -Path (Join-Path $TestDrive 'no-such-[1]\x.ps1') -Edition 'Desktop' | Should -BeNullOrEmpty
     }
 
+    It 'Reports nothing for a folder with a single closing bracket and no other match, on Desktop' {
+        $path = New-Pair 'Tools]' 'unrelated' -WithSibling
+        Get-SwPathCollision -Path $path -Edition 'Desktop' | Should -BeNullOrEmpty
+        Mock Get-SwPowerShellEdition { 'Desktop' }
+        { Assert-SwPathUsable -Path $path } | Should -Not -Throw
+    }
+
     It 'Takes the running edition when none is given' {
         $path = New-Pair 'd[1]' 'd1' -WithSibling
         Mock Get-SwPowerShellEdition { 'Desktop' }
@@ -704,5 +711,31 @@ Describe 'Get-SwPathCollision and Assert-SwPathUsable (folders with [ ] * ? unde
         Mock Get-SwPowerShellEdition { 'Desktop' }
         { Assert-SwPathUsable -Path $path } | Should -Throw '*Rename or move*'
         { Assert-SwPathUsable -Path (New-Pair 'd[1]' 'd1') } | Should -Not -Throw
+    }
+
+    Context 'Get-SwModulePath, the path for loading a module of lib\core' {
+        BeforeEach {
+            $script:SavedCore = $script:SWEEPR_CORE
+            Mock Get-SwPowerShellEdition { 'Desktop' }
+        }
+        AfterEach { $script:SWEEPR_CORE = $script:SavedCore }
+
+        It 'Throws the collision message instead of returning the path of a module of another folder' {
+            $parent = Join-Path $TestDrive ('core-' + [guid]::NewGuid().ToString('N'))
+            foreach ($folder in 'core[1]', 'core1') {
+                [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::Combine($parent, $folder))
+                [System.IO.File]::WriteAllText([System.IO.Path]::Combine($parent, $folder, 'common.ps1'), "'x'`n", $script:Utf8)
+            }
+            $script:SWEEPR_CORE = [System.IO.Path]::Combine($parent, 'core[1]')
+            { Get-SwModulePath 'common.ps1' } | Should -Throw '*Rename or move*'
+        }
+
+        It 'Returns the path when no other folder matches' {
+            $parent = Join-Path $TestDrive ('core-' + [guid]::NewGuid().ToString('N'))
+            [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::Combine($parent, 'core[1]'))
+            [System.IO.File]::WriteAllText([System.IO.Path]::Combine($parent, 'core[1]', 'common.ps1'), "'x'`n", $script:Utf8)
+            $script:SWEEPR_CORE = [System.IO.Path]::Combine($parent, 'core[1]')
+            Get-SwModulePath 'common.ps1' | Should -BeExactly ([System.IO.Path]::Combine($script:SWEEPR_CORE, 'common.ps1'))
+        }
     }
 }
