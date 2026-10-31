@@ -37,3 +37,4 @@ Planned work. The order may change. Please report wishes and bugs as an [issue](
 
 - Installation through **winget** and **Scoop**
 - Introduction on Reddit
+- **Desktop app with a window** (Rust with egui) as a second way to use Sweepr next to `sw`, built from the same behaviour descriptions and tests as the command line

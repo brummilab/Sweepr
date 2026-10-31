@@ -38,3 +38,4 @@ Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bit
 
 - Installation über **winget** und **Scoop**
 - Vorstellung auf Reddit
+- **Desktop-App mit Fenster** (Rust mit egui) als zweiter Weg neben `sw`, gebaut nach denselben Verhaltensbeschreibungen und Tests wie die Kommandozeile
