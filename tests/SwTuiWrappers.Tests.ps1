@@ -83,8 +83,10 @@ BeforeAll {
         [void][System.IO.Directory]::CreateDirectory($Dir)
         if ($script:IsWin) {
             $path = [System.IO.Path]::Combine($Dir, 'prog.cmd')
-            $text = "@echo off`r`necho ARGS=%*`r`nif defined SWEEPR_ANALYZE_PATH (echo TARGET=%SWEEPR_ANALYZE_PATH%) else (echo TARGET=NOTSET)`r`n" +
-                "if defined SWEEPR_DEBUG (echo DEBUG=%SWEEPR_DEBUG%) else (echo DEBUG=NOTSET)`r`nif not defined FIXTURE_EXIT set FIXTURE_EXIT=0`r`nexit /b %FIXTURE_EXIT%`r`n"
+            # No parenthesized block: a value with an unbalanced quote (D:\x"y) would swallow the closing
+            # parenthesis there and cmd would drop the whole line. A plain `if ... echo` prints the value as it is.
+            $text = "@echo off`r`necho ARGS=%*`r`nif defined SWEEPR_ANALYZE_PATH echo TARGET=%SWEEPR_ANALYZE_PATH%`r`nif not defined SWEEPR_ANALYZE_PATH echo TARGET=NOTSET`r`n" +
+                "if defined SWEEPR_DEBUG echo DEBUG=%SWEEPR_DEBUG%`r`nif not defined SWEEPR_DEBUG echo DEBUG=NOTSET`r`nif not defined FIXTURE_EXIT set FIXTURE_EXIT=0`r`nexit /b %FIXTURE_EXIT%`r`n"
             [System.IO.File]::WriteAllText($path, $text, [System.Text.Encoding]::ASCII)
         }
         else {
@@ -725,5 +727,121 @@ Describe 'The starters through the router' {
         $run = Invoke-Router -Install $script:Install -Form 'File' -Words @('analyze', 'a', 'b')
         $run.ExitCode | Should -Be 2
         @(Get-FixtureCalls $script:Install).Count | Should -Be $before
+    }
+}
+
+Describe 'The starters in folders with [ ] that match another folder (Windows PowerShell 5.1 reads them as patterns)' {
+    BeforeAll {
+        $script:IsDesktop = (([string]$PSVersionTable.PSEdition) -ceq 'Desktop')
+
+        # A program that only says it is the wrong one, next to the real one with the same file name.
+        function script:New-DecoyProgram([string]$Dir) {
+            [void][System.IO.Directory]::CreateDirectory($Dir)
+            if ($script:IsWin) {
+                [System.IO.File]::WriteAllText([System.IO.Path]::Combine($Dir, 'prog.cmd'), "@echo off`r`necho DECOYPROGRAM`r`n", [System.Text.Encoding]::ASCII)
+            }
+            else {
+                $path = [System.IO.Path]::Combine($Dir, 'prog')
+                [System.IO.File]::WriteAllText($path, "#!/bin/sh`necho DECOYPROGRAM`n", $script:Utf8)
+                & chmod 755 $path
+            }
+        }
+    }
+
+    Context 'the program folder <Script>' -ForEach @(
+        @{ Script = 'status' }
+        @{ Script = 'analyze' }
+    ) {
+        BeforeAll {
+            $script:Install = New-Install -Name 'sweepr' -ProgramDirName 'prog dir & [1]'
+            New-DecoyProgram ([System.IO.Path]::Combine($script:Install.Parent, 'prog dir & 1'))
+            $script:Run = Invoke-Starter -Install $script:Install -Script $Script -Arguments @('-Json')
+        }
+
+        It 'Starts the real program on PowerShell 7 and refuses on Windows PowerShell 5.1, never the program of the other folder' {
+            $script:Run.Out | Should -Not -Match 'DECOYPROGRAM'
+            if ($script:IsDesktop) {
+                $script:Run.ExitCode | Should -Be 1
+                $script:Run.Out | Should -Not -Match 'ARGS='
+                $script:Run.Err | Should -Match 'Rename or move'
+                $script:Run.Err | Should -Match 'prog dir & 1'
+            }
+            else {
+                $script:Run.ExitCode | Should -Be 0
+                Get-Value $script:Run.Out 'ARGS' | Should -BeExactly '--json'
+            }
+        }
+    }
+
+    Context 'the installation folder <Script>' -ForEach @(
+        @{ Script = 'status' }
+        @{ Script = 'analyze' }
+    ) {
+        BeforeAll {
+            $script:Install = New-Install -Name 'Tools [x64]'
+            # The wrong installation, with a tui_binaries.ps1 that says it was loaded.
+            $decoyCore = New-Dir ([System.IO.Path]::Combine($script:Install.Parent, 'Tools x', 'lib', 'core'))
+            [System.IO.File]::WriteAllText((Join-Path $decoyCore 'tui_binaries.ps1'), "[Console]::Out.WriteLine('DECOYLOADED')`n", $script:Utf8)
+            $script:Run = Invoke-Starter -Install $script:Install -Script $Script -Arguments @('-Json')
+        }
+
+        It 'Loads the real file on PowerShell 7 and refuses on Windows PowerShell 5.1, never the file of the other folder' {
+            $script:Run.Out | Should -Not -Match 'DECOYLOADED'
+            if ($script:IsDesktop) {
+                $script:Run.ExitCode | Should -Be 1
+                $script:Run.Out | Should -Not -Match 'ARGS='
+                $script:Run.Err | Should -Match 'Rename or move'
+                @(Get-FixtureCalls $script:Install).Count | Should -Be 0
+            }
+            else {
+                $script:Run.ExitCode | Should -Be 0
+                Get-Value $script:Run.Out 'ARGS' | Should -BeExactly '--json'
+            }
+        }
+    }
+
+    Context 'the check itself in <Script> (both editions, on any system)' -ForEach @(
+        @{ Script = 'status' }
+        @{ Script = 'analyze' }
+    ) {
+        BeforeAll {
+            $tokens = $null
+            $errors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Join-Path $script:RepoRoot 'bin') "$Script.ps1"), [ref]$tokens, [ref]$errors)
+            $definition = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-StarterPathCollision' }, $true)
+            $script:CheckText = $definition.Extent.Text
+            $base = Join-Path $TestDrive ('check-' + [guid]::NewGuid().ToString('N'))
+            foreach ($folder in 'd[1]', 'd1', 'solo[1]') {
+                $dir = New-Dir ([System.IO.Path]::Combine($base, $folder))
+                [System.IO.File]::WriteAllText((Join-Path $dir 'prog'), 'x', $script:Utf8)
+            }
+            $script:Base = $base
+        }
+
+        It 'Finds the starter check in the file' {
+            $script:CheckText | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Reports the other folder on Desktop and nothing on Core' {
+            . ([scriptblock]::Create($script:CheckText))
+            $path = [System.IO.Path]::Combine($script:Base, 'd[1]', 'prog')
+            $message = Get-StarterPathCollision -Path $path -Edition 'Desktop'
+            $message | Should -BeLike '*d1*'
+            $message | Should -BeLike '*Rename or move*'
+            Get-StarterPathCollision -Path $path -Edition 'Core' | Should -BeNullOrEmpty
+        }
+
+        It 'Reports nothing for a bracket folder without a match and for a path without brackets' {
+            . ([scriptblock]::Create($script:CheckText))
+            Get-StarterPathCollision -Path ([System.IO.Path]::Combine($script:Base, 'solo[1]', 'prog')) -Edition 'Desktop' | Should -BeNullOrEmpty
+            Get-StarterPathCollision -Path ([System.IO.Path]::Combine($script:Base, 'd1', 'prog')) -Edition 'Desktop' | Should -BeNullOrEmpty
+        }
+
+        It 'Takes the running edition by default' {
+            . ([scriptblock]::Create($script:CheckText))
+            $path = [System.IO.Path]::Combine($script:Base, 'd[1]', 'prog')
+            $found = Get-StarterPathCollision -Path $path
+            if ($script:IsDesktop) { $found | Should -Not -BeNullOrEmpty } else { $found | Should -BeNullOrEmpty }
+        }
     }
 }

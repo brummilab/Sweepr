@@ -148,7 +148,8 @@ Describe 'sweepr.ps1 defines the functions of the router (RT-3)' {
         @{ Name = 'Get-SweeprSourceCommit' }
         @{ Name = 'Initialize-SweeprDataDir' }
     ) {
-        Get-Command -Name $Name -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        # Functions only: on Windows `Main` also names a Control Panel applet (main.cpl).
+        Get-Command -Name $Name -CommandType Function -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 }
 
@@ -251,7 +252,7 @@ Set-StrictMode -Off
 `$r.Eap = [string]`$ErrorActionPreference
 `$r.Strict = try { `$null = `$notDefinedAnywhere; 'off' } catch { 'on' }
 `$r.Missing = @(foreach (`$n in @($names)) { if (-not (Get-Command `$n -CommandType Function -ErrorAction SilentlyContinue)) { `$n } })
-`$r.Old = @(foreach (`$n in @('Main','Invoke-SweeprCommand','Show-MainHelp','Show-MainMenu')) { if (Get-Command `$n -ErrorAction SilentlyContinue) { `$n } })
+`$r.Old = @(foreach (`$n in @('Main','Invoke-SweeprCommand','Show-MainHelp','Show-MainMenu')) { if (Get-Command `$n -CommandType Function -ErrorAction SilentlyContinue) { `$n } })
 `$r.Root = [string]`$script:SWEEPR_ROOT
 `$r.Bin = [string]`$script:SWEEPR_BIN
 `$r.Lib = [string]`$script:SWEEPR_LIB
@@ -350,5 +351,22 @@ Describe 'The module search path (RT-2)' {
         $entries.Count | Should -BeGreaterThan 0
         foreach ($entry in $entries) { ($entry + '\') | Should -Not -Match '\\PowerShell\\' }
         $entries | Should -Contain 'C:\Windows\system32\WindowsPowerShell\v1.0\Modules'
+    }
+}
+
+Describe 'The text of a start error' {
+    It 'Writes no control character of a folder name to standard error' {
+        # An escape character in a folder name is possible on Linux only; Windows does not allow it.
+        if ($PSVersionTable['PSEdition'] -ne 'Core' -or [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { Set-ItResult -Skipped -Because 'Windows folder names cannot hold control characters'; return }
+        $esc = [string][char]27
+        $root = New-FakeInstall ('start-error' + $esc + '[31m') '1.0.0'
+        # A folder in place of VERSION makes version.ps1 throw a message that holds the path.
+        [System.IO.File]::Delete((Join-Path $root 'VERSION'))
+        [void][System.IO.Directory]::CreateDirectory((Join-Path $root 'VERSION'))
+        $run = Invoke-ChildPowerShell -Script ("& " + (ConvertTo-TestLiteral (Join-Path $root 'sweepr.ps1')) + " --version; exit `$LASTEXITCODE")
+        $run.ExitCode | Should -Be 1
+        $run.Err | Should -Match 'Sweepr cannot start'
+        $run.Err | Should -Match 'start-error'
+        $run.Err.Contains($esc) | Should -BeFalse
     }
 }

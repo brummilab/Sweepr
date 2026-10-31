@@ -31,17 +31,76 @@ $script:SWEEPR_BIN = [System.IO.Path]::Combine($script:SWEEPR_ROOT, 'bin')
 $script:SWEEPR_LIB = [System.IO.Path]::Combine($script:SWEEPR_ROOT, 'lib')
 $script:SWEEPR_CORE = [System.IO.Path]::Combine($script:SWEEPR_LIB, 'core')
 
+# Windows PowerShell 5.1 reads [ ] * ? in a path it loads or starts as a pattern, so a folder called d[1]
+# also matches a folder called d1, and the file of the wrong folder can be used. PowerShell 7 takes an
+# existing path literally and has no such problem. The check is separate from the edition so that both
+# branches can be tested anywhere.
+function Get-SwPowerShellEdition {
+    return [string]$PSVersionTable.PSEdition
+}
+
+function Get-SwPathCollision {
+    <#
+    .SYNOPSIS
+        A message when Windows PowerShell 5.1 would take another file than Path, otherwise $null.
+    .DESCRIPTION
+        Only for Edition Desktop (the running edition when none is given) and only for a path that holds
+        [ ] * or ?. The path is matched as a pattern; a match other than exactly the literal file is a
+        collision. Without any match the path is used as it is: 5.1 then finds the literal file.
+    #>
+    param([string]$Path, [string]$Edition)
+
+    if ([string]::IsNullOrEmpty($Edition)) { $Edition = Get-SwPowerShellEdition }
+    if ($Edition -cne 'Desktop') { return $null }
+    if ($Path.IndexOfAny([char[]]'[]*?') -lt 0) { return $null }
+
+    $found = @()
+    try {
+        $provider = $null
+        $found = @($ExecutionContext.SessionState.Path.GetResolvedProviderPathFromPSPath($Path, [ref]$provider))
+    }
+    catch { return $null }
+
+    $literal = [System.IO.Path]::GetFullPath($Path)
+    foreach ($item in $found) {
+        if (-not [string]::Equals([System.IO.Path]::GetFullPath([string]$item), $literal, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return ('Sweepr cannot use the folder ' + [System.IO.Path]::GetDirectoryName($Path) + ': a folder name with [ ] * or ? is read as a pattern by Windows PowerShell 5.1, and here it also matches ' +
+                [System.IO.Path]::GetDirectoryName([string]$item) + '. Rename or move the installation to a folder without these characters.')
+        }
+    }
+    return $null
+}
+
+function Assert-SwPathUsable {
+    # Throws the message of Get-SwPathCollision, so a file with a colliding path is not loaded.
+    param([string]$Path)
+
+    $problem = Get-SwPathCollision -Path $Path
+    if ($null -ne $problem) { throw $problem }
+}
+
+function Get-SwModulePath {
+    # The path of a file in lib\core, for dot-sourcing; throws when another folder would be loaded instead.
+    param([string]$Name)
+
+    $path = [System.IO.Path]::Combine($script:SWEEPR_CORE, $Name)
+    Assert-SwPathUsable -Path $path
+    return $path
+}
+
 try {
-    . ([System.IO.Path]::Combine($script:SWEEPR_CORE, 'version.ps1'))
+    . (Get-SwModulePath 'version.ps1')
     # Before common.ps1: the modules loaded there must not come from pwsh 7 module folders.
     Repair-SwModuleSearchPath
     $script:SWEEPR_VER = Get-SwInstalledVersion -RootDir $script:SWEEPR_ROOT
-    . ([System.IO.Path]::Combine($script:SWEEPR_CORE, 'common.ps1'))
-    . ([System.IO.Path]::Combine($script:SWEEPR_CORE, 'update_check.ps1'))
+    . (Get-SwModulePath 'common.ps1')
+    . (Get-SwModulePath 'update_check.ps1')
 }
 catch {
     if ($script:SwDotSourced) { throw }
-    [Console]::Error.WriteLine('Sweepr cannot start: ' + $_.Exception.Message)
+    # The modules that sanitise console text may not be loaded yet, so the same characters are replaced here:
+    # a folder name with an escape character must not be able to send a terminal sequence.
+    [Console]::Error.WriteLine([regex]::Replace('Sweepr cannot start: ' + $_.Exception.Message, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', ' '))
     exit 1
 }
 
@@ -566,6 +625,11 @@ function Resolve-SwCommandArguments {
     if (-not $present) {
         return (New-SwResolution -Valid $false -ExitCode 1 -Message ('Cannot run sw ' + $name + ': its script is missing (' + $scriptPath + '). The installation is damaged.') `
                 -Hint 'Reinstall Sweepr to restore the missing file.')
+    }
+
+    $collision = Get-SwPathCollision -Path $scriptPath
+    if ($null -ne $collision) {
+        return (New-SwResolution -Valid $false -ExitCode 1 -Message $collision -Hint 'Nothing was started.')
     }
 
     try { $parameters = Get-SwScriptParameters -Path $scriptPath }

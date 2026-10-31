@@ -253,7 +253,8 @@ Describe 'Restore-SwTuiRelease' {
                 "$($script:DownloadRoot)/V9.9.9-windows/SHA256SUMS.txt"
                 "$($script:DownloadRoot)/v9.9.9-windows/SHA256SUMS.txt"
             )
-            (Get-ProgramCalls).Count | Should -Be 1
+            # @(): a single call is unrolled by the function, and Windows PowerShell 5.1 gives a custom object no Count.
+            @(Get-ProgramCalls).Count | Should -Be 1
             (Get-ProgramCalls)[0].Uri | Should -BeExactly "$($script:DownloadRoot)/v9.9.9-windows/status-windows-x64.exe"
         }
 
@@ -279,7 +280,7 @@ Describe 'Restore-SwTuiRelease' {
             Add-Release 'V9.9.9-windows' @{ 'analyze-windows-x64.exe' = $script:Other }
             Add-Release 'v9.9.9-windows' @{ 'status-windows-x64.exe' = $script:Program }
             Restore-SwTuiRelease -Name 'status' -WindowsDir $script:Root -DestinationPath $script:Dest -Version '9.9.9' | Should -BeExactly 'unavailable'
-            (Get-ProgramCalls).Count | Should -Be 0
+            @(Get-ProgramCalls).Count | Should -Be 0
             @($script:Calls | Where-Object { $_.Uri -cmatch '/v9\.9\.9-windows/' }).Count | Should -Be 0
         }
 
@@ -296,7 +297,7 @@ Describe 'Restore-SwTuiRelease' {
         It 'Returns unavailable and downloads nothing when the file has no line for the program' {
             Add-Release 'V9.9.9-windows' @{ 'analyze-windows-x64.exe' = $script:Other }
             Restore-SwTuiRelease -Name 'status' -WindowsDir $script:Root -DestinationPath $script:Dest -Version '9.9.9' | Should -BeExactly 'unavailable'
-            (Get-ProgramCalls).Count | Should -Be 0
+            @(Get-ProgramCalls).Count | Should -Be 0
             [System.IO.File]::Exists($script:Dest) | Should -BeFalse
         }
 
@@ -305,7 +306,7 @@ Describe 'Restore-SwTuiRelease' {
             $script:Net[$base + 'SHA256SUMS.txt'] = @{ Content = (("a" * 64) + "  status-windows-x64.exe`n" + ("b" * 64) + "  status-windows-x64.exe`n") }
             $script:Net[$base + 'status-windows-x64.exe'] = @{ Bytes = $script:Program }
             Restore-SwTuiRelease -Name 'status' -WindowsDir $script:Root -DestinationPath $script:Dest -Version '9.9.9' | Should -BeExactly 'unavailable'
-            (Get-ProgramCalls).Count | Should -Be 0
+            @(Get-ProgramCalls).Count | Should -Be 0
         }
 
         It 'Reads a checksum file that arrives as bytes with a byte order mark' {

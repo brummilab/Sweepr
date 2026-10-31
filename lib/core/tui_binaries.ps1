@@ -14,7 +14,35 @@
 # Every status line goes through Write-SwTuiStatus. The functions return their result as one value and
 # write nothing else to the pipeline, so a caller can capture it.
 
-. ([System.IO.Path]::Combine($PSScriptRoot, 'version.ps1'))
+function Get-SwTuiPathCollision {
+    # Windows PowerShell 5.1 reads [ ] * ? in a path it loads or starts as a pattern, so a folder called d[1]
+    # also matches a folder called d1 and the file of the wrong folder could be used. Returns a message when
+    # the pattern matches anything but the literal file, otherwise $null. PowerShell 7 reads the path as it is.
+    param([string]$Path, [string]$Edition = $PSVersionTable.PSEdition)
+
+    if ($Edition -cne 'Desktop') { return $null }
+    if ($Path.IndexOfAny([char[]]'[]*?') -lt 0) { return $null }
+    $found = @()
+    try {
+        $provider = $null
+        $found = @($ExecutionContext.SessionState.Path.GetResolvedProviderPathFromPSPath($Path, [ref]$provider))
+    }
+    catch { return $null }
+    $literal = [System.IO.Path]::GetFullPath($Path)
+    foreach ($item in $found) {
+        if (-not [string]::Equals([System.IO.Path]::GetFullPath([string]$item), $literal, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return ('Sweepr cannot use the folder ' + [System.IO.Path]::GetDirectoryName($Path) + ': a folder name with [ ] * or ? is read as a pattern by Windows PowerShell 5.1, and here it also matches ' +
+                [System.IO.Path]::GetDirectoryName([string]$item) + '. Rename or move the installation to a folder without these characters.')
+        }
+    }
+    return $null
+}
+
+$swTuiVersionFile = [System.IO.Path]::Combine($PSScriptRoot, 'version.ps1')
+$swTuiCollision = Get-SwTuiPathCollision -Path $swTuiVersionFile
+if ($null -ne $swTuiCollision) { throw $swTuiCollision }
+. $swTuiVersionFile
+Remove-Variable -Name swTuiVersionFile, swTuiCollision -ErrorAction SilentlyContinue
 
 # Fixed source of the release files; nothing in the address comes from input except a checked version.
 $script:SwTuiReleaseRoot = 'https://github.com/brummilab/sweepr/releases/download'

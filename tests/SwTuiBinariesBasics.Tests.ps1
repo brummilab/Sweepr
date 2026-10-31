@@ -798,3 +798,48 @@ Describe 'Old names (TB-17)' {
         Get-Command -Name $Name -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Get-SwTuiPathCollision and the load of version.ps1 (folders with [ ] * ? under Windows PowerShell 5.1)' {
+    BeforeAll {
+        $script:IsDesktop = (([string]$PSVersionTable.PSEdition) -ceq 'Desktop')
+        $script:PatternBase = New-Dir (Join-Path $TestDrive 'tb-pattern')
+        foreach ($folder in 'core[1]', 'core1', 'solo[1]') {
+            New-TextFile ([System.IO.Path]::Combine($script:PatternBase, $folder, 'version.ps1')) "'x'`n" | Out-Null
+        }
+    }
+
+    It 'Reports the other folder on Desktop and nothing on Core' {
+        $path = [System.IO.Path]::Combine($script:PatternBase, 'core[1]', 'version.ps1')
+        $message = Get-SwTuiPathCollision -Path $path -Edition 'Desktop'
+        $message | Should -BeLike '*core1*'
+        $message | Should -BeLike '*Rename or move*'
+        Get-SwTuiPathCollision -Path $path -Edition 'Core' | Should -BeNullOrEmpty
+    }
+
+    It 'Reports nothing for a bracket folder without a match, for a plain path and for a pattern without any match' {
+        Get-SwTuiPathCollision -Path ([System.IO.Path]::Combine($script:PatternBase, 'solo[1]', 'version.ps1')) -Edition 'Desktop' | Should -BeNullOrEmpty
+        Get-SwTuiPathCollision -Path ([System.IO.Path]::Combine($script:PatternBase, 'core1', 'version.ps1')) -Edition 'Desktop' | Should -BeNullOrEmpty
+        Get-SwTuiPathCollision -Path ([System.IO.Path]::Combine($script:PatternBase, 'none[1]', 'version.ps1')) -Edition 'Desktop' | Should -BeNullOrEmpty
+    }
+
+    It 'Takes the running edition by default' {
+        $found = Get-SwTuiPathCollision -Path ([System.IO.Path]::Combine($script:PatternBase, 'core[1]', 'version.ps1'))
+        if ($script:IsDesktop) { $found | Should -Not -BeNullOrEmpty } else { $found | Should -BeNullOrEmpty }
+    }
+
+    It 'Loads from its own folder on PowerShell 7 and refuses to load the version.ps1 of another folder on Windows PowerShell 5.1' {
+        $folder = New-Dir ([System.IO.Path]::Combine($script:PatternBase, 'load', 'core[1]'))
+        $decoy = New-Dir ([System.IO.Path]::Combine($script:PatternBase, 'load', 'core1'))
+        Copy-Item -LiteralPath (Join-Path $script:CoreDir 'version.ps1') -Destination $folder
+        Copy-Item -LiteralPath $script:TuiFile -Destination $folder
+        New-TextFile (Join-Path $decoy 'version.ps1') "function Get-SwInstalledVersion { 'decoy' }`n" | Out-Null
+        $tui = ConvertTo-TestLiteral ([System.IO.Path]::Combine($folder, 'tui_binaries.ps1'))
+        $run = Invoke-ChildPowerShell -Script @"
+try { . $tui; 'LOADED ' + [string](Get-Command Get-SwInstalledVersion -CommandType Function).ScriptBlock.File } catch { 'REFUSED ' + `$_.Exception.Message }
+"@
+        $text = [string]$run.Out
+        $text | Should -Not -Match 'decoy|core1[\\/]version'
+        if ($script:IsDesktop) { $text | Should -Match 'REFUSED .*Rename or move' }
+        else { $text | Should -Match 'LOADED' }
+    }
+}
