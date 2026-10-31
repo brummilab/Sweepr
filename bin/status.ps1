@@ -1,8 +1,9 @@
 # Sweepr - Status Command
-# System status monitor wrapper
+# Starts the native system monitor (status.exe) and hands its exit code on.
 
 #Requires -Version 5.1
-[CmdletBinding()]
+# PositionalBinding off: the program takes no loose word, so one is an error for the router, not a value.
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [Alias('h')]
     [switch]$ShowHelp,
@@ -14,53 +15,49 @@ param(
     [string]$Interval
 )
 
-$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-# Script location
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$windowsDir = Split-Path -Parent $scriptDir
-$defaultBinPath = Join-Path $windowsDir "bin\status.exe"
-. (Join-Path $windowsDir "lib\core\tui_binaries.ps1")
-
-# Help
-function Show-StatusHelp {
-    $esc = [char]27
-    Write-Host ""
-    Write-Host "$esc[1;35msw status$esc[0m - Live view of CPU, memory, disks, network and processes"
-    Write-Host ""
-    Write-Host "$esc[33mUsage:$esc[0m sw status [options]"
-    Write-Host ""
-    Write-Host "$esc[33mOptions:$esc[0m"
-    Write-Host "  --json             Output one measurement as JSON"
-    Write-Host "  --watch            Stream measurements as newline-delimited JSON"
-    Write-Host "  --interval=2s      With --watch, time between measurements (default 1s)"
-    Write-Host "  --help             Show this help message"
-    Write-Host ""
-    Write-Host "$esc[33mKeybindings:$esc[0m"
-    Write-Host "  c            Cycle how many CPU cores are listed"
-    Write-Host "  q / Esc      Quit"
-    Write-Host ""
+function Write-StatusUsageText {
+    Write-Host 'Usage: sw status [options]'
+    Write-Host ''
+    Write-Host 'Show CPU, memory, disks, network and the busiest processes of this computer.'
+    Write-Host 'Nothing is changed.'
+    Write-Host ''
+    Write-Host 'Options:'
+    Write-Host '  --json               Print one measurement as JSON and exit'
+    Write-Host '  --watch              Print one JSON line per measurement until stopped'
+    Write-Host '  --interval=<time>    Wait between two measurements with --watch (500ms, 1s, 2m)'
+    Write-Host '  -h, --help           Show this help'
+    Write-Host ''
+    Write-Host 'Keys in the live display:'
+    Write-Host '  c                    Change how many CPU cores are listed (2, 4, 8, all)'
+    Write-Host '  q, Esc               Quit'
 }
 
 if ($ShowHelp) {
-    Show-StatusHelp
+    Write-StatusUsageText
     return
 }
 
-$binPath = Ensure-TuiBinary -Name "status" -WindowsDir $windowsDir -DestinationPath $defaultBinPath -SourcePath "./cmd/status/"
-if (-not $binPath) {
-    Write-TuiBinaryStatus "Could not download the verified status tool for this version from GitHub Releases." -Color Red
-    Write-TuiBinaryStatus "Check the network and run 'sw status' again. With Go installed, Sweepr builds it locally instead." -Color Yellow
+# The installation folder from this script's own location, never from the working directory; .NET
+# path calls keep brackets and quotes in a folder name literal.
+$rootDir = [System.IO.Path]::GetDirectoryName($PSScriptRoot)
+. ([System.IO.Path]::Combine($rootDir, 'lib', 'core', 'tui_binaries.ps1'))
+
+$program = Resolve-SwTuiBinary -Name 'status' -WindowsDir $rootDir -DestinationPath ([System.IO.Path]::Combine($rootDir, 'bin', 'status.exe')) -SourcePath './cmd/status/'
+if ([string]::IsNullOrEmpty($program)) {
+    Write-SwTuiStatus 'Sweepr could not provide the verified status program for this version.' -Color 'Red'
+    Write-SwTuiStatus 'Check the network connection, or install Go: Sweepr then builds the program on this computer.' -Color 'Yellow'
     exit 1
 }
 
-# Run the binary
-$binArgs = @()
-if ($Json) { $binArgs += "--json" }
-if ($Watch) { $binArgs += "--watch" }
-if ($Interval) { $binArgs += "--interval=$Interval" }
-& $binPath @binArgs
+# Only these three forms reach the program; the interval is one argument, also when it holds blanks.
+$arguments = @()
+if ($Json) { $arguments += '--json' }
+if ($Watch) { $arguments += '--watch' }
+if (-not [string]::IsNullOrEmpty($Interval)) { $arguments += ('--interval=' + $Interval) }
 
-# Explicitly propagate native failures through powershell.exe -File as well
-# as the executable launcher. Help returns before reaching this point.
+& $program @arguments
+# Under -File only an explicit exit carries the program's code to the caller.
 exit $LASTEXITCODE

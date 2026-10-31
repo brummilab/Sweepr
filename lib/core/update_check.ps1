@@ -391,7 +391,11 @@ function Invoke-SwUpdateLookup {
 
     if ($PSVersionTable['PSEdition'] -ne 'Core') {
         # Windows PowerShell may not offer TLS 1.2 by default; GitHub requires it. Keep the others.
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+        # SystemDefault (0) lets the system choose, and adding a flag would replace that choice.
+        $protocol = [System.Net.ServicePointManager]::SecurityProtocol
+        if ([int]$protocol -ne 0) {
+            [System.Net.ServicePointManager]::SecurityProtocol = $protocol -bor [System.Net.SecurityProtocolType]::Tls12
+        }
     }
 
     $latest = $null

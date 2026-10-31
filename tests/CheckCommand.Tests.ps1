@@ -122,6 +122,9 @@ BeforeAll {
     $script:SweeprFile = Join-Path $script:WindowsDir 'sweepr.ps1'
     $script:InstallFile = Join-Path $script:WindowsDir 'install.ps1'
 
+    # Dot-sourcing the router loads its functions and modules and returns without running a command.
+    . $script:SweeprFile
+
     foreach ($module in @('core\base', 'core\log', 'core\ui', 'core\file_ops', 'core\features', 'core\health', 'core\update_check',
             'clean\user', 'clean\caches', 'clean\dev', 'clean\apps', 'clean\system', 'clean\preview', 'clean\projects')) {
         . (Join-Path $script:LibDir "$module.ps1")
@@ -188,19 +191,6 @@ BeforeAll {
         }
         return $ast
     }
-    function script:Import-ScriptFunction {
-        param([string]$Script, [string[]]$Names)
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
-        foreach ($name in $Names) {
-            $definition = $ast.Find({
-                    param($node)
-                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
-                }, $true)
-            if (-not $definition) { throw "$name not found in $Script" }
-            . ([scriptblock]::Create($definition.Extent.Text))
-            Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
-        }
-    }
 
     $script:CheckExitCode = 0
     $script:CheckAst = $null
@@ -213,7 +203,6 @@ BeforeAll {
             Set-Item -Path "function:script:$name" -Value ([scriptblock]::Create("throw 'bin\check.ps1 is missing $name'"))
         }
     }
-    Import-ScriptFunction -Script $script:SweeprFile -Names @('Resolve-CommandParameterName', 'Show-MainHelp')
 
     # ---- fixtures: what the four data sources return --------------------------------------------
 
@@ -577,18 +566,12 @@ Describe 'sw check router and help' {
     BeforeEach { Initialize-CheckEnvironment }
     AfterEach { Restore-CheckEnvironment }
 
-    It "Lists check in the router's validCommands" {
-        $text = Get-Content -LiteralPath $script:SweeprFile -Raw
-        $text | Should -Match '\$validCommands\s*=\s*@\([^)]*"check"[^)]*\)'
-    }
-
-    It 'Keeps the exit code of check (the router reads it for the same commands as for features)' {
-        $text = Get-Content -LiteralPath $script:SweeprFile -Raw
-        ([regex]::Matches($text, '-in @\("analyze", "status", "history", "features"[^)]*"check"')).Count | Should -BeGreaterOrEqual 2
+    It 'Lists check among the commands of the router' {
+        $script:SwCommands | Should -Contain 'check'
     }
 
     It 'Shows sw check in the main help' {
-        Show-MainHelp
+        Show-SwHelp
         $help = $script:Transcript -join "`n"
         $help | Should -Match 'sw check\s+\S'
         $help | Should -Match 'sw check --report'
@@ -604,14 +587,14 @@ Describe 'sw check router and help' {
         @{ Flag = 'debug'; Parameter = 'DebugMode' }
     ) {
         $declared = (Get-Command -Name $script:BinFile -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag $Flag | Should -Be $Parameter
+        Resolve-SwCommandParameter -Parameters $declared -Flag $Flag | Should -Be $Parameter
     }
 
     It 'Does not know an option the router would let through by mistake' -ForEach @(
         @{ Flag = 'system' }, @{ Flag = 'all' }, @{ Flag = 'bogus' }
     ) {
         $declared = (Get-Command -Name $script:BinFile -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag $Flag | Should -BeNullOrEmpty
+        Resolve-SwCommandParameter -Parameters $declared -Flag $Flag | Should -BeNullOrEmpty
     }
 
     It 'Prints the check help through sweepr.ps1 with exit code 0' {

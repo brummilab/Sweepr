@@ -2,8 +2,11 @@
 # Updates a source-channel installation from the main branch.
 
 #Requires -Version 5.1
+# [CmdletBinding()] makes a stray word an error instead of a silent entry in $args. No alias "debug":
+# it would collide with the common parameter -Debug; the router maps --debug to DebugMode itself.
+[CmdletBinding()]
 param(
-    [Alias('debug', 'd')]
+    [Alias('d')]
     [switch]$DebugMode,
 
     [Alias('h')]

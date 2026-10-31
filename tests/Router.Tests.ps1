@@ -6,19 +6,12 @@
 
 BeforeAll {
     $script:WindowsDir = Split-Path -Parent $PSScriptRoot
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir "sweepr.ps1"), [ref]$null, [ref]$null)
-    foreach ($name in @("Resolve-CommandParameterName", "Invoke-SweeprCommand")) {
-        $definition = $ast.Find({
-                param($node)
-                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
-            }, $true)
-        . ([scriptblock]::Create($definition.Extent.Text))
-        Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
-    }
-    function Write-SweeprError { param($Message) }
-    function Get-SweeprDebugHeader { param($CommandLine) "header: $CommandLine" }
-    function Start-SweeprDebugSession { param($Header) $script:DebugSessionCalls += "start:$($Header -join '|')" }
-    function Complete-SweeprDebugSession { $script:DebugSessionCalls += "complete" }
+    # Dot-sourcing the router loads its functions and modules and returns without running a command.
+    . (Join-Path $script:WindowsDir "sweepr.ps1")
+    function Write-SwError { param($Message) }
+    function Get-SwDebugHeader { param($CommandLine) "header: $CommandLine" }
+    function Start-SwDebugSession { param($Header) $script:DebugSessionCalls += "start:$($Header -join '|')" }
+    function Complete-SwDebugSession { $script:DebugSessionCalls += "complete" }
 
     $script:SWEEPR_BIN = Join-Path $TestDrive "bin"
     New-Item -ItemType Directory -Path $script:SWEEPR_BIN -Force | Out-Null
@@ -48,22 +41,22 @@ Describe "sweepr.ps1 command router" {
         @{ Flag = "--dry-run"; Expected = "DRYRUN" },
         @{ Flag = "--debug"; Expected = "DEBUG" }
     ) {
-        Invoke-SweeprCommand -CommandName "fake" -Arguments @($Flag) | Should -Be $Expected
+        Invoke-SwCommand -CommandName "fake" -Arguments @($Flag) | Should -Be $Expected
     }
 
     It "Opens one debug session around a --debug command and closes it" {
-        Invoke-SweeprCommand -CommandName "fake" -Arguments @("--debug") | Should -Be "DEBUG"
+        Invoke-SwCommand -CommandName "fake" -Arguments @("--debug") | Should -Be "DEBUG"
         $script:DebugSessionCalls | Should -Be @("start:header: fake --debug", "complete")
     }
 
     It "Leaves the debug session alone without --debug" {
-        Invoke-SweeprCommand -CommandName "fake" -Arguments @("--dry-run") | Should -Be "DRYRUN"
-        Invoke-SweeprCommand -CommandName "fake" -Arguments @() | Should -Be "ACTED"
+        Invoke-SwCommand -CommandName "fake" -Arguments @("--dry-run") | Should -Be "DRYRUN"
+        Invoke-SwCommand -CommandName "fake" -Arguments @() | Should -Be "ACTED"
         $script:DebugSessionCalls | Should -BeNullOrEmpty
     }
 
     It "Refuses an unknown option without running the command" {
-        $output = @(Invoke-SweeprCommand -CommandName "fake" -Arguments @("--bogus"))
+        $output = @(Invoke-SwCommand -CommandName "fake" -Arguments @("--bogus"))
         $output | Should -Not -Contain "ACTED"
         $script:SweeprExitCode | Should -Be 2
     }
@@ -71,8 +64,8 @@ Describe "sweepr.ps1 command router" {
     It "Preserves a literal trailing apostrophe in positional and named paths" {
         Set-Content -LiteralPath (Join-Path $script:SWEEPR_BIN "path.ps1") -Value 'param([string]$Path) $Path'
         $literal = "C:\fixture\reports'"
-        Invoke-SweeprCommand -CommandName "path" -Arguments @($literal) | Should -BeExactly $literal
-        Invoke-SweeprCommand -CommandName "path" -Arguments @("--path=$literal") | Should -BeExactly $literal
+        Invoke-SwCommand -CommandName "path" -Arguments @($literal) | Should -BeExactly $literal
+        Invoke-SwCommand -CommandName "path" -Arguments @("--path=$literal") | Should -BeExactly $literal
     }
 
     It "Gives a value flag the next word as <Case>" -ForEach @(
@@ -87,20 +80,20 @@ Describe "sweepr.ps1 command router" {
 param([switch]$Json, [switch]$Watch, [string]$Interval)
 "watch=$Watch interval=$Interval json=$Json"
 '@
-        Invoke-SweeprCommand -CommandName "watch" -Arguments $Arguments | Should -BeExactly $Expected
+        Invoke-SwCommand -CommandName "watch" -Arguments $Arguments | Should -BeExactly $Expected
         $script:SweeprExitCode | Should -Be 0
     }
 
     It "Refuses an unknown command with a failure exit code" {
-        Invoke-SweeprCommand -CommandName "missing" -Arguments @()
+        $null = Invoke-SwMain -Arguments @("missing")
         $script:SweeprExitCode | Should -Be 2
     }
 
     It "Preserves native TUI exit codes and resets stale results for help" {
         Set-Content -LiteralPath (Join-Path $script:SWEEPR_BIN "status.ps1") -Value 'param([switch]$ShowHelp) if ($ShowHelp) { return }; & $env:ComSpec /d /c exit 7; exit $LASTEXITCODE'
-        Invoke-SweeprCommand -CommandName "status" -Arguments @()
+        Invoke-SwCommand -CommandName "status" -Arguments @()
         $script:SweeprExitCode | Should -Be 7
-        Invoke-SweeprCommand -CommandName "status" -Arguments @("--help")
+        Invoke-SwCommand -CommandName "status" -Arguments @("--help")
         $script:SweeprExitCode | Should -Be 0
     }
 
@@ -109,14 +102,14 @@ param([switch]$Json, [switch]$Watch, [string]$Interval)
         @{ Name = "analyze"; Flag = "json"; Expected = "Json" }
     ) {
         $declared = (Get-Command -Name (Join-Path $script:WindowsDir "bin\$Name.ps1") -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag $Flag | Should -Be $Expected
+        Resolve-SwCommandParameter -Parameters $declared -Flag $Flag | Should -Be $Expected
     }
 
     It "Shows help for every real command" -ForEach @(
         "clean", "uninstall", "optimize", "analyze", "status", "purge", "update", "remove"
     ) {
         $declared = (Get-Command -Name (Join-Path $script:WindowsDir "bin\$_.ps1") -CommandType ExternalScript).Parameters
-        Resolve-CommandParameterName -Parameters $declared -Flag "help" | Should -Be "ShowHelp"
+        Resolve-SwCommandParameter -Parameters $declared -Flag "help" | Should -Be "ShowHelp"
     }
 }
 
@@ -184,18 +177,6 @@ Describe "sw remove" {
 
 Describe "sw --version install line" {
     BeforeAll {
-        $windowsDir = Split-Path -Parent $PSScriptRoot
-        # Get-SweeprInstallMethod asks Test-SweeprPortable, which lives in base.ps1.
-        . (Join-Path $windowsDir "lib\core\base.ps1")
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $windowsDir "sweepr.ps1"), [ref]$null, [ref]$null)
-        foreach ($name in @("Get-SweeprSourceCommit", "Get-SweeprInstallDescription", "Get-SweeprInstallMethod")) {
-            $definition = $ast.Find({
-                    param($node)
-                    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
-                }, $true)
-            . ([scriptblock]::Create($definition.Extent.Text))
-            Set-Item -Path "function:script:$name" -Value (Get-Item "function:$name").ScriptBlock
-        }
         $script:Sha = "0123456789abcdef0123456789abcdef01234567"
     }
 
@@ -206,26 +187,26 @@ Describe "sw --version install line" {
 
     It "Names the commit of a checked-out release tag" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value $script:Sha
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
+        Get-SwInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
     }
 
     It "Follows a branch ref, loose or packed" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value "ref: refs/heads/windows"
         Set-Content -LiteralPath (Join-Path $script:Root ".git\packed-refs") -Value @("# pack-refs with: peeled", "$($script:Sha) refs/heads/windows")
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
+        Get-SwInstallDescription -RootDir $script:Root | Should -BeExactly "Source (0123456)"
 
         Set-Content -LiteralPath (Join-Path $script:Root ".git\refs\heads\windows") -Value ("f" * 40)
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source (fffffff)"
+        Get-SwInstallDescription -RootDir $script:Root | Should -BeExactly "Source (fffffff)"
     }
 
     It "Says Source without a commit when the metadata cannot be read" {
         Set-Content -LiteralPath (Join-Path $script:Root ".git\HEAD") -Value "ref: refs/heads/missing"
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Source"
+        Get-SwInstallDescription -RootDir $script:Root | Should -BeExactly "Source"
     }
 
     It "Calls a copy without Git metadata Copy" {
         Remove-Item -LiteralPath (Join-Path $script:Root ".git") -Recurse -Force
-        Get-SweeprInstallDescription -RootDir $script:Root | Should -BeExactly "Copy"
+        Get-SwInstallDescription -RootDir $script:Root | Should -BeExactly "Copy"
     }
 }
 
@@ -345,7 +326,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\status.ps1") -Destination (Join-Path $root "bin")
         $stub = Join-Path $root "bin\status-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Ensure-TuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
 
         $result = Invoke-SweeprShape -Shape $_ -Sweepr (Join-Path $root "sweepr.ps1") -Arguments @("status", "--watch", "--interval", "1s")
 
@@ -363,7 +344,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         # A stand-in analyzer that reports what it was given.
         $stub = Join-Path $root "bin\analyze-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*`r`necho TARGET=%SWEEPR_ANALYZE_PATH%" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Ensure-TuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
         $target = Join-Path $TestDrive "scan target"
         New-Item -ItemType Directory -Path $target -Force | Out-Null
 
@@ -383,7 +364,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\analyze.ps1") -Destination (Join-Path $root "bin")
         $stub = Join-Path $root "bin\analyze-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho {}" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Ensure-TuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
         $profile = Join-Path $TestDrive ("analyze-debug-profile-" + $_)
         New-Item -ItemType Directory -Path $profile -Force | Out-Null
         $saved = $env:USERPROFILE
@@ -433,7 +414,7 @@ Describe "REA and sw inspect are removed" {
     It "Does not list inspect among the available commands" {
         $result = Invoke-SweeprChild -Arguments @("not-a-command")
         $result.ExitCode | Should -Be 2
-        $result.Text | Should -Match "Available commands: "
+        $result.Text | Should -Match "(?s)clean.*remove"
         $result.Text | Should -Not -Match "inspect"
     }
 
