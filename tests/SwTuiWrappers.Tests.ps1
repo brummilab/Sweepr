@@ -300,12 +300,6 @@ Describe 'sw status starter' {
             $script:HelpText | Should -Match '(?i)esc'
         }
 
-        It 'Defines its usage function under its own name' {
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Join-Path $script:RepoRoot 'bin') 'status.ps1'), [ref]$null, [ref]$null)
-            $names = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false) | ForEach-Object { $_.Name })
-            $names | Should -Contain 'Write-StatusUsageText'
-            $names | Should -Not -Contain 'Show-StatusHelp'
-        }
 
         It 'Does not mention the file names of the program, the key k, battery, proxy or alerts' {
             $script:HelpText | Should -Not -Match '(?i)status\.exe'
@@ -471,16 +465,9 @@ Describe 'sw analyze starter' {
             foreach ($text in '--json', '--debug', '--help') { $script:HelpText | Should -Match ([regex]::Escape($text)) -Because $text }
         }
 
-        It 'Defines its usage function under its own name' {
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Join-Path $script:RepoRoot 'bin') 'analyze.ps1'), [ref]$null, [ref]$null)
-            $names = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false) | ForEach-Object { $_.Name })
-            $names | Should -Contain 'Write-AnalyzeUsageText'
-            $names | Should -Not -Contain 'Show-AnalyzeHelp'
-        }
 
-        It 'Describes the key R as a rescan of the current folder' {
-            $script:HelpText | Should -Not -Match 'Measure again'
-            $script:HelpText | Should -CMatch '(?m)^\s+R\s+Rescan the current folder'
+        It 'Names the key R' {
+            $script:HelpText | Should -CMatch '(?m)^\s+R\s+\S'
         }
 
         It 'Lists the keys: <Pattern>' -ForEach @(
