@@ -83,8 +83,10 @@ BeforeAll {
         [void][System.IO.Directory]::CreateDirectory($Dir)
         if ($script:IsWin) {
             $path = [System.IO.Path]::Combine($Dir, 'prog.cmd')
-            $text = "@echo off`r`necho ARGS=%*`r`nif defined SWEEPR_ANALYZE_PATH (echo TARGET=%SWEEPR_ANALYZE_PATH%) else (echo TARGET=NOTSET)`r`n" +
-                "if defined SWEEPR_DEBUG (echo DEBUG=%SWEEPR_DEBUG%) else (echo DEBUG=NOTSET)`r`nif not defined FIXTURE_EXIT set FIXTURE_EXIT=0`r`nexit /b %FIXTURE_EXIT%`r`n"
+            # No parenthesized block: a value with an unbalanced quote (D:\x"y) would swallow the closing
+            # parenthesis there and cmd would drop the whole line. A plain `if ... echo` prints the value as it is.
+            $text = "@echo off`r`necho ARGS=%*`r`nif defined SWEEPR_ANALYZE_PATH echo TARGET=%SWEEPR_ANALYZE_PATH%`r`nif not defined SWEEPR_ANALYZE_PATH echo TARGET=NOTSET`r`n" +
+                "if defined SWEEPR_DEBUG echo DEBUG=%SWEEPR_DEBUG%`r`nif not defined SWEEPR_DEBUG echo DEBUG=NOTSET`r`nif not defined FIXTURE_EXIT set FIXTURE_EXIT=0`r`nexit /b %FIXTURE_EXIT%`r`n"
             [System.IO.File]::WriteAllText($path, $text, [System.Text.Encoding]::ASCII)
         }
         else {

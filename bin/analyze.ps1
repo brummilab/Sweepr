@@ -74,6 +74,14 @@ if ([string]::IsNullOrEmpty($program)) {
 $arguments = @()
 if ($Json) { $arguments += '--json' }
 
+# Windows PowerShell 5.1 reads [ ] * ? in a command path as a pattern, so a folder called d[1] would run the
+# program of a folder called d1. Escaped, the pattern matches the literal path. PowerShell 7 takes an existing
+# path literally and would not find the escaped form.
+$call = $program
+if ($PSVersionTable.PSVersion.Major -lt 6 -and $program.IndexOfAny([char[]]'[]*?') -ge 0) {
+    $call = [System.Management.Automation.WildcardPattern]::Escape($program)
+}
+
 # Both variables are put back to what the session had, also when the program cannot be started.
 $savedPath = [System.Environment]::GetEnvironmentVariable('SWEEPR_ANALYZE_PATH')
 $savedDebug = [System.Environment]::GetEnvironmentVariable('SWEEPR_DEBUG')
@@ -84,7 +92,7 @@ try {
     else { Set-AnalyzeVariable -Name 'SWEEPR_ANALYZE_PATH' -Value $Path }
     if ($DebugMode) { Set-AnalyzeVariable -Name 'SWEEPR_DEBUG' -Value '1' }
 
-    & $program @arguments
+    & $call @arguments
     $exitCode = [int]$LASTEXITCODE
 }
 finally {

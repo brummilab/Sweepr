@@ -905,8 +905,10 @@ Describe 'Test-SwSourceMatchesRelease (TB-12, S7)' {
         }
 
         It 'Finds the release by the lower-case tag too' {
-            Invoke-Git $script:Fixture @('update-ref', 'refs/tags/v9.9.9-windows', $script:Commit) | Out-Null
+            # Delete first: on a case-insensitive file system both names are one ref file, so deleting the
+            # upper-case tag after creating the lower-case one would remove the only tag there is.
             Invoke-Git $script:Fixture @('update-ref', '-d', 'refs/tags/V9.9.9-windows') | Out-Null
+            Invoke-Git $script:Fixture @('update-ref', 'refs/tags/v9.9.9-windows', $script:Commit) | Out-Null
             Test-SwSourceMatchesRelease -WindowsDir $script:Fixture -Name 'analyze' -Version '9.9.9' | Should -BeTrue
         }
 

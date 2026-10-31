@@ -58,6 +58,14 @@ if ($Json) { $arguments += '--json' }
 if ($Watch) { $arguments += '--watch' }
 if (-not [string]::IsNullOrEmpty($Interval)) { $arguments += ('--interval=' + $Interval) }
 
-& $program @arguments
+# Windows PowerShell 5.1 reads [ ] * ? in a command path as a pattern, so a folder called d[1] would run the
+# program of a folder called d1. Escaped, the pattern matches the literal path. PowerShell 7 takes an existing
+# path literally and would not find the escaped form.
+$call = $program
+if ($PSVersionTable.PSVersion.Major -lt 6 -and $program.IndexOfAny([char[]]'[]*?') -ge 0) {
+    $call = [System.Management.Automation.WildcardPattern]::Escape($program)
+}
+
+& $call @arguments
 # Under -File only an explicit exit carries the program's code to the caller.
 exit $LASTEXITCODE

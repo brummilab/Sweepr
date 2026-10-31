@@ -148,7 +148,8 @@ Describe 'sweepr.ps1 defines the functions of the router (RT-3)' {
         @{ Name = 'Get-SweeprSourceCommit' }
         @{ Name = 'Initialize-SweeprDataDir' }
     ) {
-        Get-Command -Name $Name -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        # Functions only: on Windows `Main` also names a Control Panel applet (main.cpl).
+        Get-Command -Name $Name -CommandType Function -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 }
 
@@ -251,7 +252,7 @@ Set-StrictMode -Off
 `$r.Eap = [string]`$ErrorActionPreference
 `$r.Strict = try { `$null = `$notDefinedAnywhere; 'off' } catch { 'on' }
 `$r.Missing = @(foreach (`$n in @($names)) { if (-not (Get-Command `$n -CommandType Function -ErrorAction SilentlyContinue)) { `$n } })
-`$r.Old = @(foreach (`$n in @('Main','Invoke-SweeprCommand','Show-MainHelp','Show-MainMenu')) { if (Get-Command `$n -ErrorAction SilentlyContinue) { `$n } })
+`$r.Old = @(foreach (`$n in @('Main','Invoke-SweeprCommand','Show-MainHelp','Show-MainMenu')) { if (Get-Command `$n -CommandType Function -ErrorAction SilentlyContinue) { `$n } })
 `$r.Root = [string]`$script:SWEEPR_ROOT
 `$r.Bin = [string]`$script:SWEEPR_BIN
 `$r.Lib = [string]`$script:SWEEPR_LIB

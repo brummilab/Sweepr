@@ -510,6 +510,23 @@ function Resolve-SwCommandParameter {
     return $null
 }
 
+function Get-SwInvocationPath {
+    <#
+    .SYNOPSIS
+        A file path in the form the call operator reads as exactly that file.
+    .DESCRIPTION
+        Windows PowerShell 5.1 reads [ ] * ? in a command path as a pattern, so a folder called d[1]
+        would run a script of a folder called d1. Escaping makes the pattern match the literal name.
+        PowerShell 7 takes an existing path literally and would not find the escaped form, so there
+        the path stays as it is. A path without these characters is never changed.
+    #>
+    param([string]$Path)
+
+    if ($PSVersionTable.PSVersion.Major -ge 6) { return $Path }
+    if ($Path.IndexOfAny([char[]]'[]*?') -lt 0) { return $Path }
+    return [System.Management.Automation.WildcardPattern]::Escape($Path)
+}
+
 function Get-SwScriptParameters {
     <#
     .SYNOPSIS
@@ -725,7 +742,7 @@ function Invoke-SwCommand {
         }
 
         $scriptPath = $resolution.ScriptPath
-        & $scriptPath @splat @words
+        & (Get-SwInvocationPath -Path $scriptPath) @splat @words
         $succeeded = $?
         $last = [int]$global:LASTEXITCODE
         $script:SweeprExitCode = 0
