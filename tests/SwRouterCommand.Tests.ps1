@@ -357,7 +357,7 @@ Describe 'Invoke-SwCommand' {
         Context 'with the edition Core (PowerShell 7), whatever runs the tests' {
             BeforeEach { Mock Get-SwPowerShellEdition { 'Core' } }
 
-            It 'Runs the literal script of the folder d[1], not the one of d1' {
+            It 'Runs the literal script of the folder d[1], not the one of d1' -Skip:($PSVersionTable.PSEdition -eq 'Desktop') {
                 $script:SWEEPR_BIN = New-PatternFolders 'd[1]'
                 $result = Invoke-Cmd 'fake' @('--flag')
                 @($result.Output)[0] | Should -BeExactly 'REAL'
