@@ -326,7 +326,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\status.ps1") -Destination (Join-Path $root "bin")
         $stub = Join-Path $root "bin\status-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath, `$Version, [switch]`$Refresh) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
 
         $result = Invoke-SweeprShape -Shape $_ -Sweepr (Join-Path $root "sweepr.ps1") -Arguments @("status", "--watch", "--interval", "1s")
 
@@ -344,7 +344,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         # A stand-in analyzer that reports what it was given.
         $stub = Join-Path $root "bin\analyze-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho ARGS=%*`r`necho TARGET=%SWEEPR_ANALYZE_PATH%" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath, `$Version, [switch]`$Refresh) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
         $target = Join-Path $TestDrive "scan target"
         New-Item -ItemType Directory -Path $target -Force | Out-Null
 
@@ -364,7 +364,7 @@ Describe "Machine-readable output through installed launcher call shapes" {
         Copy-Item -LiteralPath (Join-Path $script:WindowsDir "bin\analyze.ps1") -Destination (Join-Path $root "bin")
         $stub = Join-Path $root "bin\analyze-stub.cmd"
         Set-Content -LiteralPath $stub -Value "@echo off`r`necho {}" -Encoding ASCII
-        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath, `$Version, [switch]`$Refresh) '$stub' }" -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $root "lib\core\tui_binaries.ps1") -Value "function Resolve-SwTuiBinary { param(`$Name, `$WindowsDir, `$DestinationPath, `$SourcePath) '$stub' }" -Encoding ASCII
         $profile = Join-Path $TestDrive ("analyze-debug-profile-" + $_)
         New-Item -ItemType Directory -Path $profile -Force | Out-Null
         $saved = $env:USERPROFILE
