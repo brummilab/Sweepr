@@ -909,6 +909,9 @@ Describe 'Test-SwSourceMatchesRelease (TB-12, S7)' {
             # upper-case tag after creating the lower-case one would remove the only tag there is.
             Invoke-Git $script:Fixture @('update-ref', '-d', 'refs/tags/V9.9.9-windows') | Out-Null
             Invoke-Git $script:Fixture @('update-ref', 'refs/tags/v9.9.9-windows', $script:Commit) | Out-Null
+            # Packed, the tag is looked up by exact name in packed-refs on every file system; as a loose ref
+            # file on Windows the upper-case name would find it by accident.
+            Invoke-Git $script:Fixture @('pack-refs', '--all') | Out-Null
             Test-SwSourceMatchesRelease -WindowsDir $script:Fixture -Name 'analyze' -Version '9.9.9' | Should -BeTrue
         }
 

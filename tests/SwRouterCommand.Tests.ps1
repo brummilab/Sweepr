@@ -276,6 +276,24 @@ Describe 'Invoke-SwCommand' {
             @((Invoke-Cmd 'fake').Output)[0] | Should -BeExactly 'RAN'
         }
 
+        BeforeAll {
+            # A folder with a sibling the name would match as a pattern, with a script of the same name that says so.
+            function script:New-PatternFolders([string]$Folder, [switch]$NoDecoy) {
+                $parent = Join-Path $TestDrive ('literal-' + [guid]::NewGuid().ToString('N'))
+                $decoy = Join-Path $parent 'd1'
+                [void][System.IO.Directory]::CreateDirectory($decoy)
+                if (-not $NoDecoy) {
+                    [System.IO.File]::WriteAllText((Join-Path $decoy 'fake.ps1'), "[CmdletBinding()]`nparam([switch]`$Flag)`n'DECOY'`n", $script:Utf8)
+                }
+                $bin = [System.IO.Path]::Combine($parent, $Folder)
+                [void][System.IO.Directory]::CreateDirectory($bin)
+                [System.IO.File]::WriteAllText([System.IO.Path]::Combine($bin, 'fake.ps1'), "[CmdletBinding()]`nparam([switch]`$Flag)`n'REAL'`n", $script:Utf8)
+                return $bin
+            }
+        }
+
+        # On Windows PowerShell 5.1 the folder d[1] also matches d1, so the router refuses to start there;
+        # everywhere else the literal script runs. Any other folder name runs the literal script everywhere.
         It 'Runs a script in a folder called <Folder>, with brackets, quotes, blanks and an ampersand, from there and nowhere else' -ForEach @(
             @{ Folder = 'd[1]' }
             @{ Folder = "Bob's tools! & files" }
@@ -283,19 +301,68 @@ Describe 'Invoke-SwCommand' {
             @{ Folder = 'a b (x86)' }
             @{ Folder = 'a`b $x ;y' }
         ) {
-            $parent = Join-Path $TestDrive ('literal-' + [guid]::NewGuid().ToString('N'))
-            # A sibling the folder name would match as a pattern, with a script of the same name that says so.
-            $decoy = Join-Path $parent 'd1'
-            [void][System.IO.Directory]::CreateDirectory($decoy)
-            [System.IO.File]::WriteAllText((Join-Path $decoy 'fake.ps1'), "[CmdletBinding()]`nparam([switch]`$Flag)`n'DECOY'`n", $script:Utf8)
-            $bin = [System.IO.Path]::Combine($parent, $Folder)
-            [void][System.IO.Directory]::CreateDirectory($bin)
-            [System.IO.File]::WriteAllText([System.IO.Path]::Combine($bin, 'fake.ps1'), "[CmdletBinding()]`nparam([switch]`$Flag)`n'REAL'`n", $script:Utf8)
-            $script:SWEEPR_BIN = $bin
+            $script:SWEEPR_BIN = New-PatternFolders $Folder
             $result = Invoke-Cmd 'fake' @('--flag')
             $result.Thrown | Should -BeNullOrEmpty
-            @($result.Output)[0] | Should -BeExactly 'REAL'
-            $script:SweeprExitCode | Should -Be 0
+            if ($Folder -eq 'd[1]' -and ([string]$PSVersionTable.PSEdition) -ceq 'Desktop') {
+                @($result.Output) | Should -Not -Contain 'DECOY'
+                @($result.Output) | Should -Not -Contain 'REAL'
+                $script:SweeprExitCode | Should -Be 1
+                ($script:Errors -join ' ') | Should -Match 'd\[1\]'
+            }
+            else {
+                @($result.Output)[0] | Should -BeExactly 'REAL'
+                $script:SweeprExitCode | Should -Be 0
+            }
+        }
+
+        Context 'with the edition Desktop (Windows PowerShell 5.1), whatever runs the tests' {
+            BeforeEach { Mock Get-SwPowerShellEdition { 'Desktop' } }
+
+            It 'Does not start a script whose folder name also matches another folder: exit 1, a message with both folders' {
+                $script:SWEEPR_BIN = New-PatternFolders 'd[1]'
+                $result = Invoke-Cmd 'fake' @('--flag')
+                $result.Thrown | Should -BeNullOrEmpty
+                @($result.Output) | Should -Not -Contain 'DECOY'
+                @($result.Output) | Should -Not -Contain 'REAL'
+                $script:SweeprExitCode | Should -Be 1
+                $script:Errors.Count | Should -Be 1
+                $script:Errors[0] | Should -Match 'd\[1\]'
+                $script:Errors[0] | Should -Match 'd1'
+                $script:Errors[0] | Should -Match 'Rename or move'
+            }
+
+            It 'Starts no debug session and sets no run id when it refuses' {
+                $script:SWEEPR_BIN = New-PatternFolders 'd[1]'
+                $null = Invoke-Cmd 'fake' @('--flag')
+                $env:_SWEEPR_OPLOG_RUN_ID | Should -BeNullOrEmpty
+                Should -Invoke Start-SwDebugSession -Times 0 -Exactly
+            }
+
+            It 'Runs a script in a folder with brackets when no other folder matches the name' {
+                $script:SWEEPR_BIN = New-PatternFolders ([string]'Tools ' + [char]0x2019 + 's [USB]') -NoDecoy
+                $result = Invoke-Cmd 'fake' @('--flag')
+                @($result.Output)[0] | Should -BeExactly 'REAL'
+                $script:SweeprExitCode | Should -Be 0
+            }
+
+            It 'Runs a script in the folder d[1] when only that folder exists' {
+                $script:SWEEPR_BIN = New-PatternFolders 'd[1]' -NoDecoy
+                $result = Invoke-Cmd 'fake' @('--flag')
+                @($result.Output)[0] | Should -BeExactly 'REAL'
+                $script:SweeprExitCode | Should -Be 0
+            }
+        }
+
+        Context 'with the edition Core (PowerShell 7), whatever runs the tests' {
+            BeforeEach { Mock Get-SwPowerShellEdition { 'Core' } }
+
+            It 'Runs the literal script of the folder d[1], not the one of d1' {
+                $script:SWEEPR_BIN = New-PatternFolders 'd[1]'
+                $result = Invoke-Cmd 'fake' @('--flag')
+                @($result.Output)[0] | Should -BeExactly 'REAL'
+                $script:SweeprExitCode | Should -Be 0
+            }
         }
     }
 
@@ -573,5 +640,69 @@ Describe 'Invoke-SwCommand' {
             [System.Environment]::GetEnvironmentVariable('_SWEEPR_OPLOG_RUN_ID') | Should -BeNullOrEmpty
             Should -Invoke Start-SwDebugSession -Times 0 -Exactly
         }
+    }
+}
+
+Describe 'Get-SwPathCollision and Assert-SwPathUsable (folders with [ ] * ? under Windows PowerShell 5.1)' {
+    BeforeAll {
+        function script:New-Pair([string]$Name, [string]$Sibling, [switch]$WithSibling) {
+            $parent = Join-Path $TestDrive ('pair-' + [guid]::NewGuid().ToString('N'))
+            $real = [System.IO.Path]::Combine($parent, $Name)
+            [void][System.IO.Directory]::CreateDirectory($real)
+            [System.IO.File]::WriteAllText([System.IO.Path]::Combine($real, 'x.ps1'), "'REAL'`n", $script:Utf8)
+            if ($WithSibling) {
+                $other = [System.IO.Path]::Combine($parent, $Sibling)
+                [void][System.IO.Directory]::CreateDirectory($other)
+                [System.IO.File]::WriteAllText([System.IO.Path]::Combine($other, 'x.ps1'), "'DECOY'`n", $script:Utf8)
+            }
+            return [System.IO.Path]::Combine($real, 'x.ps1')
+        }
+    }
+
+    It 'Reports a folder that also matches another folder as a pattern: <Name> and <Sibling>' -ForEach @(
+        @{ Name = 'd[1]'; Sibling = 'd1' }
+        @{ Name = 'a[bc]'; Sibling = 'ab' }
+        @{ Name = 'tools [x64]'; Sibling = 'tools x' }
+    ) {
+        $path = New-Pair $Name $Sibling -WithSibling
+        $message = Get-SwPathCollision -Path $path -Edition 'Desktop'
+        $message | Should -Not -BeNullOrEmpty
+        $message | Should -BeLike "*$([System.IO.Path]::GetDirectoryName($path))*"
+        $message | Should -BeLike "*$([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($path)), $Sibling))*"
+        $message | Should -BeLike '*Rename or move*'
+    }
+
+    It 'Reports nothing when no other folder matches: <Name>' -ForEach @(
+        @{ Name = 'd[1]' }
+        @{ Name = 'tools [x64] it''s & more' }
+    ) {
+        Get-SwPathCollision -Path (New-Pair $Name 'unrelated' -WithSibling) -Edition 'Desktop' | Should -BeNullOrEmpty
+    }
+
+    It 'Reports nothing for the edition Core, even for a colliding folder' {
+        Get-SwPathCollision -Path (New-Pair 'd[1]' 'd1' -WithSibling) -Edition 'Core' | Should -BeNullOrEmpty
+    }
+
+    It 'Reports nothing for a path without [ ] * ? and does not look at the disk for it' {
+        Get-SwPathCollision -Path (Join-Path $TestDrive 'plain\missing\x.ps1') -Edition 'Desktop' | Should -BeNullOrEmpty
+    }
+
+    It 'Reports nothing when the pattern matches nothing at all' {
+        Get-SwPathCollision -Path (Join-Path $TestDrive 'no-such-[1]\x.ps1') -Edition 'Desktop' | Should -BeNullOrEmpty
+    }
+
+    It 'Takes the running edition when none is given' {
+        $path = New-Pair 'd[1]' 'd1' -WithSibling
+        Mock Get-SwPowerShellEdition { 'Desktop' }
+        Get-SwPathCollision -Path $path | Should -Not -BeNullOrEmpty
+        Mock Get-SwPowerShellEdition { 'Core' }
+        Get-SwPathCollision -Path $path | Should -BeNullOrEmpty
+    }
+
+    It 'Throws the message from Assert-SwPathUsable for a collision and returns quietly otherwise' {
+        $path = New-Pair 'd[1]' 'd1' -WithSibling
+        Mock Get-SwPowerShellEdition { 'Desktop' }
+        { Assert-SwPathUsable -Path $path } | Should -Throw '*Rename or move*'
+        { Assert-SwPathUsable -Path (New-Pair 'd[1]' 'd1') } | Should -Not -Throw
     }
 }

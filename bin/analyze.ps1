@@ -58,10 +58,44 @@ if ($ShowHelp) {
     return
 }
 
+function Get-StarterPathCollision {
+    # Windows PowerShell 5.1 reads [ ] * ? in a path it loads or starts as a pattern, so a folder called d[1]
+    # also matches a folder called d1 and the file of the wrong folder could be used. Returns a message when
+    # the pattern matches anything but the literal file, otherwise $null. PowerShell 7 reads the path as it is.
+    param([string]$Path, [string]$Edition = $PSVersionTable.PSEdition)
+
+    if ($Edition -cne 'Desktop') { return $null }
+    if ($Path.IndexOfAny([char[]]'[]*?') -lt 0) { return $null }
+    $found = @()
+    try {
+        $provider = $null
+        $found = @($ExecutionContext.SessionState.Path.GetResolvedProviderPathFromPSPath($Path, [ref]$provider))
+    }
+    catch { return $null }
+    $literal = [System.IO.Path]::GetFullPath($Path)
+    foreach ($item in $found) {
+        if (-not [string]::Equals([System.IO.Path]::GetFullPath([string]$item), $literal, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return ('Sweepr cannot use the folder ' + [System.IO.Path]::GetDirectoryName($Path) + ': a folder name with [ ] * or ? is read as a pattern by Windows PowerShell 5.1, and here it also matches ' +
+                [System.IO.Path]::GetDirectoryName([string]$item) + '. Rename or move the installation to a folder without these characters.')
+        }
+    }
+    return $null
+}
+
 # The installation folder from this script's own location, never from the working directory; .NET
 # path calls keep brackets and quotes in a folder name literal.
 $rootDir = [System.IO.Path]::GetDirectoryName($PSScriptRoot)
-. ([System.IO.Path]::Combine($rootDir, 'lib', 'core', 'tui_binaries.ps1'))
+$tuiFile = [System.IO.Path]::Combine($rootDir, 'lib', 'core', 'tui_binaries.ps1')
+$collision = Get-StarterPathCollision -Path $tuiFile
+if ($null -ne $collision) {
+    [Console]::Error.WriteLine($collision)
+    exit 1
+}
+try { . $tuiFile }
+catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
 
 # The program is provided before any variable changes, so a failure leaves the environment alone.
 $program = Resolve-SwTuiBinary -Name 'analyze' -WindowsDir $rootDir -DestinationPath ([System.IO.Path]::Combine($rootDir, 'bin', 'analyze.exe')) -SourcePath './cmd/analyze/'
@@ -71,16 +105,14 @@ if ([string]::IsNullOrEmpty($program)) {
     exit 1
 }
 
+$collision = Get-StarterPathCollision -Path $program
+if ($null -ne $collision) {
+    Write-SwTuiStatus $collision -Color 'Red'
+    exit 1
+}
+
 $arguments = @()
 if ($Json) { $arguments += '--json' }
-
-# Windows PowerShell 5.1 reads [ ] * ? in a command path as a pattern, so a folder called d[1] would run the
-# program of a folder called d1. Escaped, the pattern matches the literal path. PowerShell 7 takes an existing
-# path literally and would not find the escaped form.
-$call = $program
-if ($PSVersionTable.PSVersion.Major -lt 6 -and $program.IndexOfAny([char[]]'[]*?') -ge 0) {
-    $call = [System.Management.Automation.WildcardPattern]::Escape($program)
-}
 
 # Both variables are put back to what the session had, also when the program cannot be started.
 $savedPath = [System.Environment]::GetEnvironmentVariable('SWEEPR_ANALYZE_PATH')
@@ -92,7 +124,7 @@ try {
     else { Set-AnalyzeVariable -Name 'SWEEPR_ANALYZE_PATH' -Value $Path }
     if ($DebugMode) { Set-AnalyzeVariable -Name 'SWEEPR_DEBUG' -Value '1' }
 
-    & $call @arguments
+    & $program @arguments
     $exitCode = [int]$LASTEXITCODE
 }
 finally {
