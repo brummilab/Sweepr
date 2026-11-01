@@ -17,7 +17,7 @@
 #                         Name = npm, pnpm, pip, go, mise) or 'needs administrator' (-System without admin,
 #                         Section = Name = 'System cleanup')
 #
-# The function switches dry-run mode on for its own duration and restores the previous mode. It never
+# The function switches dry-run mode and the path guard of sw clean on for its own duration and restores both. It never
 # writes the clean-list file, never clears the screen and never asks anything. Platform neutral:
 # path identity checks and every changing cmdlet are mocked; the temp fixtures live in $TestDrive.
 
@@ -32,7 +32,7 @@ BeforeAll {
     if (Test-Path -LiteralPath $previewScript) { . $previewScript }
 
     # Commands that exist on Windows only get a stub so that Pester can mock them everywhere.
-    foreach ($name in @('Remove-AppxPackage', 'Stop-Service', 'Set-Service', 'Restart-Service', 'Disable-WindowsOptionalFeature', 'Remove-ItemProperty', 'Set-ItemProperty')) {
+    foreach ($name in @('Remove-AppxPackage', 'Stop-Service', 'Set-Service', 'Restart-Service', 'Disable-WindowsOptionalFeature', 'Remove-ItemProperty', 'Set-ItemProperty', 'Clear-RecycleBin')) {
         if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
             Set-Item -Path "function:script:$name" -Value { param() }
         }
@@ -41,19 +41,19 @@ BeforeAll {
         'New-Item', 'Set-Content', 'Add-Content', 'Out-File', 'Move-Item', 'Copy-Item', 'Rename-Item', 'Clear-Content', 'New-ItemProperty',
         'Remove-Item', 'Clear-RecycleBin', 'Remove-AppxPackage', 'Start-Process', 'Stop-Process', 'Stop-Service',
         'Set-Service', 'Restart-Service', 'Disable-WindowsOptionalFeature', 'Set-ItemProperty', 'Remove-ItemProperty',
-        'Remove-SafeDirectoryTree', 'Clear-Host', 'Read-Host'
+        'Remove-SwDirectoryTree', 'Clear-Host', 'Read-Host'
     )
     # The real section functions, kept before any test replaces them with a mock.
-    $script:RealInvokeUserCleanup = ${function:Invoke-UserCleanup}
+    $script:RealInvokeUserCleanup = ${function:Invoke-SwUserCleanup}
     $script:RealInvokeDevToolsCleanup = ${function:Invoke-DevToolsCleanup}
-    $script:RealInvokeSystemCleanup = ${function:Invoke-SystemCleanup}
+    $script:RealInvokeSystemCleanup = ${function:Invoke-SwSystemCleanup}
 
     # A section as the real cleanup modules run it: titled, removing through the shared dry-run sink.
     function script:Invoke-FakeSection {
         param([string]$Title, [string]$Description, [string[]]$Paths)
-        Start-Section $Title
-        if ($Paths) { Remove-SafeItems -Paths $Paths -Description $Description }
-        Stop-Section
+        Start-SwSection $Title
+        if ($Paths) { Remove-SwItems -Paths $Paths -Description $Description }
+        Stop-SwSection
     }
     function script:Write-Bytes {
         param([string]$Path, [int]$Count, [int]$DaysOld = 0)
@@ -102,7 +102,7 @@ BeforeAll {
 
 AfterAll {
     foreach ($name in $script:SavedEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $script:SavedEnv[$name]) }
-    Set-DryRunMode -Enabled $false
+    Set-SwDryRunMode -Enabled $false
 }
 
 Describe 'Get-SweeprCleanPreview' {
@@ -132,26 +132,26 @@ Describe 'Get-SweeprCleanPreview' {
         # The clean command would announce this list; a preview must not create it.
         $script:ExportListFile = Join-Path $script:FakeHome 'clean-list.txt'
         $script:SeenDryRun = $null
-        Set-DryRunMode -Enabled $false
-        Reset-CleanupStats
+        Set-SwDryRunMode -Enabled $false
+        Reset-SwCleanupStats
 
         # Identity checks use Win32 file IDs; the paths themselves stay real.
         Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
         Mock Test-SwPathSnapshot { $true }
-        Mock Test-IsAdmin { $false }
+        Mock Test-SwAdmin { $false }
         foreach ($name in $script:ChangingCommands) { Mock $name ([scriptblock]::Create("throw '$name must not run in a preview'")) }
 
         Mock Invoke-SweeprOwnerProcess { $null }
-        Mock Invoke-UserCleanup {
-            $script:SeenDryRun = Test-DryRunMode
+        Mock Invoke-SwUserCleanup {
+            $script:SeenDryRun = Test-SwDryRunMode
             Invoke-FakeSection 'User essentials' 'User temp files' @($script:FileA, $script:FileB)
         }
-        Mock Clear-BrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
-        Mock Clear-AppCaches { Invoke-FakeSection 'Application caches' 'Application cache' @() }
+        Mock Clear-SwBrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
+        Mock Clear-SwAppCaches { Invoke-FakeSection 'Application caches' 'Application cache' @() }
         Mock Invoke-DevToolsCleanup { Invoke-FakeSection 'Developer tools' 'Developer cache' @() }
         Mock Invoke-AppCleanup { Invoke-FakeSection 'Applications' 'Application data' @() }
-        Mock Clear-GPUShaderCaches { Invoke-FakeSection 'GPU shader caches' 'Shader cache' @() }
-        Mock Invoke-SystemCleanup { Invoke-FakeSection 'System cleanup' 'Windows temp files' @($script:SysFile) }
+        Mock Clear-SwGpuShaderCaches { Invoke-FakeSection 'GPU shader caches' 'Shader cache' @() }
+        Mock Invoke-SwSystemCleanup { Invoke-FakeSection 'System cleanup' 'Windows temp files' @($script:SysFile) }
     }
 
     Context 'Interface' {
@@ -244,16 +244,16 @@ Describe 'Get-SweeprCleanPreview' {
 
     Context 'Read-only guarantee' {
         It 'Runs in dry-run mode even when the caller is not, and restores the caller mode' {
-            Set-DryRunMode -Enabled $false
+            Set-SwDryRunMode -Enabled $false
             $null = Get-SweeprCleanPreview
             $script:SeenDryRun | Should -BeTrue
-            Test-DryRunMode | Should -BeFalse
+            Test-SwDryRunMode | Should -BeFalse
         }
 
         It 'Leaves the caller dry-run mode on when it was on' {
-            Set-DryRunMode -Enabled $true
+            Set-SwDryRunMode -Enabled $true
             $null = Get-SweeprCleanPreview
-            Test-DryRunMode | Should -BeTrue
+            Test-SwDryRunMode | Should -BeTrue
         }
 
         It 'Removes nothing and calls no changing cmdlet' {
@@ -277,10 +277,33 @@ Describe 'Get-SweeprCleanPreview' {
         }
     }
 
+    Context 'Path guard of sw clean' {
+        AfterEach { $script:SweeprCleanPathGuard = $false }
+
+        It 'Switches the guard on while the sections run and puts the caller value back' -ForEach @(
+            @{ Before = $false }
+            @{ Before = $true }
+        ) {
+            $script:SeenGuard = $null
+            Mock Invoke-SwUserCleanup { $script:SeenGuard = $script:SweeprCleanPathGuard }
+            $script:SweeprCleanPathGuard = $Before
+            $null = Get-SweeprCleanPreview
+            $script:SeenGuard | Should -BeTrue
+            $script:SweeprCleanPathGuard | Should -Be $Before
+        }
+
+        It 'Puts the caller value back when a section throws' {
+            Mock Invoke-SwUserCleanup { throw 'boom' }
+            $script:SweeprCleanPathGuard = $false
+            $null = Get-SweeprCleanPreview
+            $script:SweeprCleanPathGuard | Should -BeFalse
+        }
+    }
+
     Context 'Real user cleanup' {
         It 'Counts an old file in the temp folder and ignores a fresh one' {
             # The user section runs unmocked; the other sections stay empty.
-            Mock Invoke-UserCleanup { & $script:RealInvokeUserCleanup @PSBoundParameters }
+            Mock Invoke-SwUserCleanup { & $script:RealInvokeUserCleanup @PSBoundParameters }
             $old = Join-Path $env:TEMP 'old.tmp'
             $fresh = Join-Path $env:TEMP 'fresh.tmp'
             Write-Bytes -Path $old -Count 100 -DaysOld 30
@@ -297,19 +320,19 @@ Describe 'Get-SweeprCleanPreview' {
 
     Context '-System' {
         It 'Leaves the system section out by default' {
-            Mock Test-IsAdmin { $true }
+            Mock Test-SwAdmin { $true }
             $result = Get-SweeprCleanPreview
-            Should -Invoke Invoke-SystemCleanup -Times 0 -Exactly
+            Should -Invoke Invoke-SwSystemCleanup -Times 0 -Exactly
             @($result.Sections | ForEach-Object Name) | Should -Not -Contain 'System cleanup'
             @($result.NotMeasured).Count | Should -Be 0
             $result.IsAdmin | Should -BeTrue
         }
 
         It 'Adds the system section as an administrator, still read-only' {
-            Mock Test-IsAdmin { $true }
-            Set-DryRunMode -Enabled $false
+            Mock Test-SwAdmin { $true }
+            Set-SwDryRunMode -Enabled $false
             $result = Get-SweeprCleanPreview -System
-            Should -Invoke Invoke-SystemCleanup -Times 1 -Exactly
+            Should -Invoke Invoke-SwSystemCleanup -Times 1 -Exactly
             $section = $result.Sections | Where-Object Name -eq 'System cleanup'
             $section.TotalBytes | Should -Be 4000
             ($result.Hits | Where-Object Path -eq $script:SysFile).Section | Should -Be 'System cleanup'
@@ -320,7 +343,7 @@ Describe 'Get-SweeprCleanPreview' {
 
         It 'Marks the system section as not measured without administrator rights, and does not elevate' {
             $result = Get-SweeprCleanPreview -System
-            Should -Invoke Invoke-SystemCleanup -Times 0 -Exactly
+            Should -Invoke Invoke-SwSystemCleanup -Times 0 -Exactly
             Should -Invoke Start-Process -Times 0 -Exactly
             $entry = @($result.NotMeasured | Where-Object Section -eq 'System cleanup')
             $entry.Count | Should -Be 1
@@ -332,41 +355,18 @@ Describe 'Get-SweeprCleanPreview' {
         }
     }
 
-    Context '-System with the optional system tools' {
+    Context '-System and the removed system tools' {
         It 'Does not list DISM or Disk Cleanup for -System, because sw clean never runs them' {
-            Mock Test-IsAdmin { $true }
-            Mock Invoke-SystemCleanup { & $script:RealInvokeSystemCleanup @PSBoundParameters }
-            foreach ($name in @('Clear-SystemTempFiles', 'Clear-WindowsLogs', 'Clear-InstallerCache', 'Clear-MemoryDumps', 'Invoke-ComponentStoreCleanup', 'Invoke-DiskCleanupTool')) {
-                Mock $name {}
-            }
+            Mock Test-SwAdmin { $true }
+            Mock Invoke-SwSystemCleanup { & $script:RealInvokeSystemCleanup @PSBoundParameters }
             $result = Get-SweeprCleanPreview -System
-            Should -Invoke Invoke-ComponentStoreCleanup -Times 0 -Exactly
-            Should -Invoke Invoke-DiskCleanupTool -Times 0 -Exactly
             Should -Invoke Start-Process -Times 0 -Exactly
             @($result.NotMeasured | Where-Object { $_.Name -in @('Component Store cleanup', 'Disk Cleanup tool') }).Count | Should -Be 0
             @($result.NotMeasured).Count | Should -Be 0
         }
 
-        It 'Reports the optional DISM and Disk Cleanup parts as not previewable in a dry run and starts nothing' {
-            # Called directly with the options, as a future caller could: the real tool functions run their dry-run path.
-            Mock Test-IsAdmin { $true }
-            foreach ($name in @('Clear-SystemTempFiles', 'Clear-WindowsLogs', 'Clear-InstallerCache', 'Clear-MemoryDumps')) { Mock $name {} }
-            $collected = New-Object System.Collections.Generic.List[object]
-            Set-DryRunMode -Enabled $true
-            $script:NotMeasuredCollector = $collected
-            try { & $script:RealInvokeSystemCleanup -IncludeComponentStore -IncludeDiskCleanup 6>$null }
-            finally { $script:NotMeasuredCollector = $null; Set-DryRunMode -Enabled $false }
-            Should -Invoke Start-Process -Times 0 -Exactly
-            foreach ($name in @('Component Store cleanup', 'Disk Cleanup tool')) {
-                $entry = @($collected.ToArray() | Where-Object Name -eq $name)
-                $entry.Count | Should -Be 1
-                $entry[0].Section | Should -Be 'System cleanup'
-                $entry[0].Reason | Should -Be 'not previewable'
-            }
-        }
-
         It 'Does not mention them without -System' {
-            Mock Test-IsAdmin { $true }
+            Mock Test-SwAdmin { $true }
             $result = Get-SweeprCleanPreview
             @($result.NotMeasured).Count | Should -Be 0
         }
@@ -375,47 +375,47 @@ Describe 'Get-SweeprCleanPreview' {
     Context 'A section that throws' {
         It 'Puts mode, statistics and collector back, keeps the earlier hits and reports the error' {
             $script:ExportListFile = $null
-            Set-DryRunMode -Enabled $true
-            Remove-SafeItems -Paths @($script:FileA) -Description 'caller work'
-            $statsBefore = Get-CleanupStats
-            Set-DryRunMode -Enabled $false
-            Mock Clear-BrowserCaches { throw 'boom' }
+            Set-SwDryRunMode -Enabled $true
+            Remove-SwItems -Paths @($script:FileA) -Description 'caller work'
+            $statsBefore = Get-SwCleanupStats
+            Set-SwDryRunMode -Enabled $false
+            Mock Clear-SwBrowserCaches { throw 'boom' }
 
             $result = Get-SweeprCleanPreview -SkipExternalTools
 
-            Test-DryRunMode | Should -BeFalse
-            $statsAfter = Get-CleanupStats
+            Test-SwDryRunMode | Should -BeFalse
+            $statsAfter = Get-SwCleanupStats
             foreach ($key in @('TotalSizeKB', 'FilesCleaned', 'TotalItems')) { $statsAfter[$key] | Should -Be $statsBefore[$key] }
             @($result.NotMeasured | Where-Object { $_.Reason -match 'boom' }).Count | Should -Be 1
             ($result.Sections | Where-Object Name -eq 'User essentials').TotalBytes | Should -Be 3000
             Test-Path -LiteralPath $script:FileA | Should -BeTrue
 
             # Nothing of the failed run is left behind for the next one.
-            Mock Clear-BrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
+            Mock Clear-SwBrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
             $next = Get-SweeprCleanPreview
             $next.TotalBytes | Should -Be 3060
             @($next.NotMeasured).Count | Should -Be 0
         }
 
         It 'Leaves a caller that is in a dry run in that dry run' {
-            Set-DryRunMode -Enabled $true
-            Mock Invoke-UserCleanup { throw 'boom' }
+            Set-SwDryRunMode -Enabled $true
+            Mock Invoke-SwUserCleanup { throw 'boom' }
             $null = Get-SweeprCleanPreview
-            Test-DryRunMode | Should -BeTrue
+            Test-SwDryRunMode | Should -BeTrue
         }
     }
 
     Context '-GameMedia and -GpuShaders follow sw clean' {
         It 'Runs neither GPU shader caches nor game media by default' {
             $result = Get-SweeprCleanPreview
-            Should -Invoke Clear-GPUShaderCaches -Times 0 -Exactly
+            Should -Invoke Clear-SwGpuShaderCaches -Times 0 -Exactly
             Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGameMedia }
             @($result.Sections | ForEach-Object Name) | Should -Not -Contain 'GPU shader caches'
         }
 
         It 'Adds the GPU shader section on request' {
             $result = Get-SweeprCleanPreview -GpuShaders
-            Should -Invoke Clear-GPUShaderCaches -Times 1 -Exactly
+            Should -Invoke Clear-SwGpuShaderCaches -Times 1 -Exactly
             @($result.Sections | ForEach-Object Name) | Should -Contain 'GPU shader caches'
         }
 
@@ -474,10 +474,10 @@ Describe 'Get-SweeprCleanPreview' {
 
 Describe 'lib/clean/preview.ps1 on its own' {
     It 'Loads on its own in a new process and defines its functions' {
-        $result = Invoke-FreshLoad -File (Join-Path $script:LibDir 'clean\preview.ps1') -Functions @('Get-SweeprCleanPreview', 'Invoke-UserCleanup', 'Invoke-SystemCleanup')
+        $result = Invoke-FreshLoad -File (Join-Path $script:LibDir 'clean\preview.ps1') -Functions @('Get-SweeprCleanPreview', 'Invoke-SwUserCleanup', 'Invoke-SwSystemCleanup')
         $result.Err | Should -BeNullOrEmpty
         $result.ExitCode | Should -Be 0
-        foreach ($name in @('Get-SweeprCleanPreview', 'Invoke-UserCleanup', 'Invoke-SystemCleanup')) {
+        foreach ($name in @('Get-SweeprCleanPreview', 'Invoke-SwUserCleanup', 'Invoke-SwSystemCleanup')) {
             $result.Out | Should -Match "FOUND $name"
         }
     }
