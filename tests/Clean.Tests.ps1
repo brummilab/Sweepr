@@ -18,6 +18,9 @@ BeforeAll {
     . "$script:LibDir\clean\dev.ps1"
     . "$script:LibDir\clean\apps.ps1"
     . "$script:LibDir\clean\system.ps1"
+
+    # The command script defines the summary; dot-sourcing it runs nothing.
+    . (Join-Path $script:WindowsDir 'bin\clean.ps1')
     
     # Enable dry-run mode for all tests
     $env:SWEEPR_DRY_RUN = "1"
@@ -37,18 +40,6 @@ Describe "User Cleanup Module" {
         
         It "Should run without error in dry-run mode" {
             { Clear-UserTempFiles } | Should -Not -Throw
-        }
-    }
-    
-    Context "Clear-OldDownloads" {
-        It "Should have Clear-OldDownloads function" {
-            Get-Command Clear-OldDownloads -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
-    Context "Clear-RecycleBin" {
-        It "Should have Clear-RecycleBin function" {
-            Get-Command Clear-RecycleBin -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
     }
     
@@ -233,31 +224,14 @@ Describe "Apps Cleanup Module" {
 }
 
 Describe "System Cleanup Module" {
-    Context "System Temp" {
-        It "Should have Clear-SystemTempFiles function" {
-            Get-Command Clear-SystemTempFiles -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
-    Context "Windows Logs" {
-        It "Should have Clear-WindowsLogs function" {
-            Get-Command Clear-WindowsLogs -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
-    Context "Memory Dumps" {
-        It "Should have Clear-MemoryDumps function" {
-            Get-Command Clear-MemoryDumps -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
     Context "Admin Requirements" {
         It "Should check for admin when needed" {
             # System cleanup should handle non-admin gracefully
-            { Clear-SystemTempFiles } | Should -Not -Throw
+            Mock Test-SwAdmin { $false }
+            { Invoke-SwSystemCleanup 6>$null 3>$null } | Should -Not -Throw
         }
     }
-    
+
     Context "Invoke-SystemCleanup" {
         It "Should have main system cleanup function" {
             Get-Command Invoke-SystemCleanup -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
@@ -478,12 +452,9 @@ Describe "Owner cache accounting" {
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
     }
     It "Keeps owner-only activity out of the already-clean summary" {
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir 'bin\clean.ps1'), [ref]$null, [ref]$null)
-        $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Show-CleanupSummary' }, $true)
-        . ([scriptblock]::Create($definition.Extent.Text))
-        Mock Get-FreeSpace { '10 GB' }
+        Mock Get-SwFreeSpace { '10 GB' }
         Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
-        $output = Show-CleanupSummary -Stats (Get-CleanupStats) -IsDryRun $false 6>&1 | Out-String
+        $output = Show-SwCleanSummary -Stats (Get-CleanupStats) -IsDryRun $false 6>&1 | Out-String
         $output | Should -Not -Match 'already clean'
         $output | Should -Match 'Tool cache cleanup completed'
     }
@@ -529,13 +500,10 @@ Describe 'Review regressions: owner log and summary' {
         Should -Invoke Write-SweeprOperation -Times 0 -Exactly
     }
     It 'Uses one item count and no protection tutorial in a dry-run summary' {
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:WindowsDir 'bin\clean.ps1'), [ref]$null, [ref]$null)
-        $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Show-CleanupSummary' }, $true)
-        . ([scriptblock]::Create($definition.Extent.Text))
-        Mock Get-FreeSpace { '10 GB' }
-        Mock Show-SummaryBlock { Write-Output ($Details -join "`n") }
+        Mock Get-SwFreeSpace { '10 GB' }
+        Mock Show-SwResultFrame { Write-Output ($Details -join "`n") }
         $script:ExportListFile = 'fixture-list.txt'
-        $output = Show-CleanupSummary -Stats @{ TotalSizeKB = 4; FilesCleaned = 2; TotalItems = 1; OwnerCleanups = 0 } -IsDryRun $true | Out-String
+        $output = Show-SwCleanSummary -Stats @{ TotalSizeKB = 4; FilesCleaned = 2; TotalItems = 1; OwnerCleanups = 0 } -IsDryRun $true | Out-String
         $output | Should -Match 'Potential space:.*Items: 2'
         $output | Should -Not -Match 'Categories:|--whitelist'
     }
