@@ -205,7 +205,8 @@ Describe 'Whitelist reading code names its encoding (H1)' {
 
 Describe 'Whitelist and purge_paths.txt are written as UTF-8 with BOM (H1)' {
     BeforeAll {
-        Import-ScriptFunction -RelativePath 'bin/clean.ps1' -Name 'Edit-Whitelist'
+        # Dot-sourcing the command script defines Edit-SwWhitelist and runs nothing.
+        . (Join-Path $script:RepoRoot 'bin/clean.ps1')
         Import-ScriptFunction -RelativePath 'bin/purge.ps1' -Name 'Edit-SearchPaths'
         function script:Write-Info { param($Message) }
         function script:Write-Success { param($Message) }
@@ -227,8 +228,8 @@ Describe 'Whitelist and purge_paths.txt are written as UTF-8 with BOM (H1)' {
         $env:USERPROFILE = $script:SavedUserProfile
     }
 
-    It 'Edit-Whitelist writes a BOM and keeps the non-ASCII profile name' {
-        Edit-Whitelist
+    It 'Edit-SwWhitelist writes a BOM and keeps the non-ASCII profile name' {
+        Edit-SwWhitelist
         $bytes = [System.IO.File]::ReadAllBytes($script:Config.WhitelistFile)
         ($bytes[0..2] -join ',') | Should -BeExactly '239,187,191'
         [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3) | Should -Match 'C:\\Users\\Müller\\AppData\\Local\\CriticalApp'

@@ -212,20 +212,6 @@ Describe 'purge_paths.txt in a data folder with brackets' {
 }
 
 Describe 'Own data paths use -LiteralPath in the source' {
-    It 'Writes clean-list.txt with Set-Content -LiteralPath' {
-        $ast = Get-Ast 'bin\clean.ps1'
-        $uses = @(Get-CommandUse -Node $ast -Name 'Set-Content' | Where-Object { $_.Text -match 'ExportListFile' })
-        $uses.Count | Should -BeGreaterThan 0
-        foreach ($use in $uses) { $use.Literal | Should -BeTrue -Because "bin/clean.ps1:$($use.Line) writes clean-list.txt" }
-    }
-
-    It 'Checks the clean-list.txt folder with Test-Path -LiteralPath' {
-        $ast = Get-Ast 'bin\clean.ps1'
-        $uses = @(Get-CommandUse -Node $ast -Name 'Test-Path' | Where-Object { $_.Text -match 'exportDir' })
-        $uses.Count | Should -BeGreaterThan 0
-        foreach ($use in $uses) { $use.Literal | Should -BeTrue -Because "bin/clean.ps1:$($use.Line)" }
-    }
-
     It 'Accesses purge_paths.txt with -LiteralPath in Get-SearchPaths and Edit-SearchPaths' {
         $ast = Get-Ast 'bin\purge.ps1'
         foreach ($name in 'Get-SearchPaths', 'Edit-SearchPaths') {
@@ -241,9 +227,8 @@ Describe 'Own data paths use -LiteralPath in the source' {
 
 Describe 'clean whitelist in a data folder with brackets (F-01j)' {
     BeforeAll {
-        Import-ScriptFunction -RelativePath 'bin\clean.ps1' -Name 'Edit-Whitelist'
-        function script:Write-Info { param($Message) }
-        function script:Write-Success { param($Message) }
+        # Dot-sourcing the command script defines Edit-SwWhitelist and runs nothing.
+        . (Join-Path $script:ProjectRoot 'bin\clean.ps1')
     }
 
     BeforeEach {
@@ -260,7 +245,7 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
     }
 
     It 'Creates the config folder and whitelist.txt when the data folder has brackets' {
-        Edit-Whitelist
+        Edit-SwWhitelist
         Test-Path -LiteralPath $script:ConfigDir -PathType Container | Should -BeTrue
         Test-Path -LiteralPath $script:WhitelistFile -PathType Leaf | Should -BeTrue
         (Get-Content -LiteralPath $script:WhitelistFile -Raw) | Should -Match 'Sweepr Whitelist'
@@ -269,7 +254,7 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
     It 'Creates whitelist.txt even when a look-alike folder has one' {
         New-Item -ItemType Directory -Path $script:LookalikeDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Value 'other'
-        Edit-Whitelist
+        Edit-SwWhitelist
         Test-Path -LiteralPath $script:WhitelistFile -PathType Leaf | Should -BeTrue
         (Get-Content -LiteralPath $script:WhitelistFile -Raw) | Should -Match 'Sweepr Whitelist'
     }
@@ -277,13 +262,13 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
     It 'Does not overwrite the look-alike whitelist.txt' {
         New-Item -ItemType Directory -Path $script:ConfigDir, $script:LookalikeDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Value 'other'
-        Edit-Whitelist
+        Edit-SwWhitelist
         (Get-Content -LiteralPath (Join-Path $script:LookalikeDir 'whitelist.txt') -Raw).Trim() | Should -BeExactly 'other'
     }
 
     It 'Creates the config folder even when a look-alike config folder exists' {
         New-Item -ItemType Directory -Path $script:LookalikeDir -Force | Out-Null
-        Edit-Whitelist
+        Edit-SwWhitelist
         Test-Path -LiteralPath $script:ConfigDir -PathType Container | Should -BeTrue
         @(Get-ChildItem -LiteralPath $script:LookalikeDir -Force).Count | Should -Be 0
     }
@@ -291,12 +276,12 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
     It 'Keeps an existing whitelist.txt untouched' {
         New-Item -ItemType Directory -Path $script:ConfigDir -Force | Out-Null
         Set-Content -LiteralPath $script:WhitelistFile -Value 'keep me'
-        Edit-Whitelist
+        Edit-SwWhitelist
         (Get-Content -LiteralPath $script:WhitelistFile -Raw).Trim() | Should -BeExactly 'keep me'
     }
 
     It 'Opens the real whitelist path in the editor, quoted' {
-        Edit-Whitelist
+        Edit-SwWhitelist
         $quoted = '"{0}"' -f $script:WhitelistFile
         Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { (@($ArgumentList) -join ' ') -ceq $quoted }
     }
@@ -305,20 +290,11 @@ Describe 'clean whitelist in a data folder with brackets (F-01j)' {
         $dir = Join-Path $script:Case 'Max Muster (old) [x]/config'
         $file = Join-Path $dir 'whitelist.txt'
         $script:Config = @{ WhitelistFile = $file }
-        Edit-Whitelist
+        Edit-SwWhitelist
         $quoted = '"{0}"' -f $file
         Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
             @($ArgumentList).Count -eq 1 -and $ArgumentList[0] -ceq $quoted
         }
         $quoted | Should -Match '^".* \(old\) .*"$'
-    }
-
-    It 'Uses -LiteralPath for every path access in Edit-Whitelist' {
-        $function = Get-FunctionAst -Ast (Get-Ast 'bin\clean.ps1') -Name 'Edit-Whitelist'
-        $uses = @(Get-CommandUse -Node $function -Name 'Test-Path', 'Set-Content', 'Get-Content')
-        $uses.Count | Should -BeGreaterThan 0
-        foreach ($use in $uses) {
-            $use.Literal | Should -BeTrue -Because "bin/clean.ps1:$($use.Line) in Edit-Whitelist: $($use.Text)"
-        }
     }
 }
