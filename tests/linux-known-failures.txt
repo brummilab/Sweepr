@@ -52,6 +52,7 @@ Application cache boundaries.Rechecks the owner after sizing in dry-run true
 Application cache boundaries.Records a last-moment busy owner as skipped with no reclaimed files
 Application cache boundaries.Removes only old crash dumps across user and system cleanup
 Application cache boundaries.Uses Firefox local caches and keeps its roaming profile stores
+Application caches with the real helpers.S-2 A-4 [W] keeps all new Teams leaves when the whitelist names the Packages folder with a wildcard
 Assert-SwDataWritable.A-15 [W] stops with the message for a folder on a drive that does not exist
 Assert-SwDataWritable.A-15 [W] stops with the message when the ACL denies writing
 Base Module.Color Definitions.Should expose the full icon table in Windows PowerShell
@@ -66,7 +67,6 @@ Bounded vendor uninstaller wait.Cancels the waiting pipeline without killing fix
 Bounded vendor uninstaller wait.Keeps waiting for a child after the parent exits
 Bounded vendor uninstaller wait.Returns the real exit code after normal completion
 Bounded vendor uninstaller wait.Times out without killing the vendor parent or child
-Cache Cleanup Module.Browser Cache Functions.Should run browser cache cleanup without error
 Clean Command.Dry Run Mode.Completes a real dry run without deleting its candidate
 Clean Command.Help Display.Should mention dry-run in help
 Clean Command.Help Display.Should show help without error
@@ -79,13 +79,12 @@ Cleanup physical boundaries.Protects children of a literal directory whitelist w
 Cleanup physical boundaries.Reads a literal bracket-containing whitelist filename
 Cleanup physical boundaries.Reads the whitelist once for a whole tree, not once per child
 Cleanup physical boundaries.Still removes an ordinary cache directory
+Clear-SwReportRoot.CL-31 [W] keeps a report when its creation time is recent although its write time is old
+Clear-SwUserTempFiles.CL-21a [W] leaves out a known folder (Documents, Desktop) as TEMP
 Complete install owner probes.Allows an empty complete inventory
 Complete install owner probes.Includes hidden registered components without applying the menu filter
 Complete install owner probes.Reports Store enumeration failures as incomplete
 Complete install owner probes.Reports registry read failures as incomplete
-Conservative cleanup targets.Keeps Spotify offline stores during automatic cleanup
-Conservative cleanup targets.Keeps Teams blob_storage while still cleaning its exact cache leaves
-Conservative cleanup targets.Keeps Teams tmp while still cleaning its exact cache leaves
 Copied installation ownership.Refuses a linked destination ancestor without modifying its target
 Data folder below a cleanup target.Clear-DirectoryContents still clears a prefix sibling of the data folder
 Data folder below a cleanup target.Remove-OldFiles still removes old files in the cleanup target itself
@@ -99,28 +98,16 @@ Debug through installed launcher call shapes.Creates a debug session through Com
 Debug through installed launcher call shapes.Creates a debug session through File
 Default protection lists.B-10 [W] protects a path with a trailing dot in a segment of a system folder
 Default protection lists.B-5 [W] protects the system root and its children (default lists)
-File Operations Module.Format-ByteSize.Should format bytes correctly
-File Operations Module.Format-ByteSize.Should handle large numbers
-File Operations Module.Get-PathSize.Should return 0 for non-existent path
 File Operations Module.Get-PathSize.Should return size for directory
-File Operations Module.Get-PathSize.Should return size for file
-File Operations Module.Operation log.Keeps one record per line whatever the name holds
 File Operations Module.Operation log.Moves a log over its size limit aside before the next session
-File Operations Module.Operation log.Never deletes a folder recursively when it gained entries after the walk
 File Operations Module.Operation log.Records a removal that failed
 File Operations Module.Operation log.Records each removed item under one session marker
 File Operations Module.Operation log.Records how far a partial folder removal got
 File Operations Module.Operation log.Records why a folder was refused before anything was removed
-File Operations Module.Operation log.Removes an empty read-only folder
-File Operations Module.Operation log.Retries a line while another run holds the log
-File Operations Module.Operation log.Says on the debug stream when a line could not be written
 File Operations Module.Operation log.Writes nothing for a dry run or with SWEEPR_NO_OPLOG=1
 File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeDirectoryTree
 File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeItem
 File Operations Module.Remove-SafeItem.Reads the whitelist once for a whole tree removal through Remove-SafeItems
-File Operations Module.Remove-SafeItem.Should not partially remove a directory tree when a protected child is present
-File Operations Module.Remove-SafeItem.Should not remove protected paths
-File Operations Module.Remove-SafeItem.Should reject dry-run previews when a directory tree contains a protected child
 File Operations Module.Remove-SafeItem.Should remove empty directories successfully
 File Operations Module.Remove-SafeItem.Should remove file successfully
 File Operations Module.Remove-SafeItem.Should respect DryRun mode
@@ -128,31 +115,22 @@ File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk
 File Operations Module.Remove-SafeItem.Sizes a directory from its validated walk instead of walking it again (dry run: True)
 File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: False)
 File Operations Module.Remove-SafeItem.Sizes each directory of a batch from its validated walk (dry run: True)
-File Operations Module.Remove-SafeItem.Still refuses a whitelisted child with the single whitelist read
-File Operations Module.Test-ProtectedPath.Should keep a planned path under an unprotected parent safe
-File Operations Module.Test-ProtectedPath.Should not protect temp directories
-File Operations Module.Test-ProtectedPath.Should protect Windows Defender paths
-File Operations Module.Test-ProtectedPath.Should protect Windows directory
-File Operations Module.Test-ProtectedPath.Should protect a final path when the list stores a short-name spelling
 File Operations Module.Test-ProtectedPath.Should protect a path reached through a junction into a protected tree
-File Operations Module.Test-ProtectedPath.Should protect a trailing-dot alias of a protected tree
-File Operations Module.Test-ProtectedPath.Should protect the 8.3 short-name spelling of a protected tree
 File Operations Module.Test-ProtectedPath.Should protect the user profile root exactly
-File Operations Module.Test-ProtectedPath.Should resolve an existing short-name alias to its final path
-File Operations Module.Test-SafePath.Should return false for empty paths
-File Operations Module.Test-SafePath.Should return false for protected paths
 File Operations Module.Test-SafePath.Should return false for the user profile root
-File Operations Module.Test-SafePath.Should return true for safe paths
 Generated cmd launchers.Preserves apostrophes, exclamation marks, spaces, metacharacters and long flags
 Generated cmd launchers.Returns the script exit code when removal deletes its running batch file
 Generic game content in install folders.Keeps ordinary installs and a single Steam game eligible
 Generic game content in install folders.Rechecks content in the existing final leftover ownership guard
+Get-SwCacheProfiles with real identities.CL-25 [W] gives the profiles of an ordinary root when identities are real
+Get-SwCacheProfiles with real identities.CL-25 [W] leaves out a junction as a profile, keeps the others and the files behind the junction
 Get-SwFreeSpace.A-17 [W] gives the free space of a lower-case letter as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the default drive as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter and colon as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter only as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter, colon and backslash as number and unit in the size format
 Get-SwNativeArchitecture (RT-18).[W] Takes the machine architecture from the system-wide registry value, not from the process
+Get-SwPathCollision.CL-6 S-15 [W] stops Windows PowerShell 5.1 with exit 1 and an empty standard output when a pattern folder lies beside the installation
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives Success true and no items for a root that is a junction to a folder with content
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives the snapshot of the root that a fresh Get-SwPathSnapshot -AllowLeafLink gives
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a protected folder inside a tree below the 8.3 spelling of the temp folder
@@ -213,7 +191,6 @@ Path snapshots.F-9 [W] gives a snapshot for a link as the entry with -AllowLeafL
 Portable update without Git.Prints the portable message with an empty PATH
 Profile mode stays unchanged.Protects the profile data and cache folders the same way
 Profile mode stays unchanged.Still cleans an ordinary temp folder that is not the data folder
-Protected system cleanup does not disturb services.Never stops, starts or restarts FontCache or Windows Update during system cleanup
 Purge Command.Help Display.Should list artifact types in help
 Purge Command.Help Display.Should show help without error
 Purge project boundaries.checks Git again immediately before removal after sizing
@@ -287,7 +264,6 @@ Store package eligibility at the removal boundary.Retains a stale Store selectio
 Store package eligibility at the removal boundary.Retains a stale Store selection when current evidence is unreadable
 Store package eligibility at the removal boundary.Still removes an exactly matched ordinary Store app
 Sweepr.SwSpinner.LG-39 [W] writes the Braille characters to the standard output handle of a real console buffer and keeps the code page
-System Cleanup Module.Admin Requirements.Should check for admin when needed
 Test runner exit status.passes when the native Go checks pass
 Test runner exit status.passes when two Go installs are on PATH
 Test-SwAdmin.A-16 [W] returns a bool that matches the elevation of the current process
@@ -301,7 +277,6 @@ Test-SwProtectedPath links and aliases [W].B-11 still compares list entries in t
 Test-SwProtectedPath links and aliases [W].B-6 protects the target of a junction that is spelled as an exact list entry
 Test-SwProtectedPath links and aliases [W].B-9 protects what lies below the final spelling of a Packages folder that is a junction
 Test-SwProtectedPath links and aliases [W].S-B3 [W] Resolve-SwSafePath gives the final spelling of a junction and the target of a short name
-Test-SwSafePath on Windows file names [W].F-3 [W] accepts a path in the temp folder as the host spells it, including an 8.3 spelling
 Test-SwSafePath on Windows file names [W].F-3 [W] keeps a whitelisted junction row in both spellings
 Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path below a junction to a protected folder
 Test-SwSafePath on Windows file names [W].F-3 [W] refuses a path with a trailing dot in a segment of a protected folder
@@ -335,7 +310,6 @@ Update Command.Help Display.Should show help without error
 Update Command.Installation Refresh.Should pass the source directory to the installer by name
 Update Command.Installation Refresh.Should recover the legacy updater PATH intent without creating a shortcut
 Update Command.Installation Refresh.Should refresh the source directory on the first update from v1.30.0
-User Cleanup Module.Clear-UserTempFiles.Should run without error in dry-run mode
 Whitelist canonical pattern associations.Keeps mixed junction wildcard and literal rules associated in every position
 Whitelist canonical pattern associations.Retains a final wildcard at the removal sink after an expanded junction
 Whitelist junction roots [W].B-28 protects a candidate in the typed and in the final spelling below a junction root

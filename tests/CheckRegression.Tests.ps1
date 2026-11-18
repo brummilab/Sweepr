@@ -17,6 +17,8 @@ BeforeAll {
         $file = Join-Path $script:LibDir $optional
         if (Test-Path -LiteralPath $file) { . $file }
     }
+    # The command script defines the run and the summary; dot-sourcing it runs nothing.
+    . (Join-Path $script:Root 'bin\clean.ps1')
     $script:LibScripts = @(Get-ChildItem -LiteralPath $script:LibDir -Recurse -Filter '*.ps1' -File | ForEach-Object FullName)
 
     function script:Import-CommandFunction {
@@ -72,11 +74,9 @@ BeforeAll {
         if ($DaysOld -gt 0) { (Get-Item -LiteralPath $Path).LastWriteTime = (Get-Date).AddDays(-$DaysOld) }
     }
 
-    $script:CleanFiles = @(Join-Path $script:Root 'bin\clean.ps1') + $script:LibScripts
     $script:PurgeFiles = @(Join-Path $script:Root 'bin\purge.ps1') + $script:LibScripts
     $script:OptimizeFiles = @(Join-Path $script:Root 'bin\optimize.ps1') + $script:LibScripts
 
-    foreach ($name in @('Start-Cleanup', 'Show-CleanupSummary')) { Import-CommandFunction -Name $name -Files $script:CleanFiles }
     foreach ($name in @('Find-Projects', 'Find-ProjectArtifacts', 'Get-PurgeProjectDirectories', 'Get-PurgeDisplayPath', 'Test-PurgeArtifactKind', 'Test-PurgeArtifactContent', 'Invoke-PurgeGit')) {
         Import-CommandFunction -Name $name -Files $script:PurgeFiles
     }
@@ -111,10 +111,12 @@ BeforeAll {
 
 AfterAll {
     foreach ($name in $script:SavedEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $script:SavedEnv[$name]) }
-    Set-DryRunMode -Enabled $false
+    Set-SwDryRunMode -Enabled $false
 }
 
 Describe 'sw clean console output in a dry run' {
+    BeforeAll { $script:SavedGuard = $script:SweeprCleanPathGuard }
+    AfterAll { $script:SweeprCleanPathGuard = $script:SavedGuard }
     BeforeEach {
         $script:FakeHome = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $env:USERPROFILE = $script:FakeHome
@@ -129,23 +131,24 @@ Describe 'sw clean console output in a dry run' {
         $script:ExportListFile = Join-Path $script:FakeHome 'config/clean-list.txt'
         $script:StartCleanupParameters = @{ IsDryRun = $true; IncludeSystem = $false; IncludeGameMedia = $false; IncludeGpuShaders = $false }
 
-        Set-DryRunMode -Enabled $false
+        Set-SwDryRunMode -Enabled $false
         Mock Get-SwPathSnapshot { [pscustomobject]@{ Path = $Path } }
         Mock Test-SwPathSnapshot { $true }
-        Mock Test-IsAdmin { $false }
+        Mock Test-SwAdmin { $false }
         Mock Clear-Host {}
-        Mock Get-WindowsVersion { [pscustomobject]@{ Name = 'Example OS' } }
-        Mock Get-FreeSpace { '10.0GB' }
-        Mock Clear-BrowserCaches {}
-        Mock Clear-AppCaches {}
+        Mock Get-SwWindowsVersion { @{ Name = 'Example OS' } }
+        Mock Test-SwOutputRedirected { $false }
+        Mock Get-SwFreeSpace { '10.0GB' }
+        Mock Clear-SwBrowserCaches {}
+        Mock Clear-SwAppCaches {}
         Mock Invoke-DevToolsCleanup {}
         Mock Invoke-AppCleanup {}
-        Mock Invoke-SystemCleanup {}
+        Mock Invoke-SwSystemCleanup {}
         Mock Remove-Item { throw 'Remove-Item must not run in a dry run' }
     }
 
     It 'Shows the dry-run banner, the potential space and the summary, and clears the screen once' {
-        $output = Get-HostText (Start-Cleanup @script:StartCleanupParameters 6>&1)
+        $output = Get-HostText (Start-SwCleanRun @script:StartCleanupParameters 6>&1)
         $output | Should -Match 'Clean Your Windows'
         $output | Should -Match 'Dry Run Mode'
         $output | Should -Match 'Preview only, no deletions'
@@ -160,30 +163,30 @@ Describe 'sw clean console output in a dry run' {
     }
 
     It 'Keeps the file, writes the preview list with header, description and path, and stays in dry-run mode' {
-        $null = Start-Cleanup @script:StartCleanupParameters 6>&1
+        $null = Start-SwCleanRun @script:StartCleanupParameters 6>&1
         Test-Path -LiteralPath $script:OldFile | Should -BeTrue
         $list = Get-Content -LiteralPath $script:ExportListFile
         $list | Should -Contain '# User temp files (>7d old)'
         $list | Should -Contain $script:OldFile
         ($list | Select-Object -First 1) | Should -Match '^# Sweepr Cleanup Preview - '
-        Test-DryRunMode | Should -BeTrue
+        Test-SwDryRunMode | Should -BeTrue
     }
 
     It 'Runs the system cleanup in a dry run only for an administrator who asked for it' {
         $script:StartCleanupParameters.IncludeSystem = $true
-        $null = Start-Cleanup @script:StartCleanupParameters 6>&1
-        Should -Invoke Invoke-SystemCleanup -Times 0 -Exactly
-        Mock Test-IsAdmin { $true }
-        $null = Start-Cleanup @script:StartCleanupParameters 6>&1
-        Should -Invoke Invoke-SystemCleanup -Times 1 -Exactly
+        $null = Start-SwCleanRun @script:StartCleanupParameters 6>&1
+        Should -Invoke Invoke-SwSystemCleanup -Times 0 -Exactly
+        Mock Test-SwAdmin { $true }
+        $null = Start-SwCleanRun @script:StartCleanupParameters 6>&1
+        Should -Invoke Invoke-SwSystemCleanup -Times 1 -Exactly
     }
 
     It 'Passes game media and GPU shader requests on to their sections' {
-        Mock Clear-GPUShaderCaches {}
+        Mock Clear-SwGpuShaderCaches {}
         $script:StartCleanupParameters.IncludeGameMedia = $true
         $script:StartCleanupParameters.IncludeGpuShaders = $true
-        $null = Start-Cleanup @script:StartCleanupParameters 6>&1
-        Should -Invoke Clear-GPUShaderCaches -Times 1 -Exactly
+        $null = Start-SwCleanRun @script:StartCleanupParameters 6>&1
+        Should -Invoke Clear-SwGpuShaderCaches -Times 1 -Exactly
         Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
     }
 }

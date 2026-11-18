@@ -154,7 +154,7 @@ sw history --json
 
 sw clean --dry-run --debug   # Vorschau + Detail-Log
 sw clean --whitelist         # Geschützte Pfade verwalten
-sw clean --system            # Inkl. System-Bereinigung (als Administrator)
+sw clean --system            # Zusätzlich alte Windows-Fehlerberichte unter ProgramData (Administrator-PowerShell)
 sw purge --paths             # Projekt-Suchordner festlegen
 sw analyze D:\               # Anderes Laufwerk analysieren
 sw uninstall --list          # Installierte Apps auflisten (JSON, wenn umgeleitet)
@@ -179,6 +179,7 @@ sw analyze --json D:\        # Disk-Report als JSON
 Sweepr kann Dateien löschen, deshalb werden Pfade validiert und System- sowie Profilordner geschützt. `uninstall`, `purge` und `remove` fragen vor dem Entfernen nach. Was nicht nachweislich sicher ist, wird übersprungen.
 
 - `clean`, `uninstall` und `purge` zuerst mit `--dry-run` ansehen, bei Bedarf `--debug` dazu
+- `sw clean` endet mit Exit-Code 1, wenn ein Abschnitt an einem unerwarteten Fehler abbricht oder der Lauf nicht beginnen kann; ein einzelner übersprungener oder fehlgeschlagener Eintrag lässt den Exit-Code bei 0
 - `clean` und `purge` löschen endgültig; verifizierte `uninstall`-Reste und in `sw analyze` gelöschte Dateien gehen in den Papierkorb
 - `sw analyze` zeigt OneDrive- und andere Cloud-Ordner, löscht dort aber nie; Dateien, die nur online liegen, zählen auf dem Datenträger mit 0 Byte und erscheinen als „online“. Links, geschützte Ordner und die Datenordner von Sweepr lassen sich dort ebenfalls nicht löschen. Die Whitelist liest `sw analyze` noch nicht
 - Als normaler Benutzer ausführen; System-Schritte laufen nur in einer Administrator-PowerShell

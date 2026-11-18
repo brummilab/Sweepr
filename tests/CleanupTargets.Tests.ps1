@@ -24,68 +24,79 @@ AfterAll {
 
 Describe 'Conservative cleanup targets' {
     BeforeEach {
-        Mock Clear-DirectoryContents {}
-        Mock Remove-SafeItems {}
-        Mock Remove-SafeItem { $true }
-        Mock Clear-UserTempFiles {}
-        Mock Clear-ErrorReports {}
-        Mock Clear-UserLogs {}
+        Mock Clear-SwAppCache {}
+        Mock Clear-SwDirectoryContents {}
+        Mock Remove-SwItems {}
+        Mock Remove-SwItem { $true }
+        Mock Clear-SwUserTempFiles {}
+        Mock Clear-SwErrorReports {}
+        Mock Clear-SwUserLogs {}
         Mock Clear-Prefetch {}
+        $script:AppData = $env:APPDATA.Replace('\', '/')
     }
 
+    # Paths are compared with forward slashes, so the same check holds where the separator is a backslash.
     It 'Keeps Teams <Leaf> while still cleaning its exact cache leaves' -TestCases @(
         @{ Leaf = 'blob_storage' }
         @{ Leaf = 'tmp' }
     ) {
         param($Leaf)
-        Clear-AppCaches
-        Should -Invoke Clear-DirectoryContents -Times 0 -Exactly -ParameterFilter { $Path -eq "$env:APPDATA\Microsoft\Teams\$Leaf" }
-        Should -Invoke Clear-DirectoryContents -Times 1 -Exactly -ParameterFilter { $Path -eq "$env:APPDATA\Microsoft\Teams\Cache" }
-        Should -Invoke Clear-DirectoryContents -Times 1 -Exactly -ParameterFilter { $Path -eq "$env:APPDATA\Microsoft\Teams\GPUCache" }
+        Clear-SwAppCaches
+        Should -Invoke Clear-SwAppCache -Times 0 -Exactly -ParameterFilter { $Path.Replace('\', '/') -eq "$script:AppData/Microsoft/Teams/$Leaf" }
+        Should -Invoke Clear-SwAppCache -Times 1 -Exactly -ParameterFilter { $Path.Replace('\', '/') -eq "$script:AppData/Microsoft/Teams/Cache" }
+        Should -Invoke Clear-SwAppCache -Times 1 -Exactly -ParameterFilter { $Path.Replace('\', '/') -eq "$script:AppData/Microsoft/Teams/GPUCache" }
     }
 
     It 'Keeps Spotify offline stores during automatic cleanup' {
         foreach ($leaf in @('Data', 'Storage')) {
             New-Item -ItemType Directory -Path "$env:LOCALAPPDATA\Spotify\$leaf" -Force | Out-Null
         }
-        Clear-AppCaches
-        Should -Invoke Clear-DirectoryContents -Times 0 -Exactly -ParameterFilter { $Path -like '*\Spotify\*' }
-        Should -Invoke Clear-DirectoryContents -Times 1 -Exactly -ParameterFilter { $Path -eq "$env:APPDATA\Microsoft\Teams\Cache" }
+        Clear-SwAppCaches
+        Should -Invoke Clear-SwAppCache -Times 0 -Exactly -ParameterFilter { $Path -like '*Spotify*' }
+        Should -Invoke Clear-SwDirectoryContents -Times 0 -Exactly -ParameterFilter { $Path -like '*Spotify*' }
+        Should -Invoke Clear-SwAppCache -Times 1 -Exactly -ParameterFilter { $Path.Replace('\', '/') -eq "$script:AppData/Microsoft/Teams/Cache" }
     }
     It 'Leaves Adobe caches to the Applications section so a run counts them once' {
         foreach ($dir in @("$env:APPDATA\Adobe\Common\Media Cache Files", "$env:LOCALAPPDATA\Adobe\Premiere\Cache")) {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
         }
-        Clear-AppCaches
-        Should -Invoke Clear-DirectoryContents -Times 0 -Exactly -ParameterFilter { $Description -eq 'Adobe cache' }
+        Clear-SwAppCaches
+        Should -Invoke Clear-SwDirectoryContents -Times 0 -Exactly -ParameterFilter { $Description -eq 'Adobe cache' }
+        Should -Invoke Clear-SwAppCache -Times 0 -Exactly -ParameterFilter { $Description -eq 'Adobe cache' }
     }
     It 'Keeps Explorer thumbnails and icons during ordinary user cleanup' {
-        Invoke-UserCleanup
-        Should -Invoke Clear-UserTempFiles -Times 1 -Exactly
+        Invoke-SwUserCleanup
+        Should -Invoke Clear-SwUserTempFiles -Times 1 -Exactly
         Should -Invoke Clear-Prefetch -Times 0 -Exactly
-        Should -Invoke Remove-SafeItems -Times 0 -Exactly
-        Should -Invoke Remove-SafeItem -Times 0 -Exactly
+        Should -Invoke Remove-SwItems -Times 0 -Exactly
+        Should -Invoke Remove-SwItem -Times 0 -Exactly
     }
 }
 
 
 Describe 'Protected system cleanup does not disturb services' {
+    BeforeAll {
+        # Windows-only commands get a stub so that Pester can mock them everywhere.
+        foreach ($name in @('Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service', 'Set-Service')) {
+            if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { Set-Item -Path "function:script:$name" -Value { param() } }
+        }
+    }
     BeforeEach {
-        Mock Test-IsAdmin { $true }
-        Mock Test-DryRunMode { $false }
+        Mock Test-SwAdmin { $true }
+        Mock Test-SwDryRunMode { $false }
         Mock Get-Service { [pscustomobject]@{ Status = 'Running' } }
         Mock Stop-Service {}
         Mock Start-Service {}
         Mock Restart-Service {}
         Mock Set-Service {}
-        Mock Clear-DirectoryContents {}
-        Mock Remove-OldFiles {}
-        Mock Remove-SafeItems {}
-        Mock Remove-SafeItem { $true }
+        Mock Clear-SwDirectoryContents {}
+        Mock Remove-SwOldFiles {}
+        Mock Remove-SwItems {}
+        Mock Remove-SwItem { $true }
         Mock Start-Process {}
     }
     It 'Never stops, starts or restarts FontCache or Windows Update during system cleanup' {
-        Invoke-SystemCleanup
+        Invoke-SwSystemCleanup
         Should -Invoke Stop-Service -Times 0 -Exactly
         Should -Invoke Start-Service -Times 0 -Exactly
         Should -Invoke Restart-Service -Times 0 -Exactly

@@ -33,19 +33,19 @@ function Invoke-SweeprCleanSections {
     )
 
     # User essentials (temp, logs, etc.)
-    Invoke-UserCleanup -TempDaysOld 7 -LogDaysOld 7
+    Invoke-SwUserCleanup -TempDaysOld 7 -LogDaysOld 7
 
     # Browser caches
-    Clear-BrowserCaches
+    Clear-SwBrowserCaches
 
     # GPU shader caches (NVIDIA, AMD, Intel, DirectX) only on request: every game
     # compiles its shaders again on its next launch, which can take minutes
     if ($IncludeGpuShaders) {
-        Clear-GPUShaderCaches
+        Clear-SwGpuShaderCaches
     }
 
     # Application caches
-    Clear-AppCaches
+    Clear-SwAppCaches
 
     # Developer tools
     Invoke-DevToolsCleanup
@@ -59,8 +59,8 @@ function Invoke-SweeprCleanSections {
     }
 
     # System cleanup (if requested and admin)
-    if ($IncludeSystem -and (Test-IsAdmin)) {
-        Invoke-SystemCleanup
+    if ($IncludeSystem -and (Test-SwAdmin)) {
+        Invoke-SwSystemCleanup
     }
 }
 
@@ -86,7 +86,7 @@ function Get-SweeprCleanPreview {
         [switch]$GpuShaders
     )
 
-    $isAdmin = [bool](Test-IsAdmin)
+    $isAdmin = [bool](Test-SwAdmin)
     $includeSystem = $System.IsPresent -and $isAdmin
 
     $hitList = New-Object System.Collections.Generic.List[object]
@@ -108,10 +108,13 @@ function Get-SweeprCleanPreview {
         Items     = $script:TotalItems
         Owner     = $script:OwnerCleanups
         Active    = $script:CurrentSection.Active
+        Guard     = $script:SweeprCleanPathGuard
     }
     try {
-        Reset-CleanupStats
-        Set-DryRunMode -Enabled $true
+        Reset-SwCleanupStats
+        Set-SwDryRunMode -Enabled $true
+        # The stricter path rules of sw clean apply to the preview as well.
+        $script:SweeprCleanPathGuard = $true
         $script:DryRunCollector = $hitList
         $script:SectionCollector = $sectionList
         $script:SweeprSkipExternalTools = $SkipExternalTools.IsPresent
@@ -137,6 +140,7 @@ function Get-SweeprCleanPreview {
         $script:FilesCleaned = $saved.Files
         $script:TotalItems = $saved.Items
         $script:OwnerCleanups = $saved.Owner
+        $script:SweeprCleanPathGuard = $saved.Guard
     }
 
     foreach ($tool in $skippedTools.ToArray()) { $notMeasured.Add($tool) }

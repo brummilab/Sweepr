@@ -1,325 +1,69 @@
-# Sweepr - System Cleanup Module
-# Cleans Windows system files that require administrator access
+# Sweepr - system section of sw clean: old Windows error reports below ProgramData
+#
+# The section "System cleanup", only for a caller that already runs with administrator rights. Loaded
+# by dot-sourcing; it loads user.ps1 for the report rule. Loading writes nothing, creates no file or
+# folder and starts no process; it only defines functions. A second load in the same scope changes
+# nothing.
+#
+# Sweepr never asks for administrator rights and never raises them. Everything under the Windows
+# folder and Program Files is protected and is not a target; what is left is the two report folders
+# below ProgramData, handled by the same rule as the reports of the user.
 
-#Requires -Version 5.1
-Set-StrictMode -Version Latest
+# The dependencies come from the folder of this file, never from the working directory.
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'base.ps1'))
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'log.ps1'))
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'file_ops.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'user.ps1'))
 
-# Prevent multiple sourcing
-if ((Get-Variable -Name 'SWEEPR_CLEAN_SYSTEM_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_SYSTEM_LOADED) { return }
-$script:SWEEPR_CLEAN_SYSTEM_LOADED = $true
-
-# Import dependencies
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\..\core\base.ps1"
-. "$scriptDir\..\core\log.ps1"
-. "$scriptDir\..\core\file_ops.ps1"
-
-# ============================================================================
-# System Temp Files
-# ============================================================================
-
-function Clear-SystemTempFiles {
+function Invoke-SwSystemCleanup {
     <#
     .SYNOPSIS
-        Clean system-level temporary files (requires admin)
+        The section "System cleanup": old error reports below ProgramData. Administrator only.
+    .DESCRIPTION
+        Without administrator rights, also when the query itself fails, the section warns once and
+        offers nothing. Only exactly one [bool] true counts as administrator. Writes nothing to the
+        pipeline; a failing report folder stops only itself.
     #>
-
-    if (-not (Test-IsAdmin)) {
-        Write-Debug "Skipping system temp cleanup - requires admin"
-        return
-    }
-
-    # Windows Temp folder
-    $winTemp = "$env:WINDIR\Temp"
-    if (Test-Path $winTemp) {
-        Remove-OldFiles -Path $winTemp -DaysOld 7 -Description "Windows temp files"
-    }
-
-    # System temp (different from Windows temp)
-    $systemTemp = "$env:SYSTEMROOT\Temp"
-    if ((Test-Path $systemTemp) -and ($systemTemp -ne $winTemp)) {
-        Remove-OldFiles -Path $systemTemp -DaysOld 7 -Description "System temp files"
-    }
-}
-
-# ============================================================================
-# Windows Logs
-# ============================================================================
-
-function Clear-WindowsLogs {
-    <#
-    .SYNOPSIS
-        Clean Windows log files (requires admin)
-    #>
-    param([int]$DaysOld = 7)
-
-    if (-not (Test-IsAdmin)) {
-        Write-Debug "Skipping Windows logs cleanup - requires admin"
-        return
-    }
-
-    # Windows Logs directory
-    $logPaths = @(
-        "$env:WINDIR\Logs\CBS"
-        "$env:WINDIR\Logs\DISM"
-        "$env:WINDIR\Logs\DPX"
-        "$env:WINDIR\Logs\WindowsUpdate"
-        "$env:WINDIR\Logs\SIH"
-        "$env:WINDIR\Logs\waasmedia"
-        "$env:WINDIR\Debug"
-        "$env:WINDIR\Panther"
-        "$env:PROGRAMDATA\Microsoft\Windows\WER\ReportQueue"
-        "$env:PROGRAMDATA\Microsoft\Windows\WER\ReportArchive"
-    )
-
-    foreach ($path in $logPaths) {
-        if (Test-Path $path) {
-            Remove-OldFiles -Path $path -DaysOld $DaysOld -Description "$(Split-Path -Leaf $path) logs"
-        }
-    }
-
-    # Setup logs (*.log files in Windows directory)
-    $setupLogs = Get-ChildItem -Path "$env:WINDIR\*.log" -File -ErrorAction SilentlyContinue |
-                 Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$DaysOld) }
-    if ($setupLogs) {
-        $paths = $setupLogs | ForEach-Object { $_.FullName }
-        Remove-SafeItems -Paths $paths -Description "Windows setup logs"
-    }
-}
-
-# ============================================================================
-# Installer Cleanup
-# ============================================================================
-
-function Clear-InstallerCache {
-    <#
-    .SYNOPSIS
-        Clean Windows Installer cache (orphaned patches)
-    #>
-
-    if (-not (Test-IsAdmin)) {
-        return
-    }
-
-    # Windows Installer patch cache
-    # WARNING: Be very careful here - only clean truly orphaned files
-    $installerPath = "$env:WINDIR\Installer"
-
-    # Only clean .tmp files and very old .msp files that are likely orphaned
-    if (Test-Path $installerPath) {
-        $tmpFiles = Get-ChildItem -Path $installerPath -Filter "*.tmp" -File -ErrorAction SilentlyContinue
-        if ($tmpFiles) {
-            $paths = $tmpFiles | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "Installer temp files"
-        }
-    }
-
-    # Installer logs in temp
-    $installerLogs = Get-ChildItem -Path $env:TEMP -Filter "MSI*.LOG" -File -ErrorAction SilentlyContinue |
-                     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) }
-    if ($installerLogs) {
-        $paths = $installerLogs | ForEach-Object { $_.FullName }
-        Remove-SafeItems -Paths $paths -Description "Old MSI logs"
-    }
-}
-
-# ============================================================================
-# Component Store Cleanup
-# ============================================================================
-
-function Invoke-ComponentStoreCleanup {
-    <#
-    .SYNOPSIS
-        Run Windows Component Store cleanup (DISM)
-    #>
-
-    if (-not (Test-IsAdmin)) {
-        Write-Debug "Skipping component store cleanup - requires admin"
-        return
-    }
-
-    if (Test-DryRunMode) {
-        Write-DryRun "Component Store cleanup (DISM)"
-        # A read-only preview cannot size this step.
-        Add-SweeprNotMeasured -Name 'Component Store cleanup' -Reason 'not previewable'
-        Set-SectionActivity
-        return
-    }
-
+    $ErrorActionPreference = 'Stop'
+    Start-SwSection 'System cleanup'
     try {
-        Write-Info "Running Component Store cleanup (this may take a while)..."
-
-        # Run DISM cleanup
-        $result = Start-Process -FilePath "dism.exe" `
-            -ArgumentList "/Online", "/Cleanup-Image", "/StartComponentCleanup" `
-            -Wait -PassThru -NoNewWindow -ErrorAction Stop
-
-        if ($result.ExitCode -eq 0) {
-            Write-Success "Component Store cleanup"
-            Set-SectionActivity
+        Reset-SwReportChecks
+        $isAdmin = $false
+        try {
+            $answer = @(Test-SwAdmin)
+            $isAdmin = (($answer.Count -eq 1) -and ($answer[0] -is [bool]) -and ($answer[0] -eq $true))
         }
-        else {
-            Write-Debug "DISM returned exit code: $($result.ExitCode)"
+        catch { $isAdmin = $false }
+        if (-not $isAdmin) {
+            Write-SwWarning 'The system part needs administrator rights. Start Sweepr from a PowerShell window that runs as administrator; Sweepr does not raise its own rights.'
+            return
         }
+
+        $programData = Get-SwCleanEnvRoot -Name 'PROGRAMDATA'
+        if ($null -eq $programData) { return }
+        $queue = Join-SwCleanPath -Base $programData -Rest @('Microsoft', 'Windows', 'WER', 'ReportQueue')
+        $archive = Join-SwCleanPath -Base $programData -Rest @('Microsoft', 'Windows', 'WER', 'ReportArchive')
+        try { $null = Clear-SwReportRoot -Root $queue -DaysOld 7 -Description 'Error reports' }
+        catch { Write-SwDebug "system error reports not handled, ${queue}: $($_.Exception.Message)" }
+        try { $null = Clear-SwReportRoot -Root $archive -DaysOld 7 -Description 'Error reports' }
+        catch { Write-SwDebug "system error reports not handled, ${archive}: $($_.Exception.Message)" }
     }
-    catch {
-        Write-Debug "Component Store cleanup failed: $_"
-    }
+    finally { Stop-SwSection }
 }
 
 # ============================================================================
-# Memory Dump Cleanup
-# ============================================================================
-
-function Clear-MemoryDumps {
-    <#
-    .SYNOPSIS
-        Clean Windows memory dumps
-    #>
-
-    # %LOCALAPPDATA%\CrashDumps is not listed here: Clear-ErrorReports owns it and
-    # removes only .dmp files older than seven days. Every `sw clean` runs the user
-    # section before this one, so emptying the folder here would drop fresh dumps.
-    $dumpPaths = @(
-        "$env:WINDIR\MEMORY.DMP"
-        "$env:WINDIR\Minidump"
-    )
-
-    foreach ($path in $dumpPaths) {
-        if (Test-Path $path -PathType Leaf) {
-            # Single file (MEMORY.DMP)
-            $null = Remove-SafeItem -Path $path -Description "Memory dump"
-        }
-        elseif (Test-Path $path -PathType Container) {
-            # Directory (Minidump)
-            Clear-DirectoryContents -Path $path -Description "$(Split-Path -Leaf $path)"
-        }
-    }
-}
-
-# ============================================================================
-# Disk Cleanup Tool Integration
-# ============================================================================
-
-function Invoke-DiskCleanupTool {
-    <#
-    .SYNOPSIS
-        Run Windows built-in Disk Cleanup tool with predefined settings
-    #>
-    param([switch]$Full)
-
-    if (-not (Test-IsAdmin)) {
-        Write-Debug "Skipping Disk Cleanup tool - requires admin for full cleanup"
-    }
-
-    if (Test-DryRunMode) {
-        Write-DryRun "Windows Disk Cleanup tool"
-        # A read-only preview cannot size this step.
-        Add-SweeprNotMeasured -Name 'Disk Cleanup tool' -Reason 'not previewable'
-        return
-    }
-
-    # Set up registry keys for automated cleanup
-    $cleanupKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches"
-
-    $cleanupItems = @(
-        "Active Setup Temp Folders"
-        "Downloaded Program Files"
-        "Internet Cache Files"
-        "Old ChkDsk Files"
-        "Recycle Bin"
-        "Setup Log Files"
-        "System error memory dump files"
-        "System error minidump files"
-        "Temporary Files"
-        "Temporary Setup Files"
-        "Thumbnail Cache"
-        "Windows Error Reporting Archive Files"
-        "Windows Error Reporting Queue Files"
-        "Windows Error Reporting System Archive Files"
-        "Windows Error Reporting System Queue Files"
-    )
-
-    if ($Full -and (Test-IsAdmin)) {
-        $cleanupItems += @(
-            "Previous Installations"
-            "Temporary Windows installation files"
-            "Update Cleanup"
-            "Windows Defender"
-            "Windows Upgrade Log Files"
-        )
-    }
-
-    # Enable cleanup items in registry
-    foreach ($item in $cleanupItems) {
-        $itemPath = Join-Path $cleanupKey $item
-        if (Test-Path $itemPath) {
-            Set-ItemProperty -Path $itemPath -Name "StateFlags0100" -Value 2 -Type DWord -ErrorAction SilentlyContinue
-        }
-    }
-
-    try {
-        # Run disk cleanup
-        $process = Start-Process -FilePath "cleanmgr.exe" `
-            -ArgumentList "/sagerun:100" `
-            -Wait -PassThru -NoNewWindow -ErrorAction Stop
-
-        if ($process.ExitCode -eq 0) {
-            Write-Success "Windows Disk Cleanup"
-            Set-SectionActivity
-        }
-    }
-    catch {
-        Write-Debug "Disk Cleanup failed: $_"
-    }
-}
-
-# ============================================================================
-# Main System Cleanup Function
+# Old name, kept as a forwarding function (not an alias, so a test mock of either name behaves) until
+# the caller moves to the new one. The switches of the removed targets are accepted and do nothing.
 # ============================================================================
 
 function Invoke-SystemCleanup {
-    <#
-    .SYNOPSIS
-        Run all system-level cleanup tasks (requires admin for full effect)
-    #>
     param(
         [switch]$IncludeComponentStore,
         [switch]$IncludeDiskCleanup
     )
-
-    Start-Section "System cleanup"
-
-    if (-not (Test-IsAdmin)) {
-        Write-SweeprWarning "Running without admin - some cleanup tasks will be skipped"
-    }
-
-    # System temp files
-    Clear-SystemTempFiles
-
-    # Windows logs
-    Clear-WindowsLogs -DaysOld 7
-
-    # Installer cache
-    Clear-InstallerCache
-
-    # Memory dumps
-    Clear-MemoryDumps
-
-    # Optional: Component Store (can take a long time)
-    if ($IncludeComponentStore) {
-        Invoke-ComponentStoreCleanup
-    }
-
-    # Optional: Windows Disk Cleanup tool
-    if ($IncludeDiskCleanup) {
-        Invoke-DiskCleanupTool -Full
-    }
-
-    Stop-Section
+    Invoke-SwSystemCleanup
 }
 
-# ============================================================================
-# Exports
-# ============================================================================
-# Functions: Clear-SystemTempFiles, Clear-WindowsLogs, Invoke-SystemCleanup, etc.
+# Other modules rely on these for the rest of their run.
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'

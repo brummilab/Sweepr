@@ -256,7 +256,7 @@ Describe 'Command scripts take their files from the configured folders' {
         $hardWired = @(Select-String -LiteralPath $path -Pattern '\$env:USERPROFILE\\\.(config|cache)\\sweepr' | ForEach-Object { $_.Line.Trim() })
         $hardWired | Should -BeNullOrEmpty
         $source = Get-Content -LiteralPath $path -Raw
-        $source | Should -Match 'Get-ConfigPath|Get-CachePath|\$script:Config\.(ConfigPath|CachePath)'
+        $source | Should -Match "Get-(Sw)?ConfigPath|Get-(Sw)?CachePath|\`$script:Config\.(ConfigPath|CachePath)|-Key '(ConfigPath|CachePath)'"
     }
 }
 
