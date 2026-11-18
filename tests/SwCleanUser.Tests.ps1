@@ -846,7 +846,7 @@ Describe 'Clear-SwUserTempFiles' {
         $temp = New-Dir (P $script:Local 'Temp')
         Set-Env 'TEMP' $temp
         Clear-SwUserTempFiles
-        (Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
+        @(Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
     }
 
     It 'S-19 CL-21a, CL-28 leaves out an implausible TEMP and notes it as not verified: <Label>' -ForEach @(
@@ -881,7 +881,7 @@ Describe 'Clear-SwUserTempFiles' {
         $temp = New-Dir (P $script:Local 'Temp')
         Set-Env 'TEMP' ($temp + $script:Sep)
         Clear-SwUserTempFiles
-        (Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
+        @(Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
         $script:NotMeasured.Count | Should -Be 0
     }
 
@@ -897,7 +897,7 @@ Describe 'Clear-SwUserTempFiles' {
         Set-Env 'TEMP' $short
         Clear-SwUserTempFiles
         $script:NotMeasured.Count | Should -Be 0
-        (Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
+        @(Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
     }
 
     It 'CL-21a [W] leaves out a known folder (Documents, Desktop) as TEMP' -ForEach @(
@@ -905,7 +905,7 @@ Describe 'Clear-SwUserTempFiles' {
         @{ Folder = 'Desktop' }
     ) {
         $known = [System.Environment]::GetFolderPath($Folder)
-        $known | Should -Not -BeNullOrEmpty -Because 'this host has no such known folder'
+        if ([string]::IsNullOrEmpty($known)) { Set-ItResult -Skipped -Because ('this host has no ' + $Folder + ' folder'); return }
         Set-Env 'TEMP' $known
         Clear-SwUserTempFiles
         $script:Calls.Count | Should -Be 0
@@ -1191,7 +1191,7 @@ Describe 'Clear-SwUserLogs' {
         Set-SwDryRunMode -Enabled $Dry
         $null = New-OldFile (P $script:Roam 'old.log') 30
         Clear-SwUserLogs
-        (Get-Calls 'Remove-SwItems').Count | Should -Be 1
+        @(Get-Calls 'Remove-SwItems').Count | Should -Be 1
     }
 
     It 'SI-6 writes nothing to the pipeline' {
@@ -1490,7 +1490,7 @@ Describe 'Clear-SwReportRoot' {
         New-ManyFiles $script:Root 10
         Set-TreeAge $script:Root 10
         Clear-SwReportRoot -Root $script:Root -DaysOld 7 -Description 'Error reports'
-        (Get-Calls 'Remove-SwItems').Count | Should -Be 10
+        @(Get-Calls 'Remove-SwItems').Count | Should -Be 10
         $script:NotMeasured.Count | Should -Be 0
     }
 
