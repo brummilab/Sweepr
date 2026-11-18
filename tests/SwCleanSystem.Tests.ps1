@@ -678,6 +678,12 @@ Describe 'Invoke-SwSystemCleanup targets' {
         }
     }
 
+    It 'starts every run with an empty table of report offers' {
+        (Get-SwReportChecks)['stale-entry'] = @{ Snapshot = $null; Cutoff = [datetime]::Now }
+        Invoke-SwSystemCleanup
+        (Get-SwReportChecks).ContainsKey('stale-entry') | Should -BeFalse
+    }
+
     It 'CL-36 offers nothing else: no direct helper call, no other root' {
         Invoke-SwSystemCleanup
         $script:Calls.Count | Should -Be 0

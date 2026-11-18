@@ -824,6 +824,39 @@ Describe 'Clear-SwUserTempFiles' {
         $script:NotMeasured[0].Reason | Should -BeExactly 'not verified'
     }
 
+    It 'leaves out a TEMP with a doubled separator, and notes it as not verified' {
+        $null = New-Dir (P $script:Profile 'AppData' 'Local' 'Temp')
+        Set-Env 'TEMP' ($script:Profile + $script:Sep + 'AppData' + $script:Sep + $script:Sep + 'Local' + $script:Sep + 'Temp')
+        Clear-SwUserTempFiles
+        $script:Calls.Count | Should -Be 0
+        $script:NotMeasured.Count | Should -Be 1
+        $script:NotMeasured[0].Name | Should -BeExactly 'User temp files'
+        $script:NotMeasured[0].Reason | Should -BeExactly 'not verified'
+    }
+
+    It 'offers a TEMP with one trailing separator below the local application data folder' {
+        $temp = New-Dir (P $script:Local 'Temp')
+        Set-Env 'TEMP' ($temp + $script:Sep)
+        Clear-SwUserTempFiles
+        (Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
+        $script:NotMeasured.Count | Should -Be 0
+    }
+
+    It '[W] offers a TEMP written as an 8.3 short name when the long form is plausible' {
+        $long = New-Dir (P $script:Local 'Temp')
+        $short = $null
+        try {
+            $text = @(& cmd.exe /c ('for %I in ("' + $long + '") do @echo %~sI') 2>$null) -join ''
+            $short = $text.Trim()
+        }
+        catch { $short = $null }
+        if ([string]::IsNullOrEmpty($short) -or $short -eq $long) { Set-ItResult -Skipped -Because 'this host has no 8.3 short name for the folder'; return }
+        Set-Env 'TEMP' $short
+        Clear-SwUserTempFiles
+        $script:NotMeasured.Count | Should -Be 0
+        (Get-Calls 'Remove-SwOldFiles').Count | Should -Be 1
+    }
+
     It 'CL-21a [W] leaves out a known folder (Documents, Desktop) as TEMP' -ForEach @(
         @{ Folder = 'MyDocuments' }
         @{ Folder = 'Desktop' }
@@ -984,6 +1017,35 @@ Describe 'Clear-SwUserLogs' {
         $null = New-OldFile (P $script:Temp6 'x.log') 30
         Clear-SwUserLogs
         $script:Calls.Count | Should -Be 0
+    }
+
+    It 'leaves the local Temp folder to the temp target when TEMP only resolves to the same folder' {
+        $script:TypedTemp = New-Dir (P $script:Work 'temp-spelled-differently')
+        Set-Env 'TEMP' $script:TypedTemp
+        $null = New-OldFile (P $script:Temp6 'x.log') 30
+        Mock Resolve-SwSafePath {
+            if ((Fold $Path) -eq (Fold $script:TypedTemp) -or (Fold $Path) -eq (Fold $script:Temp6)) { $script:Temp6 } else { $Path }
+        }
+        Clear-SwUserLogs
+        @(Get-OfferedPaths | Where-Object { Test-SameOrUnder $_ $script:Temp6 }).Count | Should -Be 0
+        $script:NotMeasured.Count | Should -Be 0
+    }
+
+    It 'counts only the typed spelling when Resolve-SwSafePath gives $null for one of the two folders' -ForEach @(
+        @{ Which = 'TEMP' }
+        @{ Which = 'the local Temp folder' }
+    ) {
+        $script:TypedTemp = New-Dir (P $script:Work 'temp-spelled-differently')
+        Set-Env 'TEMP' $script:TypedTemp
+        $keep = New-OldFile (P $script:Temp6 'x.log') 30
+        $script:NullFor = if ($Which -eq 'TEMP') { $script:TypedTemp } else { $script:Temp6 }
+        Mock Resolve-SwSafePath {
+            if ((Fold $Path) -eq (Fold $script:NullFor)) { $null }
+            elseif ((Fold $Path) -eq (Fold $script:TypedTemp)) { $script:Temp6 }
+            else { $Path }
+        }
+        Clear-SwUserLogs
+        @(Get-OfferedPaths) | Should -Contain $keep
     }
 
     It 'CL-22 still offers the local Temp folder when TEMP is another folder' {
@@ -1309,6 +1371,22 @@ Describe 'Clear-SwReportRoot' {
         ($script:NotMeasured[0].Name -like '*Error reports*' -or $script:NotMeasured[0].Name -like '*Reports*') | Should -BeTrue
     }
 
+    It 'names the root by its whole path, so that the roots of the user and of the system stay apart' {
+        $user = New-Dir (Get-WerQueue)
+        $system = New-Dir (P $script:ProgramData 'Microsoft' 'Windows' 'WER' 'ReportQueue')
+        $null = New-Report $user 'old'
+        $null = New-Report $system 'old'
+        $script:FakeNoIdentity.Add($user)
+        $script:FakeNoIdentity.Add($system)
+        Clear-SwReportRoot -Root $user -DaysOld 7 -Description 'Error reports'
+        Clear-SwReportRoot -Root $system -DaysOld 7 -Description 'Error reports'
+        $script:Calls.Count | Should -Be 0
+        $names = @(Get-NotMeasuredNames)
+        $names.Count | Should -Be 2
+        $names | Should -Contain ('Error reports (' + $user + ')')
+        $names | Should -Contain ('Error reports (' + $system + ')')
+    }
+
     It 'S-7 leaves a root that is a link and does not enter it' {
         $target = New-Report (P $script:Work 'elsewhere') 'old' 30
         $link = P $script:Local 'LinkedReports'
@@ -1609,6 +1687,33 @@ Describe 'Invoke-SwUserCleanup with the real helpers' {
         @($script:DryRunCollector | ForEach-Object { $_.Path }) | Should -Contain $script:OldTemp
         @($script:DryRunCollector | ForEach-Object { $_.Path }) | Should -Contain $script:Report
         $script:Ops.Count | Should -Be 0
+    }
+
+    It 'starts every run with an empty table of report offers' {
+        (Get-SwReportChecks)['stale-entry'] = @{ Snapshot = $null; Cutoff = [datetime]::Now }
+        Invoke-SwUserCleanup
+        (Get-SwReportChecks).ContainsKey('stale-entry') | Should -BeFalse
+        (Get-SwReportChecks).Count | Should -BeLessOrEqual 2
+    }
+
+    It 'does not let the table grow when the section runs twice' {
+        Invoke-SwUserCleanup
+        $first = (Get-SwReportChecks).Count
+        Invoke-SwUserCleanup
+        (Get-SwReportChecks).Count | Should -Be $first
+    }
+
+    It 'lists a log of a TEMP that only resolves to the local Temp folder once, and none from the local Temp folder itself' {
+        $script:TypedTemp = New-Dir (P $script:Work 'temp-spelled-differently')
+        Set-Env 'TEMP' $script:TypedTemp
+        $inTyped = New-OldFile (P $script:TypedTemp 'x.log') 30 100
+        Mock Resolve-SwSafePath {
+            if ((Fold $Path) -eq (Fold $script:TypedTemp) -or (Fold $Path) -eq (Fold (Get-LocalTemp))) { Get-LocalTemp } else { $Path }
+        }
+        Invoke-SwUserCleanup
+        @($script:DryRunCollector | Where-Object { $_.Path -ceq $inTyped }).Count | Should -Be 1
+        @($script:DryRunCollector | Where-Object { $_.Path -ceq $script:LocalLog }).Count | Should -Be 0
+        @($script:DryRunCollector | Where-Object { $_.Description -ceq 'Old log files' -and (Test-SameOrUnder $_.Path (Get-LocalTemp)) }).Count | Should -Be 0
     }
 
     It 'S-8 counts exactly the paths it lists' {
