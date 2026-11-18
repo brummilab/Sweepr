@@ -317,6 +317,8 @@ Whitelist junction roots [W].B-28 protects the final spelling of a junction used
 Whitelist junction roots [W].S-B11 keeps protecting both spellings when more lines are added in any order
 Whitelisted junction roots.Keeps a child of a whitelisted junction by original and final spelling
 Write-SwOperation: rotation of a large log.LG-14 [W] throws when the file cannot be moved because another process holds it (Move-SwOperationLogAside)
+Write-SwOperation: two processes append at the same time.S-8 [W] keeps every record exactly once, none overwritten by the other process
+Write-SwOperation: two processes append at the same time.S-8 [W] leaves only whole lines in the file
 install.ps1 -Uninstall.Keeps a linked install directory and the files outside it
 install.ps1 -Uninstall.Keeps config behind a junction at .config
 install.ps1 -Uninstall.Keeps config behind a junction at sweepr
