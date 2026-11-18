@@ -154,7 +154,7 @@ sw history --json
 
 sw clean --dry-run --debug   # Preview plus detailed log
 sw clean --whitelist         # Manage protected paths
-sw clean --system            # Include system cleanup (as administrator)
+sw clean --system            # Also old Windows error reports in ProgramData (administrator PowerShell)
 sw purge --paths             # Set project search folders
 sw analyze D:\               # Analyze another drive
 sw uninstall --list          # List installed apps (JSON when redirected)
@@ -179,6 +179,7 @@ sw analyze --json D:\        # Disk report as JSON
 Sweepr can delete files, so paths are validated and system and profile folders are protected. `uninstall`, `purge` and `remove` ask before removing. Whatever is not shown to be safe is skipped.
 
 - Look at `clean`, `uninstall` and `purge` with `--dry-run` first, add `--debug` when needed
+- `sw clean` ends with exit code 1 when a section stops on an unexpected error or the run cannot start; a single skipped or failed item keeps exit code 0
 - `clean` and `purge` delete permanently; verified `uninstall` leftovers and files deleted in `sw analyze` go to the Recycle Bin
 - `sw analyze` shows OneDrive and other cloud folders but never deletes in them; files that are only online count as 0 bytes on the disk and appear as "online". Links, protected folders and Sweepr's data folders cannot be deleted there either. `sw analyze` does not read the whitelist yet
 - Run as a normal user; system steps run only in an administrator PowerShell

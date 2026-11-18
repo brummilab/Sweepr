@@ -17,6 +17,7 @@ Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bit
 - **PC einmal prüfen** (`sw check`): nur lesend, mit HTML-Bericht, ohne Installation
 - Launcher `sw.exe`, Hinweis auf neue Versionen
 - `sw analyze` und `sw status` schlanker; `sw analyze` zeigt OneDrive-Ordner, ohne dort zu löschen
+- `sw clean` überarbeitet: `--system` räumt nur noch alte Windows-Fehlerberichte unter `ProgramData` (die Ziele unter `C:\Windows` hatten keine Wirkung), Exit-Code 1, wenn ein Abschnitt abbricht
 
 ## Als Nächstes
 
