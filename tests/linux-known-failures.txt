@@ -52,6 +52,7 @@ Application cache boundaries.Rechecks the owner after sizing in dry-run true
 Application cache boundaries.Records a last-moment busy owner as skipped with no reclaimed files
 Application cache boundaries.Removes only old crash dumps across user and system cleanup
 Application cache boundaries.Uses Firefox local caches and keeps its roaming profile stores
+Application caches with the real helpers.S-2 A-4 [W] keeps all new Teams leaves when the whitelist names the Packages folder with a wildcard
 Assert-SwDataWritable.A-15 [W] stops with the message for a folder on a drive that does not exist
 Assert-SwDataWritable.A-15 [W] stops with the message when the ACL denies writing
 Base Module.Color Definitions.Should expose the full icon table in Windows PowerShell
@@ -79,6 +80,8 @@ Cleanup physical boundaries.Protects children of a literal directory whitelist w
 Cleanup physical boundaries.Reads a literal bracket-containing whitelist filename
 Cleanup physical boundaries.Reads the whitelist once for a whole tree, not once per child
 Cleanup physical boundaries.Still removes an ordinary cache directory
+Clear-SwReportRoot.CL-31 [W] keeps a report when its creation time is recent although its write time is old
+Clear-SwUserTempFiles.CL-21a [W] leaves out a known folder (Documents, Desktop) as TEMP
 Complete install owner probes.Allows an empty complete inventory
 Complete install owner probes.Includes hidden registered components without applying the menu filter
 Complete install owner probes.Reports Store enumeration failures as incomplete
@@ -147,12 +150,15 @@ Generated cmd launchers.Preserves apostrophes, exclamation marks, spaces, metach
 Generated cmd launchers.Returns the script exit code when removal deletes its running batch file
 Generic game content in install folders.Keeps ordinary installs and a single Steam game eligible
 Generic game content in install folders.Rechecks content in the existing final leftover ownership guard
+Get-SwCacheProfiles with real identities.CL-25 [W] gives the profiles of an ordinary root when identities are real
+Get-SwCacheProfiles with real identities.CL-25 [W] leaves out a junction as a profile, keeps the others and the files behind the junction
 Get-SwFreeSpace.A-17 [W] gives the free space of a lower-case letter as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the default drive as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter and colon as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter only as number and unit in the size format
 Get-SwFreeSpace.A-17 [W] gives the free space of the drive written as letter, colon and backslash as number and unit in the size format
 Get-SwNativeArchitecture (RT-18).[W] Takes the machine architecture from the system-wide registry value, not from the process
+Get-SwPathCollision.CL-6 S-15 [W] stops Windows PowerShell 5.1 with exit 1 and an empty standard output when a pattern folder lies beside the installation
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives Success true and no items for a root that is a junction to a folder with content
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] gives the snapshot of the root that a fresh Get-SwPathSnapshot -AllowLeafLink gives
 Get-SwSafeDirectoryTreeItems with real identities [W].F-15 [W] refuses a protected folder inside a tree below the 8.3 spelling of the temp folder
