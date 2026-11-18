@@ -711,6 +711,49 @@ Describe 'Invoke-SwUserCleanup structure' {
 # Clear-SwUserTempFiles: U-1 (CL-21, CL-21a, CL-26, SI-2, SI-4, )
 # ============================================================================
 
+# ============================================================================
+# The text rule for a canonical folder, run for both kinds of host
+# ============================================================================
+
+Describe 'Test-SwCleanCanonicalText' {
+    BeforeEach {
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+    }
+
+    It 'rules a Windows path with the rules of Windows, whatever the host: <Text> is <Expected>' -ForEach @(
+        @{ Text = 'C:\a\..\b'; Expected = $false }
+        @{ Text = 'C:\a\.\b'; Expected = $false }
+        @{ Text = 'C:\a\..'; Expected = $false }
+        @{ Text = 'C:\a\\b'; Expected = $false }
+        @{ Text = 'C:/a/b'; Expected = $false }
+        @{ Text = 'C:\a/b'; Expected = $false }
+        @{ Text = 'C:\a\b'; Expected = $true }
+        @{ Text = 'C:\a\b\'; Expected = $true }
+        @{ Text = 'C:\a\.b\..c'; Expected = $true }
+    ) {
+        (Test-SwCleanCanonicalText -Text $Text -Windows $true) | Should -Be $Expected
+    }
+
+    It 'rules a path of a host with the slash only: <Text> is <Expected>' -ForEach @(
+        @{ Text = '/a/../b'; Expected = $false }
+        @{ Text = '/a/./b'; Expected = $false }
+        @{ Text = '/a//b'; Expected = $false }
+        @{ Text = '/a/b'; Expected = $true }
+        @{ Text = '/a/b/'; Expected = $true }
+        @{ Text = '/a\b'; Expected = $true }
+    ) {
+        (Test-SwCleanCanonicalText -Text $Text -Windows $false) | Should -Be $Expected
+    }
+
+    It 'asks the host when no kind of host is given' {
+        $windows = ([System.IO.Path]::DirectorySeparatorChar -eq '\')
+        $text = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), 'x') + [System.IO.Path]::DirectorySeparatorChar + '..' + [System.IO.Path]::DirectorySeparatorChar + 'y'
+        (Test-SwCleanCanonicalText -Text $text) | Should -BeFalse
+        (Test-SwCleanCanonicalText -Text $text -Windows $windows) | Should -BeFalse
+    }
+}
+
 Describe 'Clear-SwUserTempFiles' {
     BeforeEach {
         Set-StrictMode -Version Latest
@@ -1046,6 +1089,14 @@ Describe 'Clear-SwUserLogs' {
         }
         Clear-SwUserLogs
         @(Get-OfferedPaths) | Should -Contain $keep
+    }
+
+    It 'leaves the local Temp folder to the temp target when only the typed spelling can be compared' {
+        Set-Env 'TEMP' $script:Temp6
+        $null = New-OldFile (P $script:Temp6 'x.log') 30
+        Mock Resolve-SwSafePath { $null }
+        Clear-SwUserLogs
+        @(Get-OfferedPaths | Where-Object { Test-SameOrUnder $_ $script:Temp6 }).Count | Should -Be 0
     }
 
     It 'CL-22 still offers the local Temp folder when TEMP is another folder' {
