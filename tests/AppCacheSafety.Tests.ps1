@@ -158,7 +158,7 @@ Describe 'Application cache boundaries' {
         (Get-CleanupStats).FilesCleaned | Should -Be 0
     }
 
-    It 'Keeps recent crash dumps and non-dump entries in system dump cleanup preview and real run' {
+    It 'Keeps recent crash dumps and non-dump entries in the error report cleanup preview and real run' {
         $recent = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\recent.dmp"
         $note = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-notes.txt"
         $nested = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-folder\inner.dmp"
@@ -167,7 +167,7 @@ Describe 'Application cache boundaries' {
             (Get-Item -LiteralPath $path).CreationTime = (Get-Date).AddDays(-10)
         }
         Set-DryRunMode -Enabled $true
-        Clear-MemoryDumps
+        Clear-ErrorReports -DaysOld 7
         if (Test-Path -LiteralPath $script:ExportListFile) {
             $preview = Get-Content -LiteralPath $script:ExportListFile -Raw
             $preview | Should -Not -Match 'recent\.dmp'
@@ -175,13 +175,13 @@ Describe 'Application cache boundaries' {
             $preview | Should -Not -Match 'old-folder'
         }
         Set-DryRunMode -Enabled $false
-        Clear-MemoryDumps
+        Clear-ErrorReports -DaysOld 7
         Test-Path -LiteralPath $recent | Should -BeTrue
         Test-Path -LiteralPath $note | Should -BeTrue
         Test-Path -LiteralPath $nested | Should -BeTrue
     }
 
-    It 'Removes only old crash dumps across user and system cleanup' {
+    It 'Removes only old crash dumps in the error report cleanup' {
         $old = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old.dmp"
         $recent = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\recent.dmp"
         $note = New-CacheFile "$env:LOCALAPPDATA\CrashDumps\old-notes.txt"
@@ -191,7 +191,6 @@ Describe 'Application cache boundaries' {
         }
         Set-DryRunMode -Enabled $true
         Clear-ErrorReports -DaysOld 7
-        Clear-MemoryDumps
         Test-Path -LiteralPath $old | Should -BeTrue
         $preview = Get-Content -LiteralPath $script:ExportListFile -Raw
         $preview | Should -Match 'old\.dmp'
@@ -199,7 +198,6 @@ Describe 'Application cache boundaries' {
         $preview | Should -Not -Match 'old-notes'
         Set-DryRunMode -Enabled $false
         Clear-ErrorReports -DaysOld 7
-        Clear-MemoryDumps
         Test-Path -LiteralPath $old | Should -BeFalse
         Test-Path -LiteralPath $recent | Should -BeTrue
         Test-Path -LiteralPath $note | Should -BeTrue
