@@ -27,6 +27,7 @@ function Invoke-SwSystemCleanup {
     $ErrorActionPreference = 'Stop'
     Start-SwSection 'System cleanup'
     try {
+        Reset-SwReportChecks
         $isAdmin = $false
         try {
             $answer = @(Test-SwAdmin)

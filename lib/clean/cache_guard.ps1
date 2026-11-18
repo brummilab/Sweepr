@@ -184,6 +184,27 @@ function Get-SwCleanAnchors {
     return $anchors.ToArray()
 }
 
+function Test-SwCleanCanonicalText {
+    # True when the text of a path has no . or .. segment and no two separators in a row (one trailing
+    # separator is fine). Where the separator is the backslash, a slash is a deviation too. Only the
+    # text is read: the file system is not asked.
+    param([string]$Text)
+
+    $windows = ([System.IO.Path]::DirectorySeparatorChar -eq '\')
+    if ($windows -and $Text.Contains('/')) { return $false }
+    $separators = if ($windows) { [char[]]@('\', '/') } else { [char[]]@('/') }
+    $previousWasSeparator = $false
+    foreach ($character in $Text.ToCharArray()) {
+        $isSeparator = ($separators -contains $character)
+        if ($isSeparator -and $previousWasSeparator) { return $false }
+        $previousWasSeparator = $isSeparator
+    }
+    foreach ($segment in $Text.Split($separators)) {
+        if ($segment -ceq '.' -or $segment -ceq '..') { return $false }
+    }
+    return $true
+}
+
 function Test-SwCleanRootPlausible {
     <#
     .SYNOPSIS
@@ -202,8 +223,9 @@ function Test-SwCleanRootPlausible {
         $typed = $Root.Trim()
         $full = [System.IO.Path]::GetFullPath($typed)
         $own = ConvertTo-SwCleanCompare -Path $full
-        # Canonical: normalizing changes nothing but the kind of separator.
-        if (-not [string]::Equals($own, $typed.Replace('/', '\').TrimEnd([char[]]@('\')), [System.StringComparison]::Ordinal)) { return $false }
+        # Canonical is judged on the text alone, so that a short 8.3 name that GetFullPath expands is no
+        # deviation: no . or .. segment, no doubled separator, and on Windows no slash.
+        if (-not (Test-SwCleanCanonicalText -Text $typed)) { return $false }
 
         $forms = [System.Collections.Generic.List[string]]::new()
         $forms.Add($own)
@@ -435,7 +457,7 @@ function Get-SwCacheProfiles {
             Add-SwCleanNotMeasured -Name $label -Reason 'incomplete scan'
             return
         }
-        foreach ($profile in $profiles) { $profile }
+        foreach ($profileFolder in $profiles) { $profileFolder }
     }
     catch { Write-SwDebug "profiles not listed, ${Root}: $($_.Exception.Message)" }
 }

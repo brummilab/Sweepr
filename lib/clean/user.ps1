@@ -30,6 +30,13 @@ function Get-SwReportChecks {
     return $script:SwReportChecks
 }
 
+function Reset-SwReportChecks {
+    # Empties the table of the report offers. Every section run starts with an empty one, so that it
+    # does not grow when the sections run more than once in a process. Never throws.
+    try { $null = (Get-SwReportChecks).Clear() }
+    catch { $script:SwReportChecks = @{} }
+}
+
 function Test-SwReportEntryAge {
     <#
     .SYNOPSIS
@@ -112,7 +119,8 @@ function Clear-SwReportRoot {
         if ($DaysOld -lt 0) { return }
         if (-not (Test-SwCleanCompletePath -Path $Root)) { return }
         if (-not (Test-SwCleanDirectory -Path $Root)) { return }
-        $label = $Description + ' (' + (Get-SwCleanRootLabel -Path $Root) + ')'
+        # The whole root path names the entry: the user and the system root have the same last segments.
+        $label = $Description + ' (' + $Root + ')'
 
         $snapshot = Get-SwPathSnapshot -Path $Root
         if ($null -eq $snapshot) {
@@ -278,13 +286,20 @@ function Clear-SwUserLogs {
         # The files of APPDATA itself are the target, so equality with APPDATA is no reason to refuse it.
         if ($null -ne $roaming) { $targets.Add([pscustomobject]@{ Folder = $roaming; AllowEqualTo = 'APPDATA' }) }
         $temp = Get-SwCleanEnvRoot -Name 'TEMP'
+        $tempForms = $null
+        if ($null -ne $temp) { $tempForms = Get-SwCleanPathForms -Path $temp }
 
         foreach ($target in $targets) {
             try {
                 $folder = [string]$target.Folder
                 if (-not (Test-SwCleanDirectory -Path $folder)) { continue }
                 # The temp target already offers every old file of this folder, logs included.
-                if ($null -ne $temp -and [string]::Equals((ConvertTo-SwCleanCompare -Path $folder), (ConvertTo-SwCleanCompare -Path $temp), [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+                # Same folder when the typed spellings agree or, if both are known, the final ones (links resolved).
+                if ($null -ne $tempForms) {
+                    $folderForms = Get-SwCleanPathForms -Path $folder
+                    if ([string]::Equals($folderForms.Typed, $tempForms.Typed, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+                    if ($folderForms.Resolved.Length -gt 0 -and $tempForms.Resolved.Length -gt 0 -and [string]::Equals($folderForms.Resolved, $tempForms.Resolved, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+                }
                 if (-not (Test-SwCleanRootPlausible -Root $folder -AllowEqualTo ([string]$target.AllowEqualTo))) {
                     Add-SwCleanNotMeasured -Name 'Old log files' -Reason 'not verified'
                     continue
@@ -317,6 +332,7 @@ function Invoke-SwUserCleanup {
     $ErrorActionPreference = 'Stop'
     Start-SwSection 'User essentials'
     try {
+        Reset-SwReportChecks
         try { $null = Clear-SwUserTempFiles -DaysOld $TempDaysOld }
         catch { Write-SwDebug "temp files failed: $($_.Exception.Message)" }
         try { $null = Clear-SwErrorReports -DaysOld 7 }
