@@ -38,4 +38,4 @@ Geplante Entwicklung. Die Reihenfolge kann sich ändern. Wünsche und Fehler bit
 
 - Installation über **winget** und **Scoop**
 - Vorstellung auf Reddit
-- **Desktop-App mit Fenster** (Rust mit egui) als zweiter Weg neben `sw`, gebaut nach denselben Verhaltensbeschreibungen und Tests wie die Kommandozeile
+- **Desktop-App mit Fenster** (Rust mit egui) als zweiter Weg neben `sw`, gebaut nach denselben Verhaltensbeschreibungen und Tests wie die Kommandozeile. Zuerst wandern die Go-Teile (`sw.exe`, `status`, `analyze`): Ihr heutiges Verhalten wird aufgezeichnet, und die Rust-Fassung muss dieselben Antworten geben, bevor sie sie ersetzt
