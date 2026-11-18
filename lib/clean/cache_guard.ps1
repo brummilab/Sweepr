@@ -187,12 +187,15 @@ function Get-SwCleanAnchors {
 function Test-SwCleanCanonicalText {
     # True when the text of a path has no . or .. segment and no two separators in a row (one trailing
     # separator is fine). Where the separator is the backslash, a slash is a deviation too. Only the
-    # text is read: the file system is not asked.
-    param([string]$Text)
+    # text is read: the file system is not asked. -Windows asks for the rules of a Windows host
+    # ($true) or of a host with the slash only ($false); without it the host decides.
+    param([string]$Text, [Nullable[bool]]$Windows = $null)
 
-    $windows = ([System.IO.Path]::DirectorySeparatorChar -eq '\')
-    if ($windows -and $Text.Contains('/')) { return $false }
-    $separators = if ($windows) { [char[]]@('\', '/') } else { [char[]]@('/') }
+    if ($null -eq $Windows) { $Windows = ([System.IO.Path]::DirectorySeparatorChar -eq '\') }
+    if ($Windows -and $Text.Contains('/')) { return $false }
+    # Typed as char[]: an untyped result of the if expression is an object array, and Split would then
+    # take the overload for one string and split nothing.
+    [char[]]$separators = if ($Windows) { [char[]]@('\', '/') } else { [char[]]@('/') }
     $previousWasSeparator = $false
     foreach ($character in $Text.ToCharArray()) {
         $isSeparator = ($separators -contains $character)
