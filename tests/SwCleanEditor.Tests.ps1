@@ -718,13 +718,41 @@ Describe 'Edit-SwWhitelist creates the file' {
         $script:Started.Count | Should -Be 1
     }
 
-    It 'S-14 CL-8 leaves the file alone and opens the editor when an earlier existence check said it was missing' {
+    It 'S-14 CL-8 leaves a file alone that appears between the existence check and the creation, and opens the editor' {
         $null = New-Dir (Split-Path -Parent (Get-ListFile))
-        [System.IO.File]::WriteAllText((Get-ListFile), 'keep me', $script:Utf8)
-        Mock Test-Path { $false }
-        Edit-SwWhitelist
+        # The template is built after the check and before the file is opened: the file shows up there.
+        Mock Get-SwWhitelistTemplate {
+            [System.IO.File]::WriteAllText((Get-ListFile), 'keep me', $script:Utf8)
+            '# Example template (test)'
+        }
+        { Edit-SwWhitelist } | Should -Not -Throw
+        Should -Invoke Get-SwWhitelistTemplate -Times 1 -Exactly
         Get-FileText (Get-ListFile) | Should -BeExactly 'keep me'
         $script:Started.Count | Should -Be 1
+    }
+
+    It 'S-14 CL-8 uses no other way to write than one Open with FileMode.CreateNew in the editor path' {
+        $ast = (Get-Command -Name Edit-SwWhitelist -CommandType Function).ScriptBlock.Ast
+        $modes = @($ast.FindAll({
+                    param($node)
+                    ($node -is [System.Management.Automation.Language.MemberExpressionAst]) -and
+                    ($node.Expression -is [System.Management.Automation.Language.TypeExpressionAst]) -and
+                    ($node.Expression.TypeName.Name -like '*FileMode')
+                }, $true) | ForEach-Object { [string]$_.Member.Value })
+        $modes | Should -Be @('CreateNew')
+
+        $members = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true) |
+                ForEach-Object { [string]$_.Member.Value })
+        @($members | Where-Object { $_ -ceq 'Open' }).Count | Should -Be 1
+        $forbidden = @('Create', 'CreateText', 'OpenWrite', 'OpenText', 'WriteAllText', 'WriteAllBytes', 'WriteAllLines', 'AppendAllText',
+            'AppendAllLines', 'AppendText', 'Replace', 'Move', 'Copy', 'Delete', 'SetLength')
+        foreach ($name in $forbidden) { $members | Should -Not -Contain $name -Because $name }
+
+        $commands = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                ForEach-Object { [string]$_.GetCommandName() })
+        foreach ($name in 'Set-Content', 'Add-Content', 'Out-File', 'New-Item', 'Clear-Content', 'Copy-Item', 'Move-Item', 'Rename-Item', 'Remove-Item') {
+            $commands | Should -Not -Contain $name -Because $name
+        }
     }
 
     It 'S-14 CL-8 writes nothing through a link to a missing file and still opens the editor' {
