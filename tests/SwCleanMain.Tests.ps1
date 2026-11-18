@@ -513,7 +513,10 @@ BeforeAll {
     # ---- a fake installation: the script, the core modules and a stand-in section runner ------------
 
     $script:RunnerStub = @'
-# Stand-in for the section runner: prints what it was given, and does what the test asks through SWEEPR_TEST_RUNNER.
+# Stand-ins for the section runner and the administrator query. The runner prints what it was given, and does
+# what the test asks through SWEEPR_TEST_RUNNER. The answer to the query comes from SWEEPR_TEST_ADMIN (1 or
+# not), so that a run does not depend on the rights of the account that runs the tests.
+function Test-SwAdmin { return ([System.Environment]::GetEnvironmentVariable('SWEEPR_TEST_ADMIN') -eq '1') }
 function Invoke-SweeprCleanSections {
     param([bool]$IncludeSystem, [bool]$IncludeGameMedia, [bool]$IncludeGpuShaders)
     $mode = [System.Environment]::GetEnvironmentVariable('SWEEPR_TEST_RUNNER')
@@ -560,7 +563,7 @@ function Invoke-SweeprCleanSections {
             SWEEPR_NO_OPLOG = '1'
         }
         foreach ($key in $Environment.Keys) { $childEnv[$key] = $Environment[$key] }
-        $remove = @('SWEEPR_DRY_RUN', 'SWEEPR_DEBUG', 'SWEEPR_TEST_RUNNER', '_SWEEPR_OPLOG_RUN_COMMAND', '_SWEEPR_OPLOG_RUN_ID') + @($RemoveEnvironment)
+        $remove = @('SWEEPR_DRY_RUN', 'SWEEPR_DEBUG', 'SWEEPR_TEST_RUNNER', 'SWEEPR_TEST_ADMIN', '_SWEEPR_OPLOG_RUN_COMMAND', '_SWEEPR_OPLOG_RUN_ID') + @($RemoveEnvironment)
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $script:Pwsh
         $psi.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (P $Install 'bin' 'clean.ps1') + '" ' + $Arguments
@@ -722,6 +725,8 @@ Describe 'Get-SwPathCollision' {
     }
 
     It 'CL-6 replaces control characters of the path in the message by spaces' {
+        # Windows does not allow control characters in a name, so the folder cannot be made there.
+        if ($script:OnWindows) { Set-ItResult -Skipped -Because 'Windows does not allow control characters in a folder name'; return }
         $tabbed = New-Dir (P $script:Work ('Tools [US' + [char]9 + [char]10 + 'B]') 'sweepr')
         $null = New-Dir (P $script:Work 'Tools S' 'sweepr')
         $message = Get-SwPathCollision -Path $tabbed -Edition 'Desktop'
@@ -762,10 +767,12 @@ Describe 'Get-SwPathCollision' {
 
     It 'CL-6 S-15 [W] stops Windows PowerShell 5.1 with exit 1 and an empty standard output when a pattern folder lies beside the installation' {
         $install = New-Dir (P $TestDrive 'Tools [USB]' 'sweepr')
-        $null = New-Dir (P $TestDrive 'Tools U' 'sweepr')
+        $lookalike = New-Dir (P $TestDrive 'Tools U' 'sweepr')
         foreach ($name in 'bin', 'lib') { Copy-Item -LiteralPath (P $script:RepoRoot $name) -Destination (P $install $name) -Recurse }
-        $null = Copy-Item -LiteralPath (P $script:RepoRoot 'bin') -Destination (P $TestDrive 'Tools U' 'sweepr' 'bin') -Recurse
-        $null = Copy-Item -LiteralPath (P $script:RepoRoot 'lib') -Destination (P $TestDrive 'Tools U' 'sweepr' 'lib') -Recurse
+        # The lookalike holds the modules that a wrong match would load, but not the script itself: when
+        # the host reads the path of -File as a pattern, it then finds nothing there and takes the real
+        # script, so the check in the script is what is tested.
+        $null = Copy-Item -LiteralPath (P $script:RepoRoot 'lib') -Destination (P $lookalike 'lib') -Recurse
         $powershell = (Get-Command -Name powershell.exe -ErrorAction Stop).Source
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $powershell
@@ -784,9 +791,12 @@ Describe 'Get-SwPathCollision' {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
         $process.WaitForExit(120000) | Should -BeTrue
-        $process.ExitCode | Should -Be 1
-        $stdout.Result.Trim() | Should -BeExactly ''
-        (Get-ChildStderr $stderr.Result).Length | Should -BeGreaterThan 0
+        $shown = $stdout.Result
+        if ($shown.Length -gt 600) { $shown = $shown.Substring(0, 600) }
+        $report = 'arguments: ' + $psi.Arguments + '; exit ' + $process.ExitCode + '; stdout: [' + $shown + ']; stderr: [' + (Get-ChildStderr $stderr.Result) + ']'
+        $process.ExitCode | Should -Be 1 -Because $report
+        $stdout.Result.Trim() | Should -BeExactly '' -Because $report
+        (Get-ChildStderr $stderr.Result).Length | Should -BeGreaterThan 0 -Because $report
     }
 }
 
@@ -1052,9 +1062,15 @@ Describe 'bin\clean.ps1 as a file in a child process' {
     }
 
     It 'CL-10 does not ask for administrator rights: -System without them runs the rest and gives exit 0' {
-        $run = Invoke-CleanScript $script:Fake '-System'
+        $run = Invoke-CleanScript $script:Fake '-System' @{ SWEEPR_TEST_ADMIN = '0' }
         $run.ExitCode | Should -Be 0
         (Get-RunnerLine $run.Out) | Should -Match 'system=False'
+    }
+
+    It 'CL-10 passes -System on when the account already has administrator rights' {
+        $run = Invoke-CleanScript $script:Fake '-System' @{ SWEEPR_TEST_ADMIN = '1' }
+        $run.ExitCode | Should -Be 0
+        (Get-RunnerLine $run.Out) | Should -Match 'system=True'
     }
 
     It 'CL-1 accepts no words: a word is a binding error and nothing runs' {
