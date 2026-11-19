@@ -879,6 +879,15 @@ Describe 'CD-12 the helper process: encoded command, execution policy and argume
         $script:Created[0].Arguments | Should -Not -Match 'Bypass'
     }
 
+    It 'CD-12 reads the input of the helper to its end before the tool is called, so that nothing the start put into it reaches the tool' {
+        $null = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x')
+        $text = Get-Encoded $script:Created[0].Arguments
+        $drain = $text.IndexOf('OpenStandardInput', [System.StringComparison]::Ordinal)
+        $drain | Should -BeGreaterOrEqual 0
+        $drain | Should -BeLessThan $text.IndexOf('&', [System.StringComparison]::Ordinal)
+        $text.IndexOf('Read(', [System.StringComparison]::Ordinal) | Should -BeGreaterThan $drain
+    }
+
     It 'CD-12 puts the absolute path of the program into the command as a literal and calls it with &' {
         $null = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x')
         $text = Get-Encoded $script:Created[0].Arguments

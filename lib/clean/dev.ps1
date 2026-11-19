@@ -343,12 +343,16 @@ function Get-SwDevHelperCommand {
     # call runs under the preference Continue, so that text on the error stream is no failure. The two
     # encodings are set apart, because setting the console one fails without a console. A call that throws
     # (program gone, not executable, script that does not load, blocked by a policy) ends the helper with
-    # the fixed exit code 125; a script that ends without exit and without an exception gives 0.
+    # the fixed exit code 125; a script that ends without exit and without an exception gives 0. The first
+    # line reads the input of the helper to its end: the parent closes it at once, but under .NET Framework
+    # the writer of the input has already put its encoding preamble (a UTF-8 byte order mark under Windows
+    # PowerShell 5.1) into the pipe when the process started, and the tool must not read that as data.
     param([string]$Program, [string[]]$Arguments)
 
     $call = '& ' + (ConvertTo-SwPsLiteral -Value $Program)
     foreach ($argument in @($Arguments)) { $call += ' ' + (ConvertTo-SwPsLiteral -Value ([string]$argument)) }
     $lines = @(
+        'try { $stdin = [Console]::OpenStandardInput(); $buffer = New-Object byte[] 4096; while ($stdin.Read($buffer, 0, $buffer.Length) -gt 0) { } } catch { $null = $_ }'
         '$ErrorActionPreference = ''Continue'''
         '$utf8 = New-Object System.Text.UTF8Encoding($false)'
         'try { $OutputEncoding = $utf8 } catch { $null = $_ }'
