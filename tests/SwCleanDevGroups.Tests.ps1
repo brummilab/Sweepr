@@ -720,6 +720,14 @@ Describe 'CD-9 the section of Invoke-SwDevCleanup' {
         (@(Get-LogLines 'DEBUG') -join "`n") | Should -Match ([regex]::Escape('boom of ' + $Group))
     }
 
+    It 'CD-4 throws nothing and still runs the twelve groups when the section cannot be opened or closed' {
+        Use-GroupSpies
+        Mock Start-SwSection { throw 'no section' }
+        Mock Stop-SwSection { throw 'no section end' }
+        { Invoke-SwDevCleanup } | Should -Not -Throw
+        @($script:Sections) | Should -Be @($script:GroupOrder | ForEach-Object { 'group:' + $_ })
+    }
+
     It 'CD-4 S-14 throws nothing and writes nothing to the pipeline with the real groups, also when every sink writes a value' {
         $script:SinkLeak = $true
         $out = Invoke-Captured { Invoke-SwDevCleanup }

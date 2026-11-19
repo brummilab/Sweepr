@@ -701,7 +701,7 @@ Describe 'CD-1 loading dev.ps1' {
     }
 }
 
-Describe 'Old name old names of the developer tool functions are forwarding functions' {
+Describe 'Old names of the developer tool functions are forwarding functions' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'

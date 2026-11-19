@@ -341,7 +341,9 @@ function Get-SwDevHelperCommand {
     # The text the helper PowerShell runs: UTF-8 output, the tool called with & by its absolute path,
     # every argument its own literal, and the exit code of the tool as the exit code of the helper. A native
     # call runs under the preference Continue, so that text on the error stream is no failure. The two
-    # encodings are set apart, because setting the console one fails without a console.
+    # encodings are set apart, because setting the console one fails without a console. A call that throws
+    # (program gone, not executable, script that does not load, blocked by a policy) ends the helper with
+    # the fixed exit code 125; a script that ends without exit and without an exception gives 0.
     param([string]$Program, [string[]]$Arguments)
 
     $call = '& ' + (ConvertTo-SwPsLiteral -Value $Program)
@@ -351,7 +353,9 @@ function Get-SwDevHelperCommand {
         '$utf8 = New-Object System.Text.UTF8Encoding($false)'
         'try { $OutputEncoding = $utf8 } catch { $null = $_ }'
         'try { [Console]::OutputEncoding = $utf8 } catch { $null = $_ }'
+        'try {'
         $call
+        '} catch { exit 125 }'
         'if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE } else { exit 0 }'
     )
     return ($lines -join "`n")
@@ -366,6 +370,37 @@ function Wait-SwDevRead {
         return [bool]$Task.Wait($left)
     }
     catch { return $false }
+}
+
+function Stop-SwDevProcessTree {
+    # Ends the whole process tree of a process this file started, with taskkill from the system folder, and
+    # says in the reasons whether that is confirmed. A process that still runs afterwards gets Kill() as the
+    # last resort. Gives the taskkill process, which the caller releases after the process itself.
+    param($Process, $Reasons)
+
+    $killer = $null
+    $id = 0
+    try { $id = [int]$Process.Id }
+    catch { $id = 0 }
+    try {
+        $killFile = [System.IO.Path]::Combine([System.Environment]::SystemDirectory, 'taskkill.exe')
+        $killer = New-SwOwnerProcess -FilePath $killFile -Arguments ('/PID ' + $id + ' /T /F')
+        $null = $killer.Start()
+        try { $killer.StandardInput.Close() }
+        catch { $null = $_ }
+        $null = $killer.StandardOutput.ReadToEndAsync()
+        $null = $killer.StandardError.ReadToEndAsync()
+        if ([bool]$killer.WaitForExit(5000)) {
+            $killCode = [int]$killer.ExitCode
+            if ($killCode -eq 0) { $Reasons.Add('process tree ' + $id + ' terminated') }
+            else { $Reasons.Add('taskkill unconfirmed: ' + $killCode) }
+        }
+        else { $Reasons.Add('taskkill unconfirmed: timed out after 5 s') }
+    }
+    catch { $Reasons.Add('taskkill unconfirmed: ' + $_.Exception.Message) }
+    try { if (-not [bool]$Process.HasExited) { $Process.Kill() } }
+    catch { $null = $_ }
+    return $killer
 }
 
 function Invoke-SwOwnerCommand {
@@ -393,6 +428,7 @@ function Invoke-SwOwnerCommand {
     $reasons = [System.Collections.Generic.List[string]]::new()
     $process = $null
     $killer = $null
+    $killed = $false
     try {
         if ($null -ne $Outcome) { $Outcome['Reason'] = '' }
         if ($Mutation -and ((Test-SwDryRunMode) -or (Test-SwDevSkipExternal))) {
@@ -431,8 +467,7 @@ function Invoke-SwOwnerCommand {
         $outTask = $null
         $errTask = $null
         try {
-            try { $process.StandardInput.Close() }
-            catch { Write-SwDebug "input of $Name not closed: $($_.Exception.Message)" }
+            $process.StandardInput.Close()
             $outTask = $process.StandardOutput.ReadToEndAsync()
             $errTask = $process.StandardError.ReadToEndAsync()
             $exited = [bool]$process.WaitForExit($TimeoutSeconds * 1000)
@@ -466,27 +501,8 @@ function Invoke-SwOwnerCommand {
         }
 
         if ($needKill) {
-            $id = 0
-            try { $id = [int]$process.Id }
-            catch { $id = 0 }
-            try {
-                $killFile = [System.IO.Path]::Combine([System.Environment]::SystemDirectory, 'taskkill.exe')
-                $killer = New-SwOwnerProcess -FilePath $killFile -Arguments ('/PID ' + $id + ' /T /F')
-                $null = $killer.Start()
-                try { $killer.StandardInput.Close() }
-                catch { $null = $_ }
-                $null = $killer.StandardOutput.ReadToEndAsync()
-                $null = $killer.StandardError.ReadToEndAsync()
-                if ([bool]$killer.WaitForExit(5000)) {
-                    $killCode = [int]$killer.ExitCode
-                    if ($killCode -eq 0) { $reasons.Add('process tree ' + $id + ' terminated') }
-                    else { $reasons.Add('taskkill unconfirmed: ' + $killCode) }
-                }
-                else { $reasons.Add('taskkill unconfirmed: timed out after 5 s') }
-            }
-            catch { $reasons.Add('taskkill unconfirmed: ' + $_.Exception.Message) }
-            try { if (-not [bool]$process.HasExited) { $process.Kill() } }
-            catch { $null = $_ }
+            $killed = $true
+            $killer = Stop-SwDevProcessTree -Process $process -Reasons $reasons
         }
 
         if ($reasons.Count -gt 0) { return $null }
@@ -499,6 +515,12 @@ function Invoke-SwOwnerCommand {
     }
     catch {
         $reasons.Add('error: ' + $_.Exception.Message)
+        if ($null -ne $process -and -not $killed) {
+            $running = $true
+            try { $running = -not [bool]$process.HasExited }
+            catch { $running = $true }
+            if ($running) { $killer = Stop-SwDevProcessTree -Process $process -Reasons $reasons }
+        }
         return $null
     }
     finally {
@@ -1150,7 +1172,8 @@ function Invoke-SwDevCleanup {
         a failing group stops only itself.
     #>
     $ErrorActionPreference = 'Stop'
-    Start-SwSection 'Developer tools'
+    try { Start-SwSection 'Developer tools' }
+    catch { Write-SwDebug "section not opened: $($_.Exception.Message)" }
     $owned = Enter-SwDevRun
     try {
         foreach ($group in 'Clear-SwNpmFamilyCaches', 'Clear-SwNodeBuildCaches', 'Clear-SwPythonCaches', 'Clear-SwDotNetCaches', 'Clear-SwGoCaches', 'Clear-SwMiseCache',
@@ -1161,7 +1184,8 @@ function Invoke-SwDevCleanup {
     }
     finally {
         if ($owned) { Exit-SwDevRun }
-        Stop-SwSection
+        try { Stop-SwSection }
+        catch { Write-SwDebug "section not closed: $($_.Exception.Message)" }
     }
 }
 

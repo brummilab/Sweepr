@@ -202,7 +202,8 @@ function Clear-SwGameMedia {
     param([int]$DaysOld = 90)
 
     $ErrorActionPreference = 'Stop'
-    Start-SwSection ('Game media (>' + $DaysOld + 'd old)')
+    try { Start-SwSection ('Game media (>' + $DaysOld + 'd old)') }
+    catch { Write-SwDebug "section not opened: $($_.Exception.Message)" }
     try {
         if ($DaysOld -lt 0) { return }
         $cutoff = (Get-Date).AddDays(-$DaysOld)
@@ -243,7 +244,11 @@ function Clear-SwGameMedia {
             }
         }
     }
-    finally { Stop-SwSection }
+    catch { Write-SwDebug "game media not handled: $($_.Exception.Message)" }
+    finally {
+        try { Stop-SwSection }
+        catch { Write-SwDebug "section not closed: $($_.Exception.Message)" }
+    }
 }
 
 # ============================================================================
@@ -263,14 +268,18 @@ function Invoke-SwAppCleanup {
     )
 
     $ErrorActionPreference = 'Stop'
-    Start-SwSection 'Applications'
+    try { Start-SwSection 'Applications' }
+    catch { Write-SwDebug "section not opened: $($_.Exception.Message)" }
     try {
         foreach ($group in 'Clear-SwOfficeCache', 'Clear-SwOneDriveCache', 'Clear-SwGoogleDriveCache', 'Clear-SwAdobeCaches', 'Clear-SwGamePlatformCaches') {
             try { $null = & $group }
             catch { Write-SwDebug "$group failed: $($_.Exception.Message)" }
         }
     }
-    finally { Stop-SwSection }
+    finally {
+        try { Stop-SwSection }
+        catch { Write-SwDebug "section not closed: $($_.Exception.Message)" }
+    }
 
     if ($IncludeGameMedia) {
         try { $null = Clear-SwGameMedia -DaysOld $GameMediaDaysOld }

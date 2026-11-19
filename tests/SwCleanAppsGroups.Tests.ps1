@@ -763,6 +763,14 @@ Describe 'CA-1 the section of Invoke-SwAppCleanup' {
         (@(Get-LogLines 'DEBUG') -join "`n") | Should -Match ([regex]::Escape('boom of ' + $Group))
     }
 
+    It 'CD-4 throws nothing and still runs the groups and the game media when the section cannot be opened or closed' {
+        Use-AppGroupSpies
+        Mock Start-SwSection { throw 'no section' }
+        Mock Stop-SwSection { throw 'no section end' }
+        { Invoke-SwAppCleanup -IncludeGameMedia -GameMediaDaysOld 30 } | Should -Not -Throw
+        @($script:Sections) | Should -Be (@($script:AppGroupOrder | ForEach-Object { 'group:' + $_ }) + @('media:30'))
+    }
+
     It 'CD-4 S-14 writes nothing to the pipeline with the real groups, also when every sink writes a value, and throws nothing' {
         $script:SinkLeak = $true
         (Invoke-Captured { Invoke-SwAppCleanup }).Count | Should -Be 0
@@ -1344,7 +1352,7 @@ Describe 'CD-1 loading apps.ps1' {
     }
 }
 
-Describe 'Old name old names of the application functions are forwarding functions' {
+Describe 'Old names of the application functions are forwarding functions' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'

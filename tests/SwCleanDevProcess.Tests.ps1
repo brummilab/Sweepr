@@ -739,6 +739,19 @@ Describe 'CD-12 the search for the program' {
         Should -Invoke New-SwOwnerProcess -Times 0 -Exactly
     }
 
+    It 'CD-12 S-3 ignores a relative PATH entry that leads out of the working folder and the location into a sibling folder' {
+        $parent = New-Dir (P $script:Work 'rel parent')
+        $cwd = New-Dir (P $parent 'cwd')
+        $null = New-ToolFolder 'rel parent/tools'
+        [System.Environment]::CurrentDirectory = $cwd
+        Set-Location -LiteralPath $cwd
+        Set-Env 'PATH' ('..' + $script:Sep + 'tools')
+        $outcome = @{}
+        $null = Invoke-SwOwnerCommand -Name 'owner-fixture' -Arguments @('x') -Outcome $outcome
+        $outcome['Reason'] | Should -Be 'tool not found'
+        Should -Invoke New-SwOwnerProcess -Times 0 -Exactly
+    }
+
     It 'CD-12 does not take an alias, a function or a cmdlet of the same name for a program' {
         function global:owner-shadow-probe { 'function' }
         Set-Alias -Name 'owner-alias-probe' -Value 'Get-Date' -Scope Global
@@ -1201,6 +1214,20 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
         $script:Created.Count | Should -Be 2
         $script:Created[1].Arguments | Should -BeExactly '/PID 42 /T /F'
         $owner.Disposed | Should -BeTrue
+        $outcome['Reason'] | Should -Match '^error: .*the wait failed'
+        $outcome['Reason'] | Should -Match 'process tree 42 terminated'
+    }
+
+    It 'CD-17 gives "error: " with the message and the evidence of the end when the input cannot be closed' {
+        $owner = New-FakeProcess -Waits $false -Id 42 -ExitsWhenKillStarts $true
+        Add-Member -InputObject $owner.StandardInput -MemberType ScriptMethod -Name Close -Value { throw 'input cannot be closed' } -Force
+        Use-FakeProcesses @($owner, (New-FakeProcess -Label 'kill' -Id 77))
+        $outcome = @{}
+        $result = $null
+        { $result = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x') -Outcome $outcome } | Should -Not -Throw
+        $null -eq $result | Should -BeTrue
+        $outcome['Reason'] | Should -Match '^error: .*input cannot be closed.*; process tree 42 terminated$'
+        $owner.Disposed | Should -BeTrue
     }
 
     It 'CD-17 S-8 uses taskkill only for the process it started and never by name: the only argument is the id of the process' {
@@ -1328,6 +1355,25 @@ Describe 'CD-12 CD-17 real helper processes with a stand-in tool' {
         $result = Invoke-SwOwnerCommand -Name (P $folder 'stdin-fixture.ps1') -Arguments @() -TimeoutSeconds 60
         $result.Output | Should -Be 'stdin closed'
         $clock.Elapsed.TotalSeconds | Should -BeLessThan 50
+    }
+
+    It 'CD-12 gives $null and "exit code" for a stand-in script with a syntax error, for a mutation too' {
+        $folder = New-ToolFolder 'syntax tools' 'if ( {' 'syntax-fixture'
+        foreach ($mutation in $false, $true) {
+            $outcome = @{}
+            if ($mutation) { $result = Invoke-SwOwnerCommand -Name (P $folder 'syntax-fixture.ps1') -Arguments @() -Mutation -TimeoutSeconds 60 -Outcome $outcome }
+            else { $result = Invoke-SwOwnerCommand -Name (P $folder 'syntax-fixture.ps1') -Arguments @() -Outcome $outcome }
+            $null -eq $result | Should -BeTrue
+            $outcome['Reason'] | Should -Match 'exit code [1-9]'
+        }
+    }
+
+    It 'CD-12 gives $null and "exit code" for a stand-in script that throws' {
+        $folder = New-ToolFolder 'throw tools' "throw 'the tool broke'" 'throw-fixture'
+        $outcome = @{}
+        $result = Invoke-SwOwnerCommand -Name (P $folder 'throw-fixture.ps1') -Arguments @() -Outcome $outcome
+        $null -eq $result | Should -BeTrue
+        $outcome['Reason'] | Should -Match 'exit code [1-9]'
     }
 
     It 'CD-17 gives $null and "exit code 9" for a program that exits with 9' {

@@ -1214,3 +1214,28 @@ Describe 'CD-14 CD-15 the calls of Invoke-SwOwnerCommand for one owner path, wit
         $script:Seen[0].Mutation | Should -BeFalse
     }
 }
+
+Describe 'CD-12 CD-18 a tool script that does not load ends in a FAILED line with the real command' {
+    BeforeEach {
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        Initialize-Case -NoNet -RealProcess
+        $script:SweeprDryRunMode = $false
+        $script:Cache = New-NpmCache (P $script:Work 'npm-cache')
+        Mock Get-SwOwnerCachePath { $script:Cache }
+        $folder = New-Dir (P $script:Work 'broken tools')
+        [System.IO.File]::WriteAllText((P $folder 'npm.ps1'), 'if ( {', $script:Utf8)
+        $script:Broken = P $folder 'npm.ps1'
+    }
+    AfterEach { Stop-Case }
+
+    It 'CD-18 writes one FAILED line with "exit code", no OWNER line and counts nothing' {
+        Invoke-SwOwnerCacheCleanup -Name $script:Broken -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
+        $failed = @($script:Ops | Where-Object { $_.Action -ceq 'FAILED' })
+        $failed.Count | Should -Be 1
+        $failed[0].Detail | Should -Match '^npm cache clean --force: incomplete; exit code [1-9]'
+        @($script:Ops | Where-Object { $_.Action -ceq 'OWNER' }).Count | Should -Be 0
+        [int]$script:OwnerCleanups | Should -Be 0
+        [System.IO.File]::Exists((P $script:Cache '_cacache' 'gone.bin')) | Should -BeTrue
+    }
+}

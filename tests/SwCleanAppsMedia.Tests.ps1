@@ -750,6 +750,25 @@ Describe 'CA-8 Clear-SwGameMedia: section, cutoff and roots' {
         foreach ($call in @($script:ScanCalls | Where-Object { $_.Root -like '*Videos*' })) { Test-SameOrUnder $call.Root $bracket | Should -BeTrue -Because $call.Root }
     }
 
+    It 'CD-4 throws nothing and scans nothing when the cutoff cannot be computed: 2147483647 days, also through the old name' {
+        { Clear-SwGameMedia -DaysOld 2147483647 } | Should -Not -Throw
+        @($script:Sections) | Should -Be @('start:Game media (>2147483647d old)', 'stop')
+        $script:ScanCalls.Count | Should -Be 0
+        @(Get-MediaCalls).Count | Should -Be 0
+        $script:Sections.Clear()
+        { Clear-GameMediaFiles 2147483647 } | Should -Not -Throw
+        @($script:Sections) | Should -Be @('start:Game media (>2147483647d old)', 'stop')
+        (Invoke-Captured { Clear-SwGameMedia -DaysOld 2147483647 }).Count | Should -Be 0
+    }
+
+    It 'CD-4 throws nothing when the section cannot be opened or closed' {
+        Mock Start-SwSection { throw 'no section' }
+        { Clear-SwGameMedia -DaysOld 90 } | Should -Not -Throw
+        Mock Stop-SwSection { throw 'no section end' }
+        { Clear-SwGameMedia -DaysOld 90 } | Should -Not -Throw
+        $script:ScanCalls.Count | Should -BeGreaterThan 0
+    }
+
     It 'CA-9 asks no Remove-SwItems when the search finds no file, and uses no other removal helper at all' {
         Clear-SwGameMedia -DaysOld 90
         $script:Calls.Count | Should -Be 0
@@ -1094,7 +1113,7 @@ Describe 'CA-11 the preview and the real run of the game media with the real rem
     }
 }
 
-Describe 'Old name the old name Clear-GameMediaFiles' {
+Describe 'The old name Clear-GameMediaFiles' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
