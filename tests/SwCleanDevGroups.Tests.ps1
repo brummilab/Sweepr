@@ -305,7 +305,7 @@ BeforeAll {
 
     # Everything the code says on the host through the writers of the log module, the sections it opens
     # and closes, what it notes as not measured and what it would write to the operations log.
-    function script:Use-Spies([switch]$RealSections) {
+    function script:Use-Spies([switch]$RealSections, [switch]$RealNotMeasured) {
         $script:Log = [System.Collections.Generic.List[string]]::new()
         $script:HostLines = [System.Collections.Generic.List[string]]::new()
         $script:Sections = [System.Collections.Generic.List[string]]::new()
@@ -322,7 +322,9 @@ BeforeAll {
             Mock Start-SwSection { $script:Sections.Add('start:' + $Title) }
             Mock Stop-SwSection { $script:Sections.Add('stop') }
         }
-        Mock Add-SwNotMeasured { $script:NotMeasured.Add([pscustomobject]@{ Name = $Name; Reason = $Reason; Section = [string]$script:CurrentSection.Name }) }
+        if (-not $RealNotMeasured) { Mock Add-SwNotMeasured { $script:NotMeasured.Add([pscustomobject]@{ Name = $Name; Reason = $Reason; Section = [string]$script:CurrentSection.Name }) } }
+        $script:Activity = 0
+        Mock Set-SwSectionActivity { $script:Activity++ }
         Mock Write-SwOperation { $script:Ops.Add([pscustomobject]@{ Action = $Action; Path = $Path; Detail = $Detail }) }
     }
     function script:Get-AllText { (@($script:Log) + @($script:HostLines)) -join "`n" }
@@ -394,12 +396,9 @@ BeforeAll {
     }
     function script:Get-ScanRoots { @($script:ScanCalls | ForEach-Object { [string]$_.Root }) }
 
-    # The owner paths as a net: no query finds a tool, no command starts, no process is created. Every call is recorded.
-    function script:Use-OwnerNet {
-        $script:OwnerQueries = [System.Collections.Generic.List[object]]::new()
+    # The process side of the owner paths as a net: no command starts, no process is created. Every command call is recorded.
+    function script:Use-ProcessNet {
         $script:OwnerCommands = [System.Collections.Generic.List[object]]::new()
-        $script:OwnerCleanups = [System.Collections.Generic.List[object]]::new()
-        Mock Get-SwOwnerCachePath { $script:OwnerQueries.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments) }); $null }
         Mock Invoke-SwOwnerCommand {
             $script:OwnerCommands.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments); Mutation = [bool]$Mutation; TimeoutSeconds = $TimeoutSeconds })
             $null
@@ -407,11 +406,17 @@ BeforeAll {
         Mock New-SwOwnerProcess { throw 'a process must not be created in this test' }
         Mock Start-Process { throw 'Start-Process must not run in this test' }
     }
+    # The owner paths as a net: no query finds a tool (Get-SwOwnerCachePath gives $null) and nothing starts.
+    function script:Use-OwnerNet {
+        $script:OwnerQueries = [System.Collections.Generic.List[object]]::new()
+        Mock Get-SwOwnerCachePath { $script:OwnerQueries.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments) }); $null }
+        Use-ProcessNet
+    }
 
     # ---- one case: a fake profile below the test drive --------------------------------------------
 
     function script:Initialize-Case {
-        param([switch]$RealProcess, [switch]$RealIdentity, [switch]$NoNet, [switch]$Real, [switch]$RealSections, [switch]$OwnerSpy)
+        param([switch]$RealProcess, [switch]$RealIdentity, [switch]$NoNet, [switch]$Real, [switch]$RealSections, [switch]$OwnerSpy, [switch]$RealNotMeasured, [switch]$ProcessNetOnly)
         $script:SavedState = Save-State
         $script:SavedEnv = Save-Env $script:EnvNames
         $script:SavedCwd = [System.Environment]::CurrentDirectory
@@ -460,9 +465,10 @@ BeforeAll {
         $script:SweeprOperationsLogFile = P $script:Work 'oplog' 'operations.log'
         $script:SweeprOperationsLogStarted = $false
         if (-not $RealIdentity) { Use-FakeIdentity }
-        Use-Spies -RealSections:$RealSections
+        Use-Spies -RealSections:$RealSections -RealNotMeasured:$RealNotMeasured
         if (-not $RealProcess) { Mock Get-Process { @() } }
-        if (-not $NoNet) { Use-OwnerNet }
+        if ($ProcessNetOnly) { Use-ProcessNet }
+        elseif (-not $NoNet) { Use-OwnerNet }
         if (-not $Real) { Use-HelperSpies; Use-AppCacheSpy }
         if ($OwnerSpy) { Use-OwnerCleanupSpy }
     }
