@@ -219,6 +219,7 @@ BeforeAll {
         }
         , $lines
     }
+    function script:Get-ParamCount([string]$Name) { $signature = Get-ParamSignature $Name; @($signature).Count }
     function script:Get-ParamLine([string]$Function, [string]$Parameter) {
         $all = Get-ParamSignature $Function
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
@@ -351,7 +352,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PSBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PSBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -835,14 +836,14 @@ Describe 'CD-8 the old name Get-FilesWithinBudget forwards to Get-SwBoundedFileS
         (Get-ParamLine 'Get-FilesWithinBudget' 'Root') | Should -Be 'Root|System.String|pos=0|mandatory=False|default='
         (Get-ParamLine 'Get-FilesWithinBudget' 'Filter') | Should -Be 'Filter|System.String|pos=1|mandatory=False|default='
         (Get-ParamLine 'Get-FilesWithinBudget' 'TimeoutSeconds') | Should -Be 'TimeoutSeconds|System.Int32|pos=2|mandatory=False|default=15'
-        @(Get-ParamSignature 'Get-FilesWithinBudget').Count | Should -Be 3
+        (Get-ParamCount 'Get-FilesWithinBudget') | Should -Be 3
         (Get-Command -Name Get-FilesWithinBudget).CommandType | Should -Be 'Function'
     }
 
     It 'CD-8 calls the new function once with the bound values and gives its table back unchanged' {
         $table = @{ Files = @('x'); Complete = $true; Marker = 'same object' }
         $script:Seen = [System.Collections.Generic.List[object]]::new()
-        Mock Get-SwBoundedFileScan { $script:Seen.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; TimeoutSeconds = $TimeoutSeconds; Bound = @($PSBoundParameters.Keys | Sort-Object) }); $table }
+        Mock Get-SwBoundedFileScan { $script:Seen.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; TimeoutSeconds = $TimeoutSeconds; Bound = @($PesterBoundParameters.Keys | Sort-Object) }); $table }
         $result = Get-FilesWithinBudget $script:Root '*.tmp' 7
         [object]::ReferenceEquals($result, $table) | Should -BeTrue
         $script:Seen.Count | Should -Be 1

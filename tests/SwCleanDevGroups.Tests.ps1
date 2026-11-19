@@ -254,6 +254,7 @@ BeforeAll {
         }
         , $lines
     }
+    function script:Get-ParamCount([string]$Name) { $signature = Get-ParamSignature $Name; @($signature).Count }
     function script:Get-ParamLine([string]$Function, [string]$Parameter) {
         $all = Get-ParamSignature $Function
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
@@ -386,7 +387,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PSBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PSBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
