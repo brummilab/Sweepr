@@ -112,27 +112,31 @@ Describe 'Game media scope' {
         try {
             $env:USERPROFILE = Join-Path $TestDrive 'media-profile'
             ${env:ProgramFiles(x86)} = Join-Path $TestDrive 'media-programs'
-            # The product joins media roots as "$env:USERPROFILE\Videos\Captures"; build the fixture
-            # directories with the same string so the test also works where '\' is not a separator.
+            $videos = Join-Path $env:USERPROFILE 'Videos'
+            # General capture folders hold the user's own recordings and are never chosen, whatever
+            # their age; only the folders a capture program creates itself are in scope.
             $paths = @(
-                (Join-Path "$env:USERPROFILE\Pictures\Screenshots" 'receipt.png'),
-                (Join-Path "$env:USERPROFILE\Videos\Screen Recordings" 'training.mp4'),
-                (Join-Path "$env:USERPROFILE\Videos\Captures" 'game.mp4'),
-                (Join-Path "$env:USERPROFILE\Videos\Captures" 'recent.mp4')
+                (Join-Path (Join-Path $env:USERPROFILE 'Pictures') (Join-Path 'Screenshots' 'receipt.png')),
+                (Join-Path $videos (Join-Path 'Screen Recordings' 'training.mp4')),
+                (Join-Path $videos (Join-Path 'Captures' 'game.mp4')),
+                (Join-Path $videos (Join-Path 'NVIDIA' 'game.mp4')),
+                (Join-Path $videos (Join-Path 'NVIDIA' 'recent.mp4'))
             )
             foreach ($path in $paths) {
                 New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
                 Set-Content -LiteralPath $path -Value 'fixture'
-                (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-100)
+                [System.IO.File]::SetCreationTime($path, [datetime]::Now.AddDays(-100))
+                [System.IO.File]::SetLastWriteTime($path, [datetime]::Now.AddDays(-100))
             }
-            $script:GamePath = $paths[2]
-            (Get-Item -LiteralPath $paths[3]).LastWriteTime = Get-Date
-            Mock Start-Section {}
-            Mock Stop-Section {}
-            Mock Remove-SafeItems {}
-            Clear-GameMediaFiles -DaysOld 90
-            Should -Invoke Remove-SafeItems -Exactly -Times 0 -ParameterFilter { @($Paths | Where-Object { $_ -like '*Screenshots?*' -or $_ -like '*Screen Recordings?*' }).Count -gt 0 }
-            Should -Invoke Remove-SafeItems -Exactly -Times 1 -ParameterFilter { @($Paths).Count -eq 1 -and @($Paths)[0] -eq $script:GamePath }
+            $script:GamePath = $paths[3]
+            [System.IO.File]::SetLastWriteTime($paths[4], [datetime]::Now)
+            Mock Start-SwSection {}
+            Mock Stop-SwSection {}
+            Mock Remove-SwItems {}
+            Clear-SwGameMedia -DaysOld 90
+            Should -Invoke Remove-SwItems -Exactly -Times 0 -ParameterFilter { @($Paths | Where-Object { $_ -like '*Screenshots?*' -or $_ -like '*Screen Recordings?*' -or $_ -like '*Captures?*' }).Count -gt 0 }
+            Should -Invoke Remove-SwItems -Exactly -Times 1 -ParameterFilter { @($Paths).Count -eq 1 -and @($Paths)[0] -eq $script:GamePath }
+            Should -Invoke Remove-SwItems -Exactly -Times 1
         }
         finally { $env:USERPROFILE = $savedProfile; ${env:ProgramFiles(x86)} = $savedPrograms }
     }

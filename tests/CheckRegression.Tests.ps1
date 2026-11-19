@@ -141,8 +141,8 @@ Describe 'sw clean console output in a dry run' {
         Mock Get-SwFreeSpace { '10.0GB' }
         Mock Clear-SwBrowserCaches {}
         Mock Clear-SwAppCaches {}
-        Mock Invoke-DevToolsCleanup {}
-        Mock Invoke-AppCleanup {}
+        Mock Invoke-SwDevCleanup {}
+        Mock Invoke-SwAppCleanup {}
         Mock Invoke-SwSystemCleanup {}
         Mock Remove-Item { throw 'Remove-Item must not run in a dry run' }
     }
@@ -187,7 +187,7 @@ Describe 'sw clean console output in a dry run' {
         $script:StartCleanupParameters.IncludeGpuShaders = $true
         $null = Start-SwCleanRun @script:StartCleanupParameters 6>&1
         Should -Invoke Clear-SwGpuShaderCaches -Times 1 -Exactly
-        Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
+        Should -Invoke Invoke-SwAppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
     }
 }
 

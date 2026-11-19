@@ -43,9 +43,11 @@ Describe 'Application cache boundaries' {
         Set-DryRunMode -Enabled $false
         Reset-CleanupStats
         Mock Get-Process { @() }
-        Mock Invoke-SweeprOwnerCacheCleanup {}
-        Mock Start-Section {}
-        Mock Stop-Section {}
+        # No tool of the test machine is asked or started by the developer groups.
+        Mock Get-SwOwnerCachePath { $null }
+        Mock Invoke-SwOwnerCommand { $null }
+        Mock Start-SwSection {}
+        Mock Stop-SwSection {}
     }
 
     It 'Keeps recent error reports and dumps in preview and real cleanup' {

@@ -93,24 +93,13 @@ Describe "Developer Tools Cleanup Module" {
         }
     }
     
-    Context "Rust Cleanup" {
-        It "Should have Rust cache cleanup function" {
-            Get-Command Clear-RustCaches -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
-    Context "Docker Cleanup" {
-        It "Should have Docker cache cleanup function" {
-            Get-Command Clear-DockerCaches -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
     Context "Invoke-DevToolsCleanup" {
         It "Should have main dev tools cleanup function" {
             Get-Command Invoke-DevToolsCleanup -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
         
         It "Should run without error in dry-run mode" {
+            Mock Invoke-SwOwnerCommand { $null }
             { Invoke-DevToolsCleanup } | Should -Not -Throw
         }
     }
@@ -127,7 +116,7 @@ Describe "Bounded developer cache scans" {
         Set-Content -LiteralPath (Join-Path $script:DevHome ".stack\snapshots\pkg\download.tar.gz") -Value "kept"
         $env:USERPROFILE = $script:DevHome
         $script:CollectedPaths = New-Object System.Collections.Generic.List[string]
-        Mock Remove-SafeItems {
+        Mock Remove-SwItems {
             param($Paths, $Description)
             foreach ($path in @($Paths)) { $script:CollectedPaths.Add($path) }
         }
@@ -136,27 +125,29 @@ Describe "Bounded developer cache scans" {
         $env:USERPROFILE = $script:SavedDevProfile
     }
     It "Keeps the Stack candidate set while bounding the scan" {
-        Clear-HaskellCaches
+        Clear-SwHaskellCaches
         $script:CollectedPaths | Should -Contain (Join-Path $script:DevHome ".stack\snapshots\pkg\download.tmp")
         $script:CollectedPaths | Should -Not -Contain (Join-Path $script:DevHome ".stack\snapshots\pkg\download.tar.gz")
     }
     It "Removes nothing when a bounded scan is incomplete" {
-        Mock Get-FilesWithinBudget { @{ Files = @(); Complete = $false } }
-        Clear-HaskellCaches
+        Mock Get-SwBoundedFileScan { @{ Files = @(); Complete = $false } }
+        Clear-SwHaskellCaches
+        Should -Invoke Get-SwBoundedFileScan -Times 1 -Exactly
         $script:CollectedPaths.Count | Should -Be 0
     }
     It "Does not walk the Maven repository the default whitelist protects" {
         # The default whitelist covers everything under ~\.m2\repository, so a
         # .lastUpdated scan there could only spend its 15-second budget.
         $real = Join-Path $script:SavedDevProfile ".m2\repository\group\artifact.jar.lastUpdated"
-        Test-SafePath -Path $real | Should -BeFalse
-        Mock Get-FilesWithinBudget { @{ Files = @(); Complete = $true } }
-        Invoke-DevToolsCleanup
-        Should -Invoke Get-FilesWithinBudget -Times 0 -ParameterFilter { $Root -like "*\.m2\*" }
+        Test-SwSafePath -Path $real | Should -BeFalse
+        Mock Get-SwOwnerCachePath { $null }
+        Mock Get-SwBoundedFileScan { @{ Files = @(); Complete = $true } }
+        Invoke-SwDevCleanup
+        Should -Invoke Get-SwBoundedFileScan -Times 0 -ParameterFilter { $Root -like "*\.m2\*" }
         Test-Path -LiteralPath (Join-Path $script:DevHome ".m2\repository\group\artifact.jar.lastUpdated") | Should -BeTrue
     }
     It "Reports a small tree as completely enumerated" {
-        $scan = Get-FilesWithinBudget -Root (Join-Path $script:DevHome ".m2\repository") -Filter "*.lastUpdated" -TimeoutSeconds 15
+        $scan = Get-SwBoundedFileScan -Root (Join-Path $script:DevHome ".m2\repository") -Filter "*.lastUpdated" -TimeoutSeconds 15
         $scan.Complete | Should -Be $true
         @($scan.Files).Count | Should -Be 1
     }
@@ -175,37 +166,37 @@ Describe "Game media enumeration" {
         Set-Content -LiteralPath $oldPhoto -Value "photo"
         Set-Content -LiteralPath $keptFile -Value "notes"
         foreach ($path in @($oldFile, $oldPhoto, $keptFile)) {
-            (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-120)
+            # The age of a file is the newer of its creation and write times.
+            [System.IO.File]::SetCreationTime($path, [datetime]::Now.AddDays(-120))
+            [System.IO.File]::SetLastWriteTime($path, [datetime]::Now.AddDays(-120))
         }
         $env:USERPROFILE = $script:MediaHome
         $script:MediaPaths = New-Object System.Collections.Generic.List[string]
-        Mock Remove-SafeItems {
-            param($Paths, $Description)
+        $script:MediaCalls = 0
+        $script:MediaChecks = New-Object System.Collections.Generic.List[object]
+        Mock Remove-SwItems {
+            param($Paths, $Description, $CanRemove)
+            $script:MediaCalls++
             foreach ($path in @($Paths)) { $script:MediaPaths.Add($path) }
+            if ($null -ne $CanRemove) { $script:MediaChecks.Add((& $CanRemove)) }
         }
     }
     AfterEach {
         $env:USERPROFILE = $script:SavedMediaProfile
     }
     It "Removes only old media files from each root's single enumeration" {
-        Clear-GameMediaFiles -DaysOld 90
+        Clear-SwGameMedia -DaysOld 90
         $script:MediaPaths | Should -Contain (Join-Path $script:MediaRoot "clip.mp4")
         $script:MediaPaths | Should -Contain (Join-Path $script:MediaRoot "photo.JPG")
         $script:MediaPaths | Should -Not -Contain (Join-Path $script:MediaRoot "notes.txt")
+        # One helper call per file, each with an age check that still holds.
+        $script:MediaCalls | Should -Be 2
+        $script:MediaChecks.Count | Should -Be 2
+        foreach ($check in $script:MediaChecks) { $check | Should -BeTrue }
     }
 }
 
 Describe "Apps Cleanup Module" {
-    Context "Orphan Detection" {
-        It "Should have Find-OrphanedAppData function" {
-            Get-Command Find-OrphanedAppData -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-        
-        It "Should have Clear-OrphanedAppData function" {
-            Get-Command Clear-OrphanedAppData -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-    }
-    
     Context "Specific App Cleanup" {
         It "Should have Clear-OfficeCache function" {
             Get-Command Clear-OfficeCache -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
@@ -325,13 +316,23 @@ Describe "Cleanup accounting" {
         $env:APPDATA = Join-Path $script:Root "AppData\Roaming"
         $env:LOCALAPPDATA = Join-Path $script:Root "AppData\Local"
         Set-Content -Path (Join-Path $script:Root ".gitconfig.lock") -Value "lock"
-        Mock Remove-SafeItem { $true }
-        Mock Remove-SafeItems { }
+        Mock Get-SwOwnerCachePath { $null }
+        Mock Remove-SwItem { $true }
+        Mock Remove-SwItems { }
+        Mock Remove-SwOldFiles { }
+        Mock Clear-SwDirectoryContents { }
+        Mock Clear-SwAppCache { }
+        Mock Get-SwBoundedFileScan { @{ Files = @(); Complete = $true } }
 
-        Clear-GitCaches
+        Invoke-SwDevCleanup
 
-        Should -Invoke Remove-SafeItem -Times 0 -ParameterFilter { $Path -like "*.gitconfig.lock" }
-        Should -Invoke Remove-SafeItems -Times 0 -ParameterFilter { @($Paths) -like "*.gitconfig.lock" }
+        Should -Invoke Remove-SwItem -Times 0 -ParameterFilter { $Path -like "*.gitconfig*" }
+        Should -Invoke Remove-SwItems -Times 0 -ParameterFilter { @($Paths) -like "*.gitconfig*" }
+        Should -Invoke Remove-SwOldFiles -Times 0 -ParameterFilter { $Path -like "*.gitconfig*" }
+        Should -Invoke Clear-SwDirectoryContents -Times 0 -ParameterFilter { $Path -like "*.gitconfig*" }
+        Should -Invoke Clear-SwAppCache -Times 0 -ParameterFilter { $Path -like "*.gitconfig*" }
+        Should -Invoke Get-SwBoundedFileScan -Times 0 -ParameterFilter { $Root -like "*.gitconfig*" -or $Root -eq $script:Root }
+        Test-Path -LiteralPath (Join-Path $script:Root ".gitconfig.lock") | Should -BeTrue
     }
 }
 
@@ -383,17 +384,18 @@ Describe "Junctions and symbolic links" {
 
 Describe "Owner cache accounting" {
     BeforeEach {
+        # A tree that carries the mark of the npm cache: one file in _cacache and one beside it.
         $script:Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $script:Root -Force | Out-Null
-        [IO.File]::WriteAllBytes((Join-Path $script:Root 'gone.bin'), (New-Object byte[] 4096))
+        New-Item -ItemType Directory -Path (Join-Path $script:Root '_cacache') -Force | Out-Null
+        [IO.File]::WriteAllBytes((Join-Path $script:Root '_cacache\gone.bin'), (New-Object byte[] 4096))
         [IO.File]::WriteAllBytes((Join-Path $script:Root 'kept.bin'), (New-Object byte[] 2048))
         Reset-CleanupStats
         Set-DryRunMode -Enabled $false
         $script:ExportListFile = Join-Path $TestDrive 'owner-preview.txt'
         [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
         [System.IO.File]::WriteAllText($script:ExportListFile, "")
-        Mock Get-SweeprOwnerCachePath { $script:Root }
-        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
+        Mock Get-SwOwnerCachePath { $script:Root }
+        Mock Invoke-SwOwnerCommand { [pscustomobject]@{ Output = '' } }
     }
     AfterEach {
         Set-DryRunMode -Enabled $true
@@ -401,59 +403,62 @@ Describe "Owner cache accounting" {
     }
     It "Exports the owner root without claiming the whole store will be pruned" {
         Set-DryRunMode -Enabled $true
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
         Get-Content $script:ExportListFile | Should -Contain $script:Root
         $stats = Get-CleanupStats
         $stats.OwnerCleanups | Should -Be 1
         $stats.TotalSizeKB | Should -Be 0
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0 -Exactly
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -Exactly
     }
     It "Measures only the space removed by a successful partial prune" {
-        Mock Invoke-SweeprOwnerProcess {
-            Remove-Item -LiteralPath (Join-Path $script:Root 'gone.bin')
+        Mock Invoke-SwOwnerCommand {
+            Remove-Item -LiteralPath (Join-Path $script:Root '_cacache\gone.bin')
             [pscustomobject]@{ Output = '' }
-        }
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        } -ParameterFilter { $Mutation }
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
         $stats = Get-CleanupStats
         $stats.OwnerCleanups | Should -Be 1
         $stats.TotalSizeKB | Should -Be 4
-        $stats.FilesCleaned | Should -Be 1
+        # The owner path counts bytes only, never files.
+        $stats.FilesCleaned | Should -Be 0
         Test-Path (Join-Path $script:Root 'kept.bin') | Should -BeTrue
     }
     It "Does not report bytes for an unchanged cache" {
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
         (Get-CleanupStats).OwnerCleanups | Should -Be 1
     }
     It "Handles an empty owner cache without a missing Sum property" {
-        Remove-Item -LiteralPath (Join-Path $script:Root 'gone.bin'), (Join-Path $script:Root 'kept.bin')
-        { Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache' } | Should -Not -Throw
+        Remove-Item -LiteralPath (Join-Path $script:Root '_cacache\gone.bin'), (Join-Path $script:Root 'kept.bin')
+        { Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache' } | Should -Not -Throw
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
     }
     It "Does not assume an unmeasurable post-cleanup tree is empty" {
+        # Validation and the fresh listing before the command succeed; the measurement after it fails.
         $script:WalkCount = 0
         Mock Get-SwSafeDirectoryTreeItems {
             $script:WalkCount++
-            if ($script:WalkCount -eq 1) {
-                return @{ Success = $true; Items = @(Get-ChildItem -LiteralPath $script:Root | ForEach-Object {
-                    $_ | Add-Member -NotePropertyName SweeprPathSnapshot -NotePropertyValue (Get-SweeprPathSnapshot $_.FullName) -PassThru
+            if ($script:WalkCount -le 2) {
+                return @{ Success = $true; Items = @(Get-ChildItem -LiteralPath $script:Root -Recurse -Force | ForEach-Object {
+                    $_ | Add-Member -NotePropertyName SweeprPathSnapshot -NotePropertyValue (Get-SwPathSnapshot -Path $_.FullName) -PassThru -Force
                 }) }
             }
             return @{ Success = $false; Items = @() }
         }
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
+        $script:WalkCount | Should -Be 3
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
         (Get-CleanupStats).OwnerCleanups | Should -Be 1
     }
     It "Does not count a failed owner command" {
-        Mock Invoke-SweeprOwnerProcess { $null }
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Mock Invoke-SwOwnerCommand { $null }
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
         (Get-CleanupStats).OwnerCleanups | Should -Be 0
         (Get-CleanupStats).TotalSizeKB | Should -Be 0
     }
     It "Keeps owner-only activity out of the already-clean summary" {
         Mock Get-SwFreeSpace { '10 GB' }
-        Invoke-SweeprOwnerCacheCleanup -Name fixture -Query @('path') -Arguments @('prune') -Description 'Fixture cache'
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config', 'get', 'cache') -Arguments @('cache', 'clean', '--force') -Description 'npm cache'
         $output = Show-SwCleanSummary -Stats (Get-CleanupStats) -IsDryRun $false 6>&1 | Out-String
         $output | Should -Not -Match 'already clean'
         $output | Should -Match 'Tool cache cleanup completed'
@@ -464,40 +469,51 @@ Describe 'Review regressions: owner log and summary' {
     BeforeEach {
         Reset-CleanupStats
         Set-DryRunMode -Enabled $false
-        Mock Get-SweeprOwnerCachePath { 'C:\cache' }
-        Mock Test-SafePath { $true }
-        Mock Get-SwPathSnapshot { @{ Path = 'C:\cache' } }
+        # An empty npm cache folder whose tree (mocked) holds one plain file.
+        $script:OwnerRoot = Join-Path $TestDrive ('npm-cache-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:OwnerRoot -Force | Out-Null
+        $script:OwnerItem = [pscustomobject]@{
+            FullName = (Join-Path $script:OwnerRoot 'entry.bin'); PSIsContainer = $false
+            Attributes = [IO.FileAttributes]::Normal; Length = 10; SweeprPathSnapshot = @{ Path = 'entry' }
+        }
+        Mock Get-SwOwnerCachePath { $script:OwnerRoot }
+        Mock Test-SwSafePath { $true }
+        Mock Get-SwPathSnapshot { @{ Path = $script:OwnerRoot } }
         Mock Test-SwPathSnapshot { $true }
-        Mock Get-SwSafeDirectoryTreeItems { @{ Success = $true; Items = @() } }
-        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
-        Mock Write-SweeprOperation { }
-        Mock Write-Success { }
-        Mock Set-SectionActivity { }
+        Mock Test-SwReparsePoint { $false }
+        Mock Get-SwSafeDirectoryTreeItems { @{ Success = $true; Items = @($script:OwnerItem) } }
+        Mock Invoke-SwOwnerCommand { [pscustomobject]@{ Output = '' } }
+        Mock Write-SwOperation { }
+        Mock Write-SwSuccess { }
+        Mock Write-SwDryRun { }
+        Mock Set-SwSectionActivity { }
     }
     It 'Records a successful owner command without claiming a file removal' {
-        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'OWNER' -and $Path -eq 'C:\cache' -and $Detail -eq 'npm cache clean --force' }
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SwOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'OWNER' -and $Path -eq $script:OwnerRoot -and $Detail -eq 'npm cache clean --force' }
+        (Get-CleanupStats).FilesCleaned | Should -Be 0
     }
     It 'Records a failed owner command as incomplete' {
-        Mock Invoke-SweeprOwnerProcess { $null }
-        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete' }
+        Mock Invoke-SwOwnerCommand { $null }
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SwOperation -Times 1 -Exactly -ParameterFilter { $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete' }
     }
     It 'Records that a timed-out owner command was killed' {
-        Mock Invoke-SweeprOwnerProcess {
-            if ($null -ne $Outcome) { $Outcome.Reason = 'timed out after 120s; process tree 42 stopped with taskkill /T /F' }
+        Mock Invoke-SwOwnerCommand {
+            if ($null -ne $Outcome) { $Outcome['Reason'] = 'timed out after 120 s; process tree 42 terminated' }
             $null
         }
-        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-SweeprOperation -Times 1 -Exactly -ParameterFilter {
-            $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete; timed out after 120s; process tree 42 stopped with taskkill /T /F'
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Write-SwOperation -Times 1 -Exactly -ParameterFilter {
+            $Action -eq 'FAILED' -and $Detail -eq 'npm cache clean --force: incomplete; timed out after 120 s; process tree 42 terminated'
         }
     }
     It 'Does not record an owner preview' {
         Set-DryRunMode -Enabled $true
-        Mock Add-DryRunListEntries { }
-        Invoke-SweeprOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
-        Should -Invoke Write-SweeprOperation -Times 0 -Exactly
+        Mock Add-SwDryRunListEntries { }
+        Invoke-SwOwnerCacheCleanup -Name npm -Query @('path') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Add-SwDryRunListEntries -Times 1 -Exactly
+        Should -Invoke Write-SwOperation -Times 0 -Exactly
     }
     It 'Uses one item count and no protection tutorial in a dry-run summary' {
         Mock Get-SwFreeSpace { '10 GB' }
@@ -512,45 +528,52 @@ Describe 'Review regressions: owner log and summary' {
 Describe 'Owner process timeout' {
     It 'Says when it stops an owner process tree that ran past its timeout' {
         $outcome = @{}
-        $result = Invoke-SweeprOwnerProcess -Name 'powershell' -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30') -TimeoutSeconds 1 -Outcome $outcome
+        $result = Invoke-SwOwnerCommand -Name 'powershell' -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30') -TimeoutSeconds 1 -Outcome $outcome
         $result | Should -BeNullOrEmpty
-        $outcome.Reason | Should -Match '^timed out after 1s; process tree \d+ stopped with taskkill /T /F$'
+        $outcome['Reason'] | Should -Match '^timed out after 1 s; process tree \d+ terminated$'
     }
 }
 
 Describe 'Owner cancellation evidence' {
     It 'Reports <Expected> without inventing a stopped process tree' -ForEach @(
-        @{ Finished = $true; ExitCode = 5; Expected = 'taskkill exit code 5; process tree termination unverified' },
-        @{ Finished = $false; ExitCode = 0; Expected = 'taskkill timed out; process tree termination unverified' }
+        @{ Finished = $true; ExitCode = 5; Expected = 'taskkill unconfirmed: 5' },
+        @{ Finished = $false; ExitCode = 0; Expected = 'taskkill unconfirmed: timed out after 5 s' }
     ) {
         $script:FakeProcessIndex = 0
+        $script:FakeFiles = New-Object System.Collections.Generic.List[string]
         $script:FakeOwner = [pscustomobject]@{
             StartInfo = $null; Id = 42; HasExited = $false; ExitCode = 0
             StandardOutput = [IO.StringReader]::new(''); StandardError = [IO.StringReader]::new('')
             Finished = $false; Disposed = $false; Killed = $false
         }
         $script:FakeStopper = [pscustomobject]@{
-            StartInfo = [Diagnostics.ProcessStartInfo]::new(); Id = 43; HasExited = $Finished; ExitCode = $ExitCode
+            StartInfo = $null; Id = 43; HasExited = $Finished; ExitCode = $ExitCode
             StandardOutput = [IO.StringReader]::new(''); StandardError = [IO.StringReader]::new('')
             Finished = $Finished; Disposed = $false; Killed = $false
         }
         foreach ($fake in @($script:FakeOwner, $script:FakeStopper)) {
+            $input = [pscustomobject]@{}
+            $input | Add-Member ScriptMethod Close { }
+            $fake | Add-Member NoteProperty StandardInput $input
             $fake | Add-Member ScriptMethod Start { $true }
             $fake | Add-Member ScriptMethod WaitForExit { param($milliseconds) $this.Finished }
             $fake | Add-Member ScriptMethod Kill { $this.Killed = $true }
             $fake | Add-Member ScriptMethod Dispose { $this.Disposed = $true }
         }
-        Mock Get-Command { [pscustomobject]@{ Source = 'fixture.exe' } } -ParameterFilter { $Name -eq 'fixture-owner' }
-        Mock New-Object {
+        Mock New-SwOwnerProcess {
+            param($FilePath, $Arguments)
+            $script:FakeFiles.Add($FilePath)
             $script:FakeProcessIndex++
             if ($script:FakeProcessIndex -eq 1) { return $script:FakeOwner }
             return $script:FakeStopper
-        } -ParameterFilter { $TypeName -eq 'Diagnostics.Process' }
-        Mock New-Object { [Diagnostics.ProcessStartInfo]::new() } -ParameterFilter { $TypeName -eq 'Diagnostics.ProcessStartInfo' }
+        }
+        $tool = Join-Path $TestDrive 'fixture-owner.ps1'
+        Set-Content -LiteralPath $tool -Value 'exit 0'
         $outcome = @{}
-        Invoke-SweeprOwnerProcess -Name 'fixture-owner' -Arguments @() -TimeoutSeconds 1 -Outcome $outcome | Should -BeNullOrEmpty
-        $outcome.Reason | Should -Be "timed out after 1s; $Expected"
-        $outcome.Reason | Should -Not -Match 'stopped with taskkill'
+        Invoke-SwOwnerCommand -Name $tool -Arguments @() -TimeoutSeconds 1 -Outcome $outcome | Should -BeNullOrEmpty
+        $outcome['Reason'] | Should -Be "timed out after 1 s; $Expected"
+        $outcome['Reason'] | Should -Not -Match 'terminated'
+        $script:FakeFiles[1] | Should -BeLike '*taskkill.exe'
         $script:FakeOwner.Killed | Should -BeTrue
         $script:FakeOwner.Disposed | Should -BeTrue
         $script:FakeStopper.Disposed | Should -BeTrue

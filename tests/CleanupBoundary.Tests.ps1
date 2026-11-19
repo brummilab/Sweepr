@@ -44,7 +44,7 @@ Describe 'Cleanup physical boundaries' {
         $bounded = Join-Path $script:Root 'bounded'
         New-Item -ItemType Directory -Path $bounded | Out-Null
         Set-Content -LiteralPath (Join-Path $bounded 'a.lastUpdated') -Value 'x'
-        $scan = Get-FilesWithinBudget -Root $bounded -Filter '*.lastUpdated' -TimeoutSeconds 0
+        $scan = Get-SwBoundedFileScan -Root $bounded -Filter '*.lastUpdated' -TimeoutSeconds 0
         $scan.Complete | Should -BeFalse
         @($scan.Files).Count | Should -Be 0
     }
@@ -298,19 +298,6 @@ Describe 'Linked protected segments' {
 }
 
 Describe 'Owner cache cleanup whitelist' {
-    BeforeAll {
-        function npm { }
-        function pnpm { }
-        function pip { }
-        function go { }
-        function mise { }
-        function docker { }
-        # Resolution is a read-only probe; the fallback lets the old implementation
-        # run so each assertion observes its mutation instead of a missing command.
-        if (-not (Get-Command Get-SweeprOwnerCachePath -ErrorAction SilentlyContinue)) {
-            function Get-SweeprOwnerCachePath { param($Name,$Arguments) $null }
-        }
-    }
     BeforeEach {
         $script:OwnerRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:OwnerRoot | Out-Null
@@ -318,26 +305,20 @@ Describe 'Owner cache cleanup whitelist' {
         $script:SavedOwnerLocal = $env:LOCALAPPDATA
         $script:SavedOwnerProfile = $env:USERPROFILE
         $script:SavedOwnerApp = $env:APPDATA
-        $script:SavedOwnerGo = $env:GOPATH
-        $script:SavedOwnerMise = $env:MISE_CACHE_DIR
         $env:LOCALAPPDATA = $script:OwnerRoot
         $env:USERPROFILE = $script:OwnerRoot
         $env:APPDATA = $script:OwnerRoot
-        $env:GOPATH = $script:OwnerRoot
         $script:Config.WhitelistFile = Join-Path $script:OwnerRoot 'whitelist.txt'
-        $script:OwnerCache = Join-Path $script:OwnerRoot 'cache'
-        New-Item -ItemType Directory -Path $script:OwnerCache | Out-Null
-        $env:MISE_CACHE_DIR = $script:OwnerCache
-        New-Item -ItemType Directory -Path (Join-Path $script:OwnerRoot 'pnpm\store') -Force | Out-Null
+        # One folder that carries the mark of every owner tool (npm _cacache, pip http, go README,
+        # pnpm leaf v<n>, mise below LOCALAPPDATA) and holds files, so only the whitelist decides.
+        $script:OwnerCache = Join-Path $script:OwnerRoot 'store\v3'
+        New-Item -ItemType Directory -Path (Join-Path $script:OwnerCache '_cacache'), (Join-Path $script:OwnerCache 'http') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:OwnerCache '_cacache\index.bin') -Value 'x'
+        Set-Content -LiteralPath (Join-Path $script:OwnerCache 'http\entry.bin') -Value 'x'
+        Set-Content -LiteralPath (Join-Path $script:OwnerCache 'README') -Value 'x'
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value $script:OwnerCache
-        Mock Get-SweeprOwnerCachePath { $script:OwnerCache }
-        Mock Invoke-SweeprOwnerProcess { [pscustomobject]@{ Output = '' } }
-        Mock npm { $global:LASTEXITCODE=0 }
-        Mock pnpm { $global:LASTEXITCODE=0 }
-        Mock pip { $global:LASTEXITCODE=0 }
-        Mock go { $global:LASTEXITCODE=0 }
-        Mock mise { $global:LASTEXITCODE=0; $script:OwnerCache }
-        Mock docker { $global:LASTEXITCODE=0 }
+        Mock Get-SwOwnerCachePath { $script:OwnerCache }
+        Mock Invoke-SwOwnerCommand { [pscustomobject]@{ Output = '' } }
         Set-DryRunMode -Enabled $false
     }
     AfterEach {
@@ -345,43 +326,40 @@ Describe 'Owner cache cleanup whitelist' {
         $env:LOCALAPPDATA = $script:SavedOwnerLocal
         $env:USERPROFILE = $script:SavedOwnerProfile
         $env:APPDATA = $script:SavedOwnerApp
-        $env:GOPATH = $script:SavedOwnerGo
-        $env:MISE_CACHE_DIR = $script:SavedOwnerMise
         Set-DryRunMode -Enabled $true
     }
     It 'Does not invoke npm or pnpm mutations for a whitelisted resolved root' {
-        Clear-NpmCache
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
-        Should -Invoke npm -Times 0 -ParameterFilter { $args -contains 'clean' }
-        Should -Invoke pnpm -Times 0 -ParameterFilter { $args -contains 'prune' }
+        Clear-SwNpmFamilyCaches
+        Should -Invoke Get-SwOwnerCachePath -Times 1 -ParameterFilter { $Name -eq 'npm' }
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Does not invoke pip purge for a whitelisted resolved root' {
-        Clear-PythonCaches
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
-        Should -Invoke pip -Times 0 -ParameterFilter { $args -contains 'purge' }
+        Clear-SwPythonCaches
+        Should -Invoke Get-SwOwnerCachePath -Times 1 -ParameterFilter { $Name -eq 'pip' }
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Does not invoke go clean for a whitelisted resolved root' {
-        Clear-GoCaches
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
-        Should -Invoke go -Times 0 -ParameterFilter { $args -contains 'clean' }
+        Clear-SwGoCaches
+        Should -Invoke Get-SwOwnerCachePath -Times 1 -ParameterFilter { $Name -eq 'go' }
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Does not invoke mise clear for a whitelisted resolved root' {
-        Clear-MiseCache
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
-        Should -Invoke mise -Times 0 -ParameterFilter { $args -contains 'clear' }
+        Clear-SwMiseCache
+        Should -Invoke Get-SwOwnerCachePath -Times 1 -ParameterFilter { $Name -eq 'mise' }
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Runs an owner for a known unprotected ordinary cache' {
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
-        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 1 -ParameterFilter { $TimeoutSeconds -eq 120 }
+        Invoke-SwOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Invoke-SwOwnerCommand -Times 1 -Exactly -ParameterFilter { $Mutation -and $TimeoutSeconds -eq 120 }
     }
     It 'Reads the whitelist once for the boundary recheck, not once per cache entry' {
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value '# no exclusions'
         foreach ($i in 1..8) { Set-Content -LiteralPath (Join-Path $script:OwnerCache "entry$i.bin") -Value 'x' }
-        $script:FixtureWhitelistState = Get-WhitelistState
+        $script:FixtureWhitelistState = Get-SwWhitelistState
         Mock Get-SwWhitelistState { $script:FixtureWhitelistState }
-        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 1
+        Invoke-SwOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Invoke-SwOwnerCommand -Times 1 -Exactly -ParameterFilter { $Mutation }
         # The root check, the tree walk, the boundary recheck and the walk that
         # measures what the owner removed: one per pass, never one per entry.
         Should -Invoke Get-SwWhitelistState -Times 4 -Exactly
@@ -390,81 +368,19 @@ Describe 'Owner cache cleanup whitelist' {
         $child = Join-Path $script:OwnerCache 'keep.txt'
         Set-Content -LiteralPath $child -Value 'keep'
         Set-Content -LiteralPath $script:Config.WhitelistFile -Value $child
-        Invoke-SweeprOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'fixture'
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
+        Invoke-SwOwnerCacheCleanup -Name 'npm' -Query @('config','get','cache') -Arguments @('cache','clean','--force') -Description 'npm cache'
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Keeps a cache when its owner cannot resolve the root' {
-        Mock Get-SweeprOwnerCachePath { $null }
-        Clear-NpmCache
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
+        Mock Get-SwOwnerCachePath { $null }
+        Clear-SwNpmFamilyCaches
+        Should -Invoke Invoke-SwOwnerCommand -Times 0 -ParameterFilter { $Mutation }
     }
     It 'Preserves Gradle transaction locks' {
         $lock = Join-Path $env:USERPROFILE '.gradle\caches\build-cache-1\build-cache-1.lock'
         New-Item -ItemType Directory -Path (Split-Path -Parent $lock) -Force | Out-Null
         Set-Content -LiteralPath $lock -Value 'lock'
-        Invoke-DevToolsCleanup
+        Invoke-SwDevCleanup
         Test-Path -LiteralPath $lock | Should -BeTrue
-    }
-    It 'Keeps Docker builders whose mutation cannot be mapped to whitelist paths' {
-        Clear-DockerCaches
-        Should -Invoke docker -Times 0
-        Should -Invoke Invoke-SweeprOwnerProcess -Times 0
-    }
-}
-
-Describe 'Bounded owner process execution' {
-    BeforeEach {
-        $script:ProcessFixture = Join-Path $TestDrive ('owner tools ' + [guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $script:ProcessFixture | Out-Null
-        $script:OwnerCommand = Join-Path $script:ProcessFixture 'fixture.cmd'
-    }
-    It 'Captures an actual read-only owner response with a spaced executable path' {
-        Set-Content -LiteralPath $script:OwnerCommand -Encoding ASCII -Value @('@echo off', 'echo fixture-cache-root', 'exit /b 0')
-        $result = Invoke-SweeprOwnerProcess -Name $script:OwnerCommand -Arguments @('query')
-        $result.Output | Should -Be 'fixture-cache-root'
-    }
-    It 'Rejects an actual nonzero owner exit even when stdout looks like a path' {
-        Set-Content -LiteralPath $script:OwnerCommand -Encoding ASCII -Value @('@echo off', 'echo C:\looks-like-a-cache', 'exit /b 9')
-        Invoke-SweeprOwnerProcess -Name $script:OwnerCommand -Arguments @('query') | Should -BeNullOrEmpty
-    }
-    It 'Bounds a slow owner and terminates its sleeping child' {
-        $owner = Join-Path $script:ProcessFixture 'sleep.ps1'
-        # Record the child PID in its parent, before the child's PowerShell
-        # startup. CI can exhaust a short budget before a cold child runs code.
-        Set-Content -LiteralPath $owner -Encoding ASCII -Value @(
-            '$child = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -NonInteractive -Command Start-Sleep -Seconds 60" -PassThru',
-            'Set-Content -LiteralPath (Join-Path $PSScriptRoot "child.pid") -Value @($child.Id, $child.StartTime.ToUniversalTime().Ticks)',
-            '$child.WaitForExit()'
-        )
-        $pidFile = Join-Path $script:ProcessFixture 'child.pid'
-        $timer = [Diagnostics.Stopwatch]::StartNew()
-        try {
-            Invoke-SweeprOwnerProcess -Name $owner -Arguments @() -TimeoutSeconds 10 | Should -BeNullOrEmpty
-            $timer.Stop()
-            $timer.Elapsed.TotalSeconds | Should -BeLessThan 20
-            Test-Path -LiteralPath $pidFile | Should -BeTrue
-            $childId = [int](@(Get-Content -LiteralPath $pidFile)[0])
-            # A killed process can stay visible for a moment while Windows tears it down. A child that
-            # was not killed sleeps for 60 seconds, so a short bounded wait still tells the two apart.
-            $deadline = [Diagnostics.Stopwatch]::StartNew()
-            while ((Get-Process -Id $childId -ErrorAction SilentlyContinue) -and $deadline.Elapsed.TotalSeconds -lt 5) {
-                Start-Sleep -Milliseconds 100
-            }
-            Get-Process -Id $childId -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
-        }
-        finally {
-            if (Test-Path -LiteralPath $pidFile) {
-                # Only the process created by this fixture is eligible for cleanup.
-                $receipt = @(Get-Content -LiteralPath $pidFile)
-                $remaining = Get-Process -Id ([int]$receipt[0]) -ErrorAction SilentlyContinue
-                # The process may exit between the lookup and these reads; that is the outcome we want.
-                try {
-                    if ($remaining -and $remaining.StartTime.ToUniversalTime().Ticks -eq [long]$receipt[1]) {
-                        $remaining.Kill()
-                    }
-                }
-                catch { }
-            }
-        }
     }
 }

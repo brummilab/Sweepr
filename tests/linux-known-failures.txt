@@ -67,6 +67,21 @@ Bounded vendor uninstaller wait.Cancels the waiting pipeline without killing fix
 Bounded vendor uninstaller wait.Keeps waiting for a child after the parent exits
 Bounded vendor uninstaller wait.Returns the real exit code after normal completion
 Bounded vendor uninstaller wait.Times out without killing the vendor parent or child
+CA-9 CA-10 S-10 which files are chosen, with the real search.CA-9 CA-10 [W] does not deliver a cloud placeholder file, which has the reparse point attribute
+CA-9 CA-10 S-10 which files are chosen, with the real search.CA-9 [W] does not choose a file that was written 120 days ago and created yesterday: the newer of the two times counts
+CA-9 the condition that checks the age again right before the removal.CA-9 [W] answers $false when the creation time changed to now between the search and the removal: the newer of both times counts
+CD-12 CD-17 real helper processes with a stand-in tool.CD-12 [W] gives $null and "exit code 9" for a .cmd stand-in that exits with 9
+CD-12 CD-17 real helper processes with a stand-in tool.CD-12 [W] runs a .cmd stand-in in a folder with a space in the name and hands stdout back, also when it writes to stderr and ends with 0
+CD-12 CD-17 real helper processes with a stand-in tool.CD-17 [W] ends a child of the program together with the program: the real taskkill ends the whole process tree
+CD-12 the search for the program.CD-12 [W] takes .exe before .cmd before .ps1 in the same folder, and rejects a .cmd whose folder has one of the characters percent, caret, ampersand, pipe, angle brackets, quote or exclamation mark
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 [W] refuses the known folder of the account Desktop
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 [W] refuses the known folder of the account MyDocuments
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 [W] refuses the known folder of the account MyMusic
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 [W] refuses the known folder of the account MyPictures
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 [W] refuses the known folder of the account MyVideos
+CD-13 CD-14 the folder must be plausible, carry the characteristic of its tool and stay out of the never-list.CD-13 refuses an ancestor of a known folder of the account [W]
+CD-8 Get-SwBoundedFileScan: age.CD-8 [W] uses the newer of CreationTime and LastWriteTime: written 200 days ago and created yesterday is not old
+CD-8 Get-SwBoundedFileScan: order of the checks, budget, links and unreadable folders.CD-8 [W] does not deliver a cloud placeholder file, which has the reparse point attribute, and keeps Complete $true
 Cache Cleanup Module.Browser Cache Functions.Should run browser cache cleanup without error
 Clean Command.Dry Run Mode.Completes a real dry run without deleting its candidate
 Clean Command.Help Display.Should mention dry-run in help

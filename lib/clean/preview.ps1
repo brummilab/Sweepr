@@ -48,14 +48,14 @@ function Invoke-SweeprCleanSections {
     Clear-SwAppCaches
 
     # Developer tools
-    Invoke-DevToolsCleanup
+    Invoke-SwDevCleanup
 
     # Applications cleanup (with optional game media)
     if ($IncludeGameMedia) {
-        Invoke-AppCleanup -IncludeGameMedia -GameMediaDaysOld 90
+        Invoke-SwAppCleanup -IncludeGameMedia -GameMediaDaysOld 90
     }
     else {
-        Invoke-AppCleanup
+        Invoke-SwAppCleanup
     }
 
     # System cleanup (if requested and admin)

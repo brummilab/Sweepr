@@ -45,7 +45,7 @@ BeforeAll {
     )
     # The real section functions, kept before any test replaces them with a mock.
     $script:RealInvokeUserCleanup = ${function:Invoke-SwUserCleanup}
-    $script:RealInvokeDevToolsCleanup = ${function:Invoke-DevToolsCleanup}
+    $script:RealInvokeDevCleanup = ${function:Invoke-SwDevCleanup}
     $script:RealInvokeSystemCleanup = ${function:Invoke-SwSystemCleanup}
 
     # A section as the real cleanup modules run it: titled, removing through the shared dry-run sink.
@@ -141,15 +141,16 @@ Describe 'Get-SweeprCleanPreview' {
         Mock Test-SwAdmin { $false }
         foreach ($name in $script:ChangingCommands) { Mock $name ([scriptblock]::Create("throw '$name must not run in a preview'")) }
 
-        Mock Invoke-SweeprOwnerProcess { $null }
+        Mock Invoke-SwOwnerCommand { $null }
+        Mock New-SwOwnerProcess { throw 'no process may start in a preview test' }
         Mock Invoke-SwUserCleanup {
             $script:SeenDryRun = Test-SwDryRunMode
             Invoke-FakeSection 'User essentials' 'User temp files' @($script:FileA, $script:FileB)
         }
         Mock Clear-SwBrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
         Mock Clear-SwAppCaches { Invoke-FakeSection 'Application caches' 'Application cache' @() }
-        Mock Invoke-DevToolsCleanup { Invoke-FakeSection 'Developer tools' 'Developer cache' @() }
-        Mock Invoke-AppCleanup { Invoke-FakeSection 'Applications' 'Application data' @() }
+        Mock Invoke-SwDevCleanup { Invoke-FakeSection 'Developer tools' 'Developer cache' @() }
+        Mock Invoke-SwAppCleanup { Invoke-FakeSection 'Applications' 'Application data' @() }
         Mock Clear-SwGpuShaderCaches { Invoke-FakeSection 'GPU shader caches' 'Shader cache' @() }
         Mock Invoke-SwSystemCleanup { Invoke-FakeSection 'System cleanup' 'Windows temp files' @($script:SysFile) }
     }
@@ -409,7 +410,7 @@ Describe 'Get-SweeprCleanPreview' {
         It 'Runs neither GPU shader caches nor game media by default' {
             $result = Get-SweeprCleanPreview
             Should -Invoke Clear-SwGpuShaderCaches -Times 0 -Exactly
-            Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGameMedia }
+            Should -Invoke Invoke-SwAppCleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGameMedia }
             @($result.Sections | ForEach-Object Name) | Should -Not -Contain 'GPU shader caches'
         }
 
@@ -421,27 +422,28 @@ Describe 'Get-SweeprCleanPreview' {
 
         It 'Passes game media on to the application section' {
             $null = Get-SweeprCleanPreview -GameMedia
-            Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
+            Should -Invoke Invoke-SwAppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
         }
     }
 
     Context '-SkipExternalTools' {
         BeforeEach {
             # Tool caches run through the real developer section; nothing else is needed from it.
-            Mock Invoke-DevToolsCleanup { & $script:RealInvokeDevToolsCleanup }
+            Mock Invoke-SwDevCleanup { & $script:RealInvokeDevCleanup }
         }
 
         It 'Asks the installed tools for their cache folder when the switch is absent' {
             $result = Get-SweeprCleanPreview
             foreach ($tool in @('npm', 'pnpm', 'pip', 'go', 'mise')) {
-                Should -Invoke Invoke-SweeprOwnerProcess -Times 1 -ParameterFilter { $Name -eq $tool }
+                Should -Invoke Invoke-SwOwnerCommand -Times 1 -Exactly -ParameterFilter { $Name -eq $tool -and -not $Mutation }
             }
             @($result.NotMeasured).Count | Should -Be 0
         }
 
         It 'Starts no external program with the switch and names the skipped tools as not measured' {
             $result = Get-SweeprCleanPreview -SkipExternalTools
-            Should -Invoke Invoke-SweeprOwnerProcess -Times 0 -Exactly
+            Should -Invoke Invoke-SwOwnerCommand -Times 0 -Exactly
+            Should -Invoke New-SwOwnerProcess -Times 0 -Exactly
             Should -Invoke Start-Process -Times 0 -Exactly
             $names = @($result.NotMeasured | ForEach-Object Name)
             foreach ($tool in @('npm', 'pnpm', 'pip', 'go', 'mise')) {

@@ -1,644 +1,317 @@
-# Sweepr - Application-Specific Cleanup Module
-# Cleans leftover data from uninstalled apps and app-specific caches
+# Sweepr - application cleanup of sw clean: the sections "Applications" and "Game media"
+#
+# Caches and logs of Office, cloud drives, Adobe and game launchers, and on request old recordings of game
+# programs. Loaded by dot-sourcing; it loads cache_guard.ps1 and dev.ps1 (which holds the bounded file
+# search). Loading writes nothing, creates no file or folder and starts no process; it only defines
+# functions. A second load in the same scope changes nothing. Setting $script:SWEEPR_CLEAN_APPS_LOADED to
+# $false makes the next load define everything again.
+#
+# This file never removes anything itself: a folder goes to Clear-SwDirectoryContents or, while its owner
+# may be working, to Clear-SwAppCache; old log files go to Remove-SwOldFiles; single files go to
+# Remove-SwItems. It starts no process and asks neither the registry nor the network. Documents, Pictures
+# and Videos as such, game libraries and saved games are never in a table; the recordings of game programs
+# are only touched on request.
 
-#Requires -Version 5.1
-Set-StrictMode -Version Latest
+if ($(try { [bool]$script:SWEEPR_CLEAN_APPS_LOADED } catch { $false })) { return }
 
-# Prevent multiple sourcing
-if ((Get-Variable -Name 'SWEEPR_CLEAN_APPS_LOADED' -Scope Script -ErrorAction SilentlyContinue) -and $script:SWEEPR_CLEAN_APPS_LOADED) { return }
-$script:SWEEPR_CLEAN_APPS_LOADED = $true
-
-# Import dependencies
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\..\core\base.ps1"
-. "$scriptDir\..\core\log.ps1"
-. "$scriptDir\..\core\file_ops.ps1"
+# The dependencies come from the folder of this file, never from the working directory.
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'base.ps1'))
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'log.ps1'))
+. ([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($PSScriptRoot), 'core', 'file_ops.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'cache_guard.ps1'))
+. ([System.IO.Path]::Combine($PSScriptRoot, 'dev.ps1'))
 
 # ============================================================================
-# Orphaned App Data Detection
+# Rows
 # ============================================================================
 
-function Get-InstalledPrograms {
-    <#
-    .SYNOPSIS
-        Get list of installed programs from registry
-    #>
-    
-    $programs = @()
-    
-    $registryPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
-    
-    foreach ($path in $registryPaths) {
-        $items = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
-                 Where-Object { $_.DisplayName } |
-                 Select-Object DisplayName, InstallLocation, Publisher
-        if ($items) {
-            $programs += $items
-        }
-    }
-    
-    # Also check UWP apps
+function Invoke-SwAppOldFilesRow {
+    # One row that removes the old files directly in a folder.
+    param([string]$Path, [int]$DaysOld, [string]$Description)
+
+    try { $null = Remove-SwOldFiles -Path $Path -DaysOld $DaysOld -Filter '*' -Description $Description }
+    catch { Write-SwDebug "row not offered, ${Path}: $($_.Exception.Message)" }
+}
+
+function Invoke-SwAppTempFilesRow {
+    # One row for the old *.tmp files directly in several folders: one list over all folders, offered once,
+    # and only while the owner is idle (asked afresh at every evaluation). A folder whose search is not
+    # complete adds nothing and is noted; the others still count.
+    param([string[]]$Roots, [string]$Description, [string[]]$Processes, [datetime]$Cutoff)
+
     try {
-        $uwpApps = Get-AppxPackage -ErrorAction SilentlyContinue | 
-                   Select-Object @{N='DisplayName';E={$_.Name}}, @{N='InstallLocation';E={$_.InstallLocation}}, Publisher
-        if ($uwpApps) {
-            $programs += $uwpApps
-        }
-    }
-    catch {
-        Write-Debug "Could not enumerate UWP apps: $_"
-    }
-    
-    return $programs
-}
-
-function Find-OrphanedAppData {
-    <#
-    .SYNOPSIS
-        Find app data folders for apps that are no longer installed
-    #>
-    param([int]$DaysOld = 60)
-    
-    $installedPrograms = Get-InstalledPrograms
-    $installedNames = $installedPrograms | ForEach-Object { $_.DisplayName.ToLower() }
-    
-    $orphanedPaths = @()
-    $cutoffDate = (Get-Date).AddDays(-$DaysOld)
-    
-    # Check common app data locations
-    $appDataPaths = @(
-        @{ Path = $env:APPDATA; Type = "Roaming" }
-        @{ Path = $env:LOCALAPPDATA; Type = "Local" }
-    )
-    
-    foreach ($location in $appDataPaths) {
-        if (-not (Test-Path $location.Path)) { continue }
-        
-        $folders = Get-ChildItem -Path $location.Path -Directory -ErrorAction SilentlyContinue
-        
-        foreach ($folder in $folders) {
-            # Skip system folders
-            $skipFolders = @('Microsoft', 'Windows', 'Packages', 'Programs', 'Temp', 'Roaming')
-            if ($folder.Name -in $skipFolders) { continue }
-            
-            # Skip if recently modified
-            if ($folder.LastWriteTime -gt $cutoffDate) { continue }
-            
-            # Check if app is installed using stricter matching
-            # Require exact match or that folder name is a clear prefix/suffix of app name
-            $isInstalled = $false
-            $folderLower = $folder.Name.ToLower()
-            foreach ($name in $installedNames) {
-                # Exact match
-                if ($name -eq $folderLower) {
-                    $isInstalled = $true
-                    break
-                }
-                # Folder is prefix of app name (e.g., "chrome" matches "chrome browser")
-                if ($name.StartsWith($folderLower) -and $folderLower.Length -ge 4) {
-                    $isInstalled = $true
-                    break
-                }
-                # App name is prefix of folder (e.g., "vscode" matches "vscode-data")
-                if ($folderLower.StartsWith($name) -and $name.Length -ge 4) {
-                    $isInstalled = $true
-                    break
-                }
+        $files = [System.Collections.Generic.List[string]]::new()
+        foreach ($root in $Roots) {
+            try {
+                $found = Read-SwDevScan -Answer (Get-SwBoundedFileScan -Root $root -Filter '*.tmp' -NoRecurse -OlderThan $Cutoff) -Name $Description -Root $root
+                if ($null -ne $found) { foreach ($file in $found) { $files.Add($file) } }
             }
-            
-            if (-not $isInstalled) {
-                $orphanedPaths += @{
-                    Path = $folder.FullName
-                    Name = $folder.Name
-                    Type = $location.Type
-                    Size = (Get-PathSize -Path $folder.FullName)
-                    LastModified = $folder.LastWriteTime
-                }
-            }
+            catch { Write-SwDebug "folder not searched, ${root}: $($_.Exception.Message)" }
         }
+        if ($files.Count -eq 0) { return }
+        $names = (@($Processes | ForEach-Object { ConvertTo-SwPsLiteral -Value ([string]$_) }) -join ', ')
+        $source = '$answer = @(Test-SwCacheOwnerIdle -Names @(' + $names + ')); ($answer.Count -eq 1) -and ($answer[0] -is [bool]) -and ($answer[0] -eq $true)'
+        $null = Remove-SwItems -Paths ([string[]]$files.ToArray()) -Description $Description -CanRemove ([scriptblock]::Create($source))
     }
-    
-    return $orphanedPaths
-}
-
-function Clear-OrphanedAppData {
-    <#
-    .SYNOPSIS
-        Clean orphaned application data
-    #>
-    param([int]$DaysOld = 60)
-    
-    Start-Section "Orphaned app data"
-    
-    # @() keeps a single result an array; one hashtable alone would report
-    # its key count as .Count.
-    $orphaned = @(Find-OrphanedAppData -DaysOld $DaysOld)
-    
-    if ($orphaned.Count -eq 0) {
-        Write-Info "No orphaned app data found"
-        Stop-Section
-        return
-    }
-    
-    # Filter by size (only clean if > 10MB to avoid noise)
-    $significantOrphans = @($orphaned | Where-Object { $_.Size -gt 10MB })
-    
-    if ($significantOrphans.Count -gt 0) {
-        $totalSize = ($significantOrphans | Measure-Object -Property Size -Sum).Sum
-        $sizeHuman = Format-ByteSize -Bytes $totalSize
-        
-        $noun = if ($significantOrphans.Count -eq 1) { 'folder' } else { 'folders' }
-        Write-Info "Found $($significantOrphans.Count) orphaned $noun ($sizeHuman)"
-        
-        foreach ($orphan in $significantOrphans) {
-            $orphanSize = Format-ByteSize -Bytes $orphan.Size
-            $null = Remove-SafeItem -Path $orphan.Path -Description "$($orphan.Name) ($orphanSize)" -Recurse
-        }
-    }
-    
-    Stop-Section
+    catch { Write-SwDebug "temp files not offered, ${Description}: $($_.Exception.Message)" }
 }
 
 # ============================================================================
-# Specific Application Cleanup
+# Groups
 # ============================================================================
 
-function Clear-OfficeCache {
+function Clear-SwOfficeCache {
     <#
     .SYNOPSIS
-        Clean Microsoft Office caches and temp files
-    #>
-    
-    $officeCachePaths = @(
-        # Office 365 / 2019 / 2021
-        "$env:LOCALAPPDATA\Microsoft\Office\16.0\Wef"
-        "$env:LOCALAPPDATA\Microsoft\Outlook\Offline Address Books"
-        # Office temp files
-        "$env:APPDATA\Microsoft\Templates\*.tmp"
-        "$env:APPDATA\Microsoft\Word\*.tmp"
-        "$env:APPDATA\Microsoft\Excel\*.tmp"
-        "$env:APPDATA\Microsoft\PowerPoint\*.tmp"
-    )
-    
-    foreach ($path in $officeCachePaths) {
-        if ($path -like "*.tmp") {
-            $parent = Split-Path -Parent $path
-            if (Test-Path $parent) {
-                $tmpFiles = Get-ChildItem -Path $parent -Filter "*.tmp" -File -ErrorAction SilentlyContinue
-                if ($tmpFiles) {
-                    $paths = $tmpFiles | ForEach-Object { $_.FullName }
-                    Remove-SafeItems -Paths $paths -Description "Office temp files"
-                }
-            }
-        }
-        elseif (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Office $(Split-Path -Leaf $path)"
-        }
-    }
-}
-
-function Clear-OneDriveCache {
-    <#
-    .SYNOPSIS
-        Clean OneDrive cache
-    #>
-    
-    $oneDriveCachePaths = @(
-        "$env:LOCALAPPDATA\Microsoft\OneDrive\setup\logs"
-    )
-    
-    foreach ($path in $oneDriveCachePaths) {
-        if (Test-Path $path) {
-            Remove-OldFiles -Path $path -DaysOld 7 -Description "OneDrive logs"
-        }
-    }
-}
-
-function Clear-GoogleDriveCache {
-    <#
-    .SYNOPSIS
-        Clean Google Drive cache
-    #>
-    
-    $googleDriveCachePaths = @(
-        "$env:LOCALAPPDATA\Google\DriveFS\Logs"
-        "$env:LOCALAPPDATA\Google\DriveFS\*.tmp"
-    )
-    
-    foreach ($path in $googleDriveCachePaths) {
-        if ($path -like "*.tmp") {
-            $parent = Split-Path -Parent $path
-            if (Test-Path $parent) {
-                $tmpFiles = Get-ChildItem -Path $parent -Filter "*.tmp" -ErrorAction SilentlyContinue
-                if ($tmpFiles) {
-                    $paths = $tmpFiles | ForEach-Object { $_.FullName }
-                    Remove-SafeItems -Paths $paths -Description "Google Drive temp"
-                }
-            }
-        }
-        elseif (Test-Path $path) {
-            Remove-OldFiles -Path $path -DaysOld 7 -Description "Google Drive logs"
-        }
-    }
-}
-
-function Clear-AdobeData {
-    <#
-    .SYNOPSIS
-        Clean Adobe application caches and temp files
-    #>
-    
-    $adobeCachePaths = @(
-        "$env:APPDATA\Adobe\Common\Media Cache Files"
-        "$env:APPDATA\Adobe\Common\Peak Files"
-        "$env:LOCALAPPDATA\Adobe\*\Cache"
-        "$env:LOCALAPPDATA\Adobe\*\CameraRaw\Cache"
-        "$env:LOCALAPPDATA\Temp\Adobe"
-    )
-    
-    foreach ($pattern in $adobeCachePaths) {
-        $paths = Resolve-Path $pattern -ErrorAction SilentlyContinue
-        foreach ($path in $paths) {
-            if (Test-Path $path.Path) {
-                Clear-DirectoryContents -Path $path.Path -Description "Adobe cache"
-            }
-        }
-    }
-}
-
-function Clear-AutodeskData {
-    <#
-    .SYNOPSIS
-        Clean Autodesk application caches
-    #>
-    
-    $autodeskCachePaths = @(
-        "$env:LOCALAPPDATA\Autodesk\*\Cache"
-        "$env:APPDATA\Autodesk\*\cache"
-    )
-    
-    foreach ($pattern in $autodeskCachePaths) {
-        $paths = Resolve-Path $pattern -ErrorAction SilentlyContinue
-        foreach ($path in $paths) {
-            if (Test-Path $path.Path) {
-                Clear-DirectoryContents -Path $path.Path -Description "Autodesk cache"
-            }
-        }
-    }
-}
-
-# ============================================================================
-# Gaming Platform Cleanup
-# ============================================================================
-
-function Clear-GamingPlatformCaches {
-    <#
-    .SYNOPSIS
-        Clean gaming platform caches (Steam, Epic, Origin, etc.)
-    #>
-    
-    # Steam
-    $steamPaths = @(
-        "${env:ProgramFiles(x86)}\Steam\appcache\httpcache"
-        "${env:ProgramFiles(x86)}\Steam\appcache\librarycache"
-        "${env:ProgramFiles(x86)}\Steam\logs"
-    )
-    foreach ($path in $steamPaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Steam $(Split-Path -Leaf $path)"
-        }
-    }
-    
-    # Epic Games Launcher
-    $epicPaths = @(
-        "$env:LOCALAPPDATA\EpicGamesLauncher\Saved\webcache"
-        "$env:LOCALAPPDATA\EpicGamesLauncher\Saved\Logs"
-    )
-    foreach ($path in $epicPaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Epic Games $(Split-Path -Leaf $path)"
-        }
-    }
-    
-    # EA App (Origin replacement)
-    $eaPaths = @(
-        "$env:LOCALAPPDATA\Electronic Arts\EA Desktop\cache"
-        "$env:APPDATA\Origin\*\cache"
-    )
-    foreach ($pattern in $eaPaths) {
-        $paths = Resolve-Path $pattern -ErrorAction SilentlyContinue
-        foreach ($path in $paths) {
-            if (Test-Path $path.Path) {
-                Clear-DirectoryContents -Path $path.Path -Description "EA/Origin cache"
-            }
-        }
-    }
-    
-    # GOG Galaxy
-    $gogPaths = @(
-        "$env:LOCALAPPDATA\GOG.com\Galaxy\webcache"
-        "$env:PROGRAMDATA\GOG.com\Galaxy\logs"
-    )
-    foreach ($path in $gogPaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "GOG Galaxy $(Split-Path -Leaf $path)"
-        }
-    }
-    
-    # Ubisoft Connect
-    $ubiPaths = @(
-        "$env:LOCALAPPDATA\Ubisoft Game Launcher\cache"
-        "$env:LOCALAPPDATA\Ubisoft Game Launcher\logs"
-    )
-    foreach ($path in $ubiPaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Ubisoft $(Split-Path -Leaf $path)"
-        }
-    }
-    
-    # Battle.net
-    $battlenetPaths = @(
-        "$env:APPDATA\Battle.net\Cache"
-        "$env:APPDATA\Battle.net\Logs"
-    )
-    foreach ($path in $battlenetPaths) {
-        if (Test-Path $path) {
-            Clear-DirectoryContents -Path $path -Description "Battle.net $(Split-Path -Leaf $path)"
-        }
-    }
-}
-
-# ============================================================================
-# Game Media Cleanup (Replays, Screenshots, Recordings)
-# ============================================================================
-
-function Clear-GameMediaFiles {
-    <#
-    .SYNOPSIS
-        Clean old game replays, screenshots, and recordings
+        The Office add-in cache, the Outlook address book cache and the old temporary Office files, each
+        only while no Office program is working.
     .DESCRIPTION
-        Removes old media files from various gaming sources:
-        - NVIDIA ShadowPlay/Highlights
-        - AMD ReLive
-        - Xbox Game Bar captures
-        - Steam screenshots
-        - OBS recordings
-        - Windows Game DVR
-        - GeForce Experience
-        
-        By default, only removes files older than 90 days.
-        User media in standard Pictures/Videos folders is NOT touched
-        unless it's in a game-specific subfolder.
-    .PARAMETER DaysOld
-        Minimum age of files to remove (default: 90 days)
+        The temporary files are the *.tmp files directly in the four Office folders of APPDATA that are
+        older than seven days (the newer of creation and last write time decides).
+    #>
+    $ErrorActionPreference = 'Stop'
+    try {
+        $office = @('WINWORD', 'EXCEL', 'POWERPNT', 'OUTLOOK', 'ONENOTE')
+        $local = Get-SwDevBase -Name 'LOCALAPPDATA'
+        if ($null -ne $local) {
+            Invoke-SwDevGuardedRow -Path (Join-SwCleanPath -Base $local -Rest @('Microsoft', 'Office', '16.0', 'Wef')) -Description 'Office Wef' -Processes $office
+            Invoke-SwDevGuardedRow -Path (Join-SwCleanPath -Base $local -Rest @('Microsoft', 'Outlook', 'Offline Address Books')) -Description 'Office Offline Address Books' -Processes @('OUTLOOK')
+        }
+        $roaming = Get-SwDevBase -Name 'APPDATA'
+        if ($null -ne $roaming) {
+            $cutoff = (Get-Date).AddDays(-7)
+            $roots = [System.Collections.Generic.List[string]]::new()
+            foreach ($leaf in 'Templates', 'Word', 'Excel', 'PowerPoint') { $roots.Add((Join-SwCleanPath -Base $roaming -Rest @('Microsoft', $leaf))) }
+            Invoke-SwAppTempFilesRow -Roots $roots.ToArray() -Description 'Office temp files' -Processes $office -Cutoff $cutoff
+        }
+    }
+    catch { Write-SwDebug "office caches not handled: $($_.Exception.Message)" }
+}
+
+function Clear-SwOneDriveCache {
+    <#
+    .SYNOPSIS
+        The OneDrive setup logs older than seven days (never the main logs in OneDrive\logs).
+    #>
+    $ErrorActionPreference = 'Stop'
+    try {
+        $local = Get-SwDevBase -Name 'LOCALAPPDATA'
+        if ($null -eq $local) { return }
+        Invoke-SwAppOldFilesRow -Path (Join-SwCleanPath -Base $local -Rest @('Microsoft', 'OneDrive', 'setup', 'logs')) -DaysOld 7 -Description 'OneDrive logs'
+    }
+    catch { Write-SwDebug "onedrive caches not handled: $($_.Exception.Message)" }
+}
+
+function Clear-SwGoogleDriveCache {
+    <#
+    .SYNOPSIS
+        The Google Drive logs and the temporary files directly in DriveFS, both older than seven days; the
+        temporary files only while Google Drive is idle.
+    #>
+    $ErrorActionPreference = 'Stop'
+    try {
+        $local = Get-SwDevBase -Name 'LOCALAPPDATA'
+        if ($null -eq $local) { return }
+        $drive = Join-SwCleanPath -Base $local -Rest @('Google', 'DriveFS')
+        Invoke-SwAppOldFilesRow -Path (Join-SwCleanPath -Base $drive -Rest @('Logs')) -DaysOld 7 -Description 'Google Drive logs'
+        $cutoff = (Get-Date).AddDays(-7)
+        Invoke-SwAppTempFilesRow -Roots @($drive) -Description 'Google Drive temp' -Processes @('GoogleDriveFS') -Cutoff $cutoff
+    }
+    catch { Write-SwDebug "google drive caches not handled: $($_.Exception.Message)" }
+}
+
+function Clear-SwAdobeCaches {
+    <#
+    .SYNOPSIS
+        The Adobe media cache and peak files (never Common itself or the Team Projects Cache).
+    #>
+    $ErrorActionPreference = 'Stop'
+    try {
+        $roaming = Get-SwDevBase -Name 'APPDATA'
+        if ($null -eq $roaming) { return }
+        Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $roaming -Rest @('Adobe', 'Common', 'Media Cache Files')) -Description 'Adobe cache'
+        Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $roaming -Rest @('Adobe', 'Common', 'Peak Files')) -Description 'Adobe cache'
+    }
+    catch { Write-SwDebug "adobe caches not handled: $($_.Exception.Message)" }
+}
+
+function Clear-SwGamePlatformCaches {
+    <#
+    .SYNOPSIS
+        The caches and logs of the Epic, EA, GOG, Ubisoft and Battle.net launchers. Games, saved games and
+        libraries are not in this list.
+    #>
+    $ErrorActionPreference = 'Stop'
+    try {
+        $local = Get-SwDevBase -Name 'LOCALAPPDATA'
+        $roaming = Get-SwDevBase -Name 'APPDATA'
+        $shared = Get-SwDevBase -Name 'PROGRAMDATA'
+        if ($null -ne $local) {
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('EpicGamesLauncher', 'Saved', 'webcache')) -Description 'Epic Games webcache'
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('EpicGamesLauncher', 'Saved', 'Logs')) -Description 'Epic Games Logs'
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('Electronic Arts', 'EA Desktop', 'cache')) -Description 'EA/Origin cache'
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('GOG.com', 'Galaxy', 'webcache')) -Description 'GOG Galaxy webcache'
+        }
+        if ($null -ne $shared) {
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $shared -Rest @('GOG.com', 'Galaxy', 'logs')) -Description 'GOG Galaxy logs'
+        }
+        if ($null -ne $local) {
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('Ubisoft Game Launcher', 'cache')) -Description 'Ubisoft cache'
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $local -Rest @('Ubisoft Game Launcher', 'logs')) -Description 'Ubisoft logs'
+        }
+        if ($null -ne $roaming) {
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $roaming -Rest @('Battle.net', 'Cache')) -Description 'Battle.net Cache'
+            Invoke-SwDevContentRow -Path (Join-SwCleanPath -Base $roaming -Rest @('Battle.net', 'Logs')) -Description 'Battle.net Logs'
+        }
+    }
+    catch { Write-SwDebug "game platform caches not handled: $($_.Exception.Message)" }
+}
+
+# ============================================================================
+# Game media
+# ============================================================================
+
+function Get-SwGameMediaCheck {
+    # The condition that asks right before a file is removed whether it is still old: it exists, is no
+    # folder and no link, and the newer of its creation and last write time is before the cutoff. Text, so
+    # that it keeps the file and the cutoff when the removal helper runs it later; it needs no command.
+    # Exactly one [bool] comes out, $false for anything unclear.
+    param([string]$File, [datetime]$Cutoff)
+
+    $source = '$p = ' + (ConvertTo-SwPsLiteral -Value $File) + '; $t = [long]' + $Cutoff.Ticks + '; ' +
+        'try { $a = [System.IO.File]::GetAttributes($p); ' +
+        'if (($a -band ([System.IO.FileAttributes]::ReparsePoint -bor [System.IO.FileAttributes]::Directory)) -ne 0) { $false } ' +
+        'else { $c = [System.IO.File]::GetCreationTime($p); $w = [System.IO.File]::GetLastWriteTime($p); if ($w -gt $c) { $c = $w }; [bool]($c.Ticks -lt $t) } } ' +
+        'catch { $false }'
+    return [scriptblock]::Create($source)
+}
+
+function Clear-SwGameMedia {
+    <#
+    .SYNOPSIS
+        The section "Game media": old recordings, replays and logs of game programs.
+    .DESCRIPTION
+        Only the folders the programs make themselves (NVIDIA, AMD, Medal, Overwolf, Fortnite, VALORANT,
+        Apex) are searched, never Pictures, Videos or Documents as such. A file counts when the newer of
+        its creation and last write time is strictly before now minus the days; links and cloud
+        placeholders are never listed. Every file goes to Remove-SwItems on its own with a condition that
+        checks its age once more right before the removal. A folder whose search is not complete adds
+        nothing and is noted; the others still run. Negative days open and close the section and do
+        nothing else; 0 means older than now.
+    #>
+    param([int]$DaysOld = 90)
+
+    $ErrorActionPreference = 'Stop'
+    try { Start-SwSection ('Game media (>' + $DaysOld + 'd old)') }
+    catch { Write-SwDebug "section not opened: $($_.Exception.Message)" }
+    try {
+        if ($DaysOld -lt 0) { return }
+        $cutoff = (Get-Date).AddDays(-$DaysOld)
+        $media = @('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.png', '.jpg', '.jpeg', '.bmp', '.gif')
+        $profileRoot = Get-SwDevBase -Name 'USERPROFILE'
+        $local = Get-SwDevBase -Name 'LOCALAPPDATA'
+
+        # Name, base, folders below the base, extensions (none: every file).
+        $sources = @(
+            @{ Name = 'NVIDIA recordings'; Base = $profileRoot; Rests = @(@('Videos', 'NVIDIA'), @('Videos', 'ShadowPlay'), @('Videos', 'GeForce Experience')); Extensions = $media }
+            @{ Name = 'AMD ReLive recordings'; Base = $profileRoot; Rests = @(@('Videos', 'Radeon ReLive'), @('Videos', 'AMD'), @('Videos', 'Radeon')); Extensions = $media }
+            @{ Name = 'Medal.tv clips'; Base = $profileRoot; Rests = @(, @('Videos', 'Medal')); Extensions = $media }
+            @{ Name = 'Overwolf/Outplayed recordings'; Base = $profileRoot; Rests = @(@('Videos', 'Overwolf'), @('Videos', 'Outplayed')); Extensions = $media }
+            @{ Name = 'Fortnite replays'; Base = $local; Rests = @(, @('FortniteGame', 'Saved', 'Demos')); Extensions = @() }
+            @{ Name = 'VALORANT logs'; Base = $local; Rests = @(, @('VALORANT', 'Saved', 'Logs')); Extensions = @() }
+            @{ Name = 'Apex Legends temp files'; Base = $profileRoot; Rests = @(, @('Saved Games', 'Respawn', 'Apex', 'assets', 'temp')); Extensions = @() }
+        )
+
+        $chosen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($source in $sources) {
+            if ($null -eq $source.Base) { continue }
+            $description = $source.Name + ' (>' + $DaysOld + 'd)'
+            foreach ($rest in $source.Rests) {
+                try {
+                    $root = Join-SwCleanPath -Base $source.Base -Rest $rest
+                    if (@($source.Extensions).Count -gt 0) { $answer = Get-SwBoundedFileScan -Root $root -Extensions ([string[]]$source.Extensions) -OlderThan $cutoff }
+                    else { $answer = Get-SwBoundedFileScan -Root $root -OlderThan $cutoff }
+                    $found = Read-SwDevScan -Answer $answer -Name $source.Name -Root $root
+                    if ($null -eq $found) { continue }
+                    foreach ($file in $found) {
+                        # A file counts once in a run, also when two folders deliver it.
+                        if (-not $chosen.Add((ConvertTo-SwCleanCompare -Path $file))) { continue }
+                        try { $null = Remove-SwItems -Paths ([string[]]@($file)) -Description $description -CanRemove (Get-SwGameMediaCheck -File $file -Cutoff $cutoff) }
+                        catch { Write-SwDebug "file not offered, ${file}: $($_.Exception.Message)" }
+                    }
+                }
+                catch { Write-SwDebug "folder not handled, $($source.Name): $($_.Exception.Message)" }
+            }
+        }
+    }
+    catch { Write-SwDebug "game media not handled: $($_.Exception.Message)" }
+    finally {
+        try { Stop-SwSection }
+        catch { Write-SwDebug "section not closed: $($_.Exception.Message)" }
+    }
+}
+
+# ============================================================================
+# The section
+# ============================================================================
+
+function Invoke-SwAppCleanup {
+    <#
+    .SYNOPSIS
+        The section "Applications": five groups in a fixed order; with -IncludeGameMedia the section "Game
+        media" follows, after this one was closed. Writes nothing to the pipeline; a failing group stops
+        only itself.
     #>
     param(
-        [int]$DaysOld = 90
+        [switch]$IncludeGameMedia,
+        [int]$GameMediaDaysOld = 90
     )
-    
-    Start-Section "Game media (>${DaysOld}d old)"
-    
-    $cutoffDate = (Get-Date).AddDays(-$DaysOld)
-    # One recursive enumeration per media root, then one extension filter. The
-    # old per-extension loop read every root eleven times for the same files.
-    $mediaExtensionPattern = '^\.(mp4|mkv|avi|mov|wmv|webm|png|jpg|jpeg|bmp|gif)$'
-    $obsExtensionPattern = '^\.(mp4|mkv|flv|mov|ts)$'
-    
-    # -------------------------------------------------------------------------
-    # NVIDIA ShadowPlay / GeForce Experience
-    # -------------------------------------------------------------------------
-    $nvidiaPaths = @(
-        "$env:USERPROFILE\Videos\NVIDIA"                    # Default ShadowPlay location
-        "$env:USERPROFILE\Videos\ShadowPlay"                # Alternative name
-        "$env:USERPROFILE\Videos\GeForce Experience"        # GeForce Experience recordings
-    )
-    
-    foreach ($basePath in $nvidiaPaths) {
-        if (Test-Path $basePath) {
-            $oldFiles = Get-ChildItem -Path $basePath -File -Recurse -ErrorAction SilentlyContinue |
-                        Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $mediaExtensionPattern }
-            if ($oldFiles) {
-                $paths = $oldFiles | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "NVIDIA recordings (>${DaysOld}d)"
-            }
+
+    $ErrorActionPreference = 'Stop'
+    try { Start-SwSection 'Applications' }
+    catch { Write-SwDebug "section not opened: $($_.Exception.Message)" }
+    try {
+        foreach ($group in 'Clear-SwOfficeCache', 'Clear-SwOneDriveCache', 'Clear-SwGoogleDriveCache', 'Clear-SwAdobeCaches', 'Clear-SwGamePlatformCaches') {
+            try { $null = & $group }
+            catch { Write-SwDebug "$group failed: $($_.Exception.Message)" }
         }
     }
-    
-    # NVIDIA Highlights (game-specific clips)
-    $highlightsPath = "$env:USERPROFILE\Videos\NVIDIA\Highlights"
-    if (Test-Path $highlightsPath) {
-        $oldHighlights = Get-ChildItem -Path $highlightsPath -File -Recurse -ErrorAction SilentlyContinue |
-                         Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match '\.(mp4|mkv|avi|mov)$' }
-        if ($oldHighlights) {
-            $paths = $oldHighlights | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "NVIDIA Highlights (>${DaysOld}d)"
-        }
+    finally {
+        try { Stop-SwSection }
+        catch { Write-SwDebug "section not closed: $($_.Exception.Message)" }
     }
-    
-    # -------------------------------------------------------------------------
-    # AMD ReLive / Radeon Software
-    # -------------------------------------------------------------------------
-    $amdPaths = @(
-        "$env:USERPROFILE\Videos\Radeon ReLive"
-        "$env:USERPROFILE\Videos\AMD"
-        "$env:USERPROFILE\Videos\Radeon"
-    )
-    
-    foreach ($basePath in $amdPaths) {
-        if (Test-Path $basePath) {
-            $oldFiles = Get-ChildItem -Path $basePath -File -Recurse -ErrorAction SilentlyContinue |
-                        Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $mediaExtensionPattern }
-            if ($oldFiles) {
-                $paths = $oldFiles | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "AMD ReLive recordings (>${DaysOld}d)"
-            }
-        }
+
+    if ($IncludeGameMedia) {
+        try { $null = Clear-SwGameMedia -DaysOld $GameMediaDaysOld }
+        catch { Write-SwDebug "game media failed: $($_.Exception.Message)" }
     }
-    
-    # -------------------------------------------------------------------------
-    # Xbox Game Bar / Windows Game DVR
-    # -------------------------------------------------------------------------
-    $xboxCapturesPath = "$env:USERPROFILE\Videos\Captures"
-    if (Test-Path $xboxCapturesPath) {
-        $oldFiles = Get-ChildItem -Path $xboxCapturesPath -File -ErrorAction SilentlyContinue |
-                    Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $mediaExtensionPattern }
-        if ($oldFiles) {
-            $paths = $oldFiles | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "Xbox Game Bar captures (>${DaysOld}d)"
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # Steam Screenshots
-    # -------------------------------------------------------------------------
-    # Steam stores screenshots in userdata\<userid>\760\remote\<appid>\screenshots
-    $steamUserDataPath = "${env:ProgramFiles(x86)}\Steam\userdata"
-    if (Test-Path $steamUserDataPath) {
-        $screenshotFolders = Get-ChildItem -Path $steamUserDataPath -Directory -ErrorAction SilentlyContinue |
-                             ForEach-Object { Join-Path $_.FullName "760\remote" } |
-                             Where-Object { Test-Path $_ }
-        
-        foreach ($folder in $screenshotFolders) {
-            $oldScreenshots = Get-ChildItem -Path $folder -Filter "*.jpg" -File -Recurse -ErrorAction SilentlyContinue |
-                              Where-Object { $_.LastWriteTime -lt $cutoffDate }
-            if ($oldScreenshots) {
-                $paths = $oldScreenshots | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "Steam screenshots (>${DaysOld}d)"
-            }
-        }
-    }
-    
-    # Also check common Steam screenshot export location
-    $steamScreenshotsPath = "$env:USERPROFILE\Pictures\Steam Screenshots"
-    if (Test-Path $steamScreenshotsPath) {
-        $oldFiles = Get-ChildItem -Path $steamScreenshotsPath -Filter "*.jpg" -File -Recurse -ErrorAction SilentlyContinue |
-                    Where-Object { $_.LastWriteTime -lt $cutoffDate }
-        if ($oldFiles) {
-            $paths = $oldFiles | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "Steam exported screenshots (>${DaysOld}d)"
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # OBS Studio Recordings
-    # -------------------------------------------------------------------------
-    $obsRecordingsPath = "$env:USERPROFILE\Videos\OBS"
-    if (Test-Path $obsRecordingsPath) {
-        $oldFiles = Get-ChildItem -Path $obsRecordingsPath -File -Recurse -ErrorAction SilentlyContinue |
-                    Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $obsExtensionPattern }
-        if ($oldFiles) {
-            $paths = $oldFiles | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "OBS recordings (>${DaysOld}d)"
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # Windows Game DVR (legacy location)
-    # -------------------------------------------------------------------------
-    $gameDvrPath = "$env:LOCALAPPDATA\Packages\Microsoft.XboxGamingOverlay_*\LocalState\GameDVR"
-    $gameDvrPaths = Resolve-Path $gameDvrPath -ErrorAction SilentlyContinue
-    foreach ($path in $gameDvrPaths) {
-        if (Test-Path $path.Path) {
-            $oldFiles = Get-ChildItem -Path $path.Path -File -Recurse -ErrorAction SilentlyContinue |
-                        Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match '\.(mp4|png)$' }
-            if ($oldFiles) {
-                $paths = $oldFiles | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "Game DVR recordings (>${DaysOld}d)"
-            }
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # Medal.tv Clips
-    # -------------------------------------------------------------------------
-    $medalPath = "$env:USERPROFILE\Videos\Medal"
-    if (Test-Path $medalPath) {
-        $oldFiles = Get-ChildItem -Path $medalPath -File -Recurse -ErrorAction SilentlyContinue |
-                    Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $mediaExtensionPattern }
-        if ($oldFiles) {
-            $paths = $oldFiles | ForEach-Object { $_.FullName }
-            Remove-SafeItems -Paths $paths -Description "Medal.tv clips (>${DaysOld}d)"
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # Overwolf / Outplayed Recordings
-    # -------------------------------------------------------------------------
-    $overwolfPaths = @(
-        "$env:USERPROFILE\Videos\Overwolf"
-        "$env:USERPROFILE\Videos\Outplayed"
-    )
-    foreach ($basePath in $overwolfPaths) {
-        if (Test-Path $basePath) {
-            $oldFiles = Get-ChildItem -Path $basePath -File -Recurse -ErrorAction SilentlyContinue |
-                        Where-Object { $_.LastWriteTime -lt $cutoffDate -and $_.Extension -match $mediaExtensionPattern }
-            if ($oldFiles) {
-                $paths = $oldFiles | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "Overwolf/Outplayed recordings (>${DaysOld}d)"
-            }
-        }
-    }
-    
-    # -------------------------------------------------------------------------
-    # Game-specific replay folders (common locations)
-    # -------------------------------------------------------------------------
-    $gameReplayPaths = @(
-        # Fortnite replays
-        "$env:LOCALAPPDATA\FortniteGame\Saved\Demos"
-        # League of Legends replays
-        "$env:USERPROFILE\Documents\League of Legends\Replays"
-        # Valorant
-        "$env:LOCALAPPDATA\VALORANT\Saved\Logs"
-        # Rocket League replays
-        "$env:USERPROFILE\Documents\My Games\Rocket League\TAGame\Demos"
-        # Call of Duty
-        "$env:USERPROFILE\Documents\Call of Duty\players\theatre"
-        # Apex Legends
-        "$env:USERPROFILE\Saved Games\Respawn\Apex\assets\temp"
-    )
-    
-    foreach ($path in $gameReplayPaths) {
-        if (Test-Path $path) {
-            $oldFiles = Get-ChildItem -Path $path -File -Recurse -ErrorAction SilentlyContinue |
-                        Where-Object { $_.LastWriteTime -lt $cutoffDate }
-            if ($oldFiles) {
-                $gameName = (Split-Path (Split-Path $path -Parent) -Leaf)
-                $paths = $oldFiles | ForEach-Object { $_.FullName }
-                Remove-SafeItems -Paths $paths -Description "$gameName replays (>${DaysOld}d)"
-            }
-        }
-    }
-    
-    Stop-Section
 }
 
 # ============================================================================
-# Main Application Cleanup Function
+# Old names, kept as forwarding functions (not aliases, so a test mock of either name behaves) until the
+# callers move to the new ones. The switch of the removed search for orphaned application data is
+# accepted and does nothing.
 # ============================================================================
 
 function Invoke-AppCleanup {
-    <#
-    .SYNOPSIS
-        Run all application-specific cleanup tasks
-    #>
     param(
         [switch]$IncludeOrphaned,
         [switch]$IncludeGameMedia,
         [int]$GameMediaDaysOld = 90
     )
-    
-    Start-Section "Applications"
-    
-    # Productivity apps
-    Clear-OfficeCache
-    Clear-OneDriveCache
-    Clear-GoogleDriveCache
-    
-    # Creative apps
-    Clear-AdobeData
-    Clear-AutodeskData
-    
-    # Gaming platforms
-    Clear-GamingPlatformCaches
-    
-    Stop-Section
-    
-    # Game media (replays, screenshots, recordings)
-    if ($IncludeGameMedia) {
-        Clear-GameMediaFiles -DaysOld $GameMediaDaysOld
-    }
-    
-    # Orphaned app data (separate section)
-    if ($IncludeOrphaned) {
-        Clear-OrphanedAppData -DaysOld 60
-    }
+    $null = $IncludeOrphaned
+    Invoke-SwAppCleanup -IncludeGameMedia:$IncludeGameMedia -GameMediaDaysOld $GameMediaDaysOld
 }
 
-# ============================================================================
-# Exports
-# ============================================================================
-# Functions: Get-InstalledPrograms, Find-OrphanedAppData, Clear-OfficeCache, etc.
+function Clear-OfficeCache { Clear-SwOfficeCache }
+function Clear-OneDriveCache { Clear-SwOneDriveCache }
+function Clear-GoogleDriveCache { Clear-SwGoogleDriveCache }
+function Clear-AdobeData { Clear-SwAdobeCaches }
+function Clear-GamingPlatformCaches { Clear-SwGamePlatformCaches }
+
+function Clear-GameMediaFiles {
+    param([int]$DaysOld = 90)
+    Clear-SwGameMedia -DaysOld $DaysOld
+}
+
+$script:SWEEPR_CLEAN_APPS_LOADED = $true

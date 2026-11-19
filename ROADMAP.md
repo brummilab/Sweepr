@@ -16,7 +16,7 @@ Planned work. The order may change. Please report wishes and bugs as an [issue](
 - **Check a PC once** (`sw check`): read-only, with an HTML report, no installation
 - Launcher `sw.exe`, notice about new versions
 - Leaner `sw analyze` and `sw status`; `sw analyze` shows OneDrive folders without deleting in them
-- `sw clean` reworked: `--system` now only removes old Windows error reports in `ProgramData` (the targets under `C:\Windows` had no effect), exit code 1 when a section stops
+- `sw clean` reworked: `--system` now only removes old Windows error reports in `ProgramData` (the targets under `C:\Windows` had no effect), exit code 1 when a section stops; developer and application caches reworked: tool caches only through the tool's own command, Office and Drive temporary files only when old and the app is closed, game recordings only from the recording apps' own folders
 
 ## Next
 

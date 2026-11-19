@@ -84,8 +84,8 @@ Describe 'GPU shader caches wait for --gpu-shaders' {
         Mock Invoke-SwUserCleanup {}
         Mock Clear-SwBrowserCaches {}
         Mock Clear-SwAppCaches {}
-        Mock Invoke-DevToolsCleanup {}
-        Mock Invoke-AppCleanup {}
+        Mock Invoke-SwDevCleanup {}
+        Mock Invoke-SwAppCleanup {}
     }
     It 'Skips them in an ordinary clean and keeps the other sections' {
         Start-SwCleanRun -IsDryRun $false -IncludeSystem $false -IncludeGameMedia $false -IncludeGpuShaders $false 6>$null
