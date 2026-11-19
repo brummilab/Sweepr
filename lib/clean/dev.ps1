@@ -340,14 +340,17 @@ function Get-SwDevHostFile {
 function Get-SwDevHelperCommand {
     # The text the helper PowerShell runs: UTF-8 output, the tool called with & by its absolute path,
     # every argument its own literal, and the exit code of the tool as the exit code of the helper. A native
-    # call runs under the preference Continue, so that text on the error stream is no failure.
+    # call runs under the preference Continue, so that text on the error stream is no failure. The two
+    # encodings are set apart, because setting the console one fails without a console.
     param([string]$Program, [string[]]$Arguments)
 
     $call = '& ' + (ConvertTo-SwPsLiteral -Value $Program)
     foreach ($argument in @($Arguments)) { $call += ' ' + (ConvertTo-SwPsLiteral -Value ([string]$argument)) }
     $lines = @(
         '$ErrorActionPreference = ''Continue'''
-        'try { $utf8 = New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8 } catch { $null = $_ }'
+        '$utf8 = New-Object System.Text.UTF8Encoding($false)'
+        'try { $OutputEncoding = $utf8 } catch { $null = $_ }'
+        'try { [Console]::OutputEncoding = $utf8 } catch { $null = $_ }'
         $call
         'if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE } else { exit 0 }'
     )
