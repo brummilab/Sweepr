@@ -546,6 +546,8 @@ BeforeAll {
         $psi.RedirectStandardError = $true
         $psi.RedirectStandardInput = $true
         $psi.WorkingDirectory = $WorkingDirectory
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
         foreach ($name in $RemoveEnvironment) { if ($psi.EnvironmentVariables.ContainsKey($name)) { $psi.EnvironmentVariables.Remove($name) } }
         foreach ($name in $Environment.Keys) { $psi.EnvironmentVariables[$name] = [string]$Environment[$name] }
         $process = [System.Diagnostics.Process]::Start($psi)
@@ -605,6 +607,7 @@ BeforeAll {
         $script:QueryCalls = [System.Collections.Generic.List[object]]::new()
         $script:QueryAnswers = @($Answers)
         $script:QueryByName = @{}
+        $script:OnQuery = $null
         $script:Commands = [System.Collections.Generic.List[object]]::new()
         $script:TreeCalls = 0
         $script:WlReads = 0
@@ -616,6 +619,7 @@ BeforeAll {
         }
         Mock Get-SwOwnerCachePath {
             $script:QueryCalls.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments) })
+            if ($null -ne $script:OnQuery) { & $script:OnQuery $script:QueryCalls.Count }
             if ($script:QueryByName.ContainsKey($Name)) { return $script:QueryByName[$Name] }
             $answers = @($script:QueryAnswers)
             if ($answers.Count -eq 0) { return $null }
@@ -637,38 +641,10 @@ BeforeAll {
     }
     function script:Get-NpmNotMeasured { @(Get-NotMeasuredFor 'npm') }
     function script:Get-OpsOf([string]$Action) { @($script:Ops | Where-Object { $_.Action -ceq $Action }) }
-
-    # The tool table as the groups give it to the owner path.
-    function script:Get-ToolArgs([string]$Tool) {
-        $row = $script:ToolTable[$Tool]
-        @{ Name = $Tool; Query = @($row.Query -split ' '); Arguments = @($row.Mutation -split ' '); Description = $row.Description }
-    }
-    $script:ToolTable = @{
-        npm  = @{ Query = 'config get cache'; Mutation = 'cache clean --force'; Description = 'npm cache' }
-        pnpm = @{ Query = 'store path'; Mutation = 'store prune'; Description = 'pnpm store' }
-        pip  = @{ Query = 'cache dir'; Mutation = 'cache purge'; Description = 'pip cache' }
-        go   = @{ Query = 'env GOCACHE'; Mutation = 'clean -cache'; Description = 'Go build cache' }
-        mise = @{ Query = 'cache path'; Mutation = 'cache clear'; Description = 'mise cache' }
-    }
-    function script:Invoke-ToolCleanup([string]$Tool) {
-        $arguments = Get-ToolArgs $Tool
-        Invoke-SwOwnerCacheCleanup -Name $arguments.Name -Query $arguments.Query -Arguments $arguments.Arguments -Description $arguments.Description
-    }
     # A folder with one file and the folder _cacache, so that every characteristic can be added on top.
     function script:New-PlainCache([string]$Root) {
         $null = New-File (P $Root 'file.bin') 2048
         $Root
-    }
-    # A preview run of one tool over one answer; true when the folder was accepted (counted, listed, no command).
-    function script:Test-Accepted([string]$Tool, [string]$Answer) {
-        $script:OwnerCleanups = 0
-        $script:SweeprDryRunMode = $true
-        $script:QueryAnswers = @($Answer)
-        Invoke-ToolCleanup $Tool
-        [int]$script:OwnerCleanups -eq 1
-    }
-    function script:Get-BaseFolder([string]$Base) {
-        switch ($Base) { 'Profile' { $script:Profile } 'Roam' { $script:Roam } 'Local' { $script:Local } }
     }
     # Items of a tree as a stand-in gives them; each property can be left out.
     function script:New-TreeItem([string]$Path, [hashtable]$Leave = @{}) {
@@ -686,6 +662,34 @@ BeforeAll {
             $script:TreeCalls++
             @{ Success = $true; Items = @($script:FixedItems); RootSnapshot = [pscustomobject]@{ Path = $Path; AllowLeafLink = $true }; Reason = '' }
         }
+    }
+
+    # The tool table as the groups give it to the owner path.
+    function script:Get-ToolArgs([string]$Tool) {
+        $row = $script:ToolTable[$Tool]
+        @{ Name = $Tool; Query = @($row.Query -split ' '); Arguments = @($row.Mutation -split ' '); Description = $row.Description }
+    }
+    $script:ToolTable = @{
+        npm  = @{ Query = 'config get cache'; Mutation = 'cache clean --force'; Description = 'npm cache' }
+        pnpm = @{ Query = 'store path'; Mutation = 'store prune'; Description = 'pnpm store' }
+        pip  = @{ Query = 'cache dir'; Mutation = 'cache purge'; Description = 'pip cache' }
+        go   = @{ Query = 'env GOCACHE'; Mutation = 'clean -cache'; Description = 'Go build cache' }
+        mise = @{ Query = 'cache path'; Mutation = 'cache clear'; Description = 'mise cache' }
+    }
+    function script:Invoke-ToolCleanup([string]$Tool) {
+        $arguments = Get-ToolArgs $Tool
+        Invoke-SwOwnerCacheCleanup -Name $arguments.Name -Query $arguments.Query -Arguments $arguments.Arguments -Description $arguments.Description
+    }
+    # A preview run of one tool over one answer; true when the folder was accepted (counted, listed, no command).
+    function script:Test-Accepted([string]$Tool, [string]$Answer) {
+        $script:OwnerCleanups = 0
+        $script:SweeprDryRunMode = $true
+        $script:QueryAnswers = @($Answer)
+        Invoke-ToolCleanup $Tool
+        [int]$script:OwnerCleanups -eq 1
+    }
+    function script:Get-BaseFolder([string]$Base) {
+        switch ($Base) { 'Profile' { $script:Profile } 'Roam' { $script:Roam } 'Local' { $script:Local } }
     }
 }
 

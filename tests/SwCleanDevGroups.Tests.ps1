@@ -509,6 +509,8 @@ BeforeAll {
         $psi.RedirectStandardError = $true
         $psi.RedirectStandardInput = $true
         $psi.WorkingDirectory = $WorkingDirectory
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
         foreach ($name in $RemoveEnvironment) { if ($psi.EnvironmentVariables.ContainsKey($name)) { $psi.EnvironmentVariables.Remove($name) } }
         foreach ($name in $Environment.Keys) { $psi.EnvironmentVariables[$name] = [string]$Environment[$name] }
         $process = [System.Diagnostics.Process]::Start($psi)
