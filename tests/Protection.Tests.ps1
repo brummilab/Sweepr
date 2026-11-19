@@ -210,6 +210,8 @@ Describe "Clean leaves user data alone" {
         [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $script:ExportListFile))
         [System.IO.File]::WriteAllText($script:ExportListFile, "")
         Reset-CleanupStats
+        # The preview asks no tool of the test machine for its cache folder.
+        Mock Invoke-SwOwnerCommand { $null }
 
         & {
             Invoke-UserCleanup -TempDaysOld 7 -LogDaysOld 7

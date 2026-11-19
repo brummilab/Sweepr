@@ -141,7 +141,8 @@ Describe 'Get-SweeprCleanPreview' {
         Mock Test-SwAdmin { $false }
         foreach ($name in $script:ChangingCommands) { Mock $name ([scriptblock]::Create("throw '$name must not run in a preview'")) }
 
-        Mock Invoke-SweeprOwnerProcess { $null }
+        Mock Invoke-SwOwnerCommand { $null }
+        Mock New-SwOwnerProcess { throw 'no process may start in a preview test' }
         Mock Invoke-SwUserCleanup {
             $script:SeenDryRun = Test-SwDryRunMode
             Invoke-FakeSection 'User essentials' 'User temp files' @($script:FileA, $script:FileB)
@@ -434,14 +435,15 @@ Describe 'Get-SweeprCleanPreview' {
         It 'Asks the installed tools for their cache folder when the switch is absent' {
             $result = Get-SweeprCleanPreview
             foreach ($tool in @('npm', 'pnpm', 'pip', 'go', 'mise')) {
-                Should -Invoke Invoke-SweeprOwnerProcess -Times 1 -ParameterFilter { $Name -eq $tool }
+                Should -Invoke Invoke-SwOwnerCommand -Times 1 -Exactly -ParameterFilter { $Name -eq $tool -and -not $Mutation }
             }
             @($result.NotMeasured).Count | Should -Be 0
         }
 
         It 'Starts no external program with the switch and names the skipped tools as not measured' {
             $result = Get-SweeprCleanPreview -SkipExternalTools
-            Should -Invoke Invoke-SweeprOwnerProcess -Times 0 -Exactly
+            Should -Invoke Invoke-SwOwnerCommand -Times 0 -Exactly
+            Should -Invoke New-SwOwnerProcess -Times 0 -Exactly
             Should -Invoke Start-Process -Times 0 -Exactly
             $names = @($result.NotMeasured | ForEach-Object Name)
             foreach ($tool in @('npm', 'pnpm', 'pip', 'go', 'mise')) {
