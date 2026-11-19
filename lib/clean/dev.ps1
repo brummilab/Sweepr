@@ -371,7 +371,10 @@ function Close-SwDevInput {
     # cannot flush into it, which the callers ignore.
     param($Process)
 
-    $Process.StandardInput.BaseStream.Close()
+    $stream = Get-SwDevField -Object $Process.StandardInput -Name 'BaseStream'
+    # A real process always has the stream; an object without one (a stand-in) can only be closed itself.
+    if ($null -ne $stream) { $stream.Close() }
+    else { $Process.StandardInput.Close() }
 }
 
 function Wait-SwDevRead {
