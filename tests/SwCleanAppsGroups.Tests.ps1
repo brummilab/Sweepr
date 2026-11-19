@@ -259,7 +259,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -388,7 +388,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions | Where-Object { $null -ne $_ }); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -1344,7 +1344,7 @@ Describe 'CD-1 loading apps.ps1' {
     }
 }
 
-Describe 'Section 6 old names of the application functions are forwarding functions' {
+Describe 'Old name old names of the application functions are forwarding functions' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
@@ -1352,7 +1352,7 @@ Describe 'Section 6 old names of the application functions are forwarding functi
     }
     AfterEach { Stop-Case }
 
-    It 'Section 6 <Old> is a function with no parameters and no CmdletBinding, not an alias, and calls <New> once' -ForEach $script:Forwards {
+    It 'Old name <Old> is a function with no parameters and no CmdletBinding, not an alias, and calls <New> once' -ForEach $script:Forwards {
         (Get-Command -Name $Old -ErrorAction Stop).CommandType | Should -Be 'Function'
         @(Get-Alias -Name $Old -ErrorAction SilentlyContinue).Count | Should -Be 0
         (Get-Command -Name $Old).CmdletBinding | Should -BeFalse
@@ -1364,7 +1364,7 @@ Describe 'Section 6 old names of the application functions are forwarding functi
         $script:Forwarded[0] | Should -Be $New
     }
 
-    It 'Section 6 CA-14 Invoke-AppCleanup keeps the switches IncludeOrphaned and IncludeGameMedia and GameMediaDaysOld (default 90)' {
+    It 'Old name CA-14 Invoke-AppCleanup keeps the switches IncludeOrphaned and IncludeGameMedia and GameMediaDaysOld (default 90)' {
         (Get-ParamLine 'Invoke-AppCleanup' 'IncludeOrphaned') | Should -BeLike 'IncludeOrphaned|System.Management.Automation.SwitchParameter|*'
         (Get-ParamLine 'Invoke-AppCleanup' 'IncludeGameMedia') | Should -BeLike 'IncludeGameMedia|System.Management.Automation.SwitchParameter|*'
         (Get-ParamLine 'Invoke-AppCleanup' 'GameMediaDaysOld') | Should -BeLike 'GameMediaDaysOld|System.Int32|*|mandatory=False|default=90'
@@ -1372,7 +1372,7 @@ Describe 'Section 6 old names of the application functions are forwarding functi
         (Get-Command -Name Invoke-AppCleanup).CmdletBinding | Should -BeFalse
     }
 
-    It 'Section 6 Invoke-AppCleanup calls Invoke-SwAppCleanup once with the media switch and the days, and ignores -IncludeOrphaned' {
+    It 'Old name Invoke-AppCleanup calls Invoke-SwAppCleanup once with the media switch and the days, and ignores -IncludeOrphaned' {
         $script:Seen = [System.Collections.Generic.List[object]]::new()
         Mock Invoke-SwAppCleanup { $script:Seen.Add([pscustomobject]@{ Media = [bool]$IncludeGameMedia; Days = $GameMediaDaysOld; Bound = @($PesterBoundParameters.Keys | Sort-Object) }) }
         Invoke-AppCleanup -IncludeOrphaned -IncludeGameMedia -GameMediaDaysOld 30
@@ -1384,7 +1384,7 @@ Describe 'Section 6 old names of the application functions are forwarding functi
         $script:Seen[1].Media | Should -BeFalse
     }
 
-    It 'Section 6 Clear-GameMediaFiles keeps DaysOld (int, position 0, default 90) and calls Clear-SwGameMedia -DaysOld once' {
+    It 'Old name Clear-GameMediaFiles keeps DaysOld (int, position 0, default 90) and calls Clear-SwGameMedia -DaysOld once' {
         (Get-ParamLine 'Clear-GameMediaFiles' 'DaysOld') | Should -Be 'DaysOld|System.Int32|pos=0|mandatory=False|default=90'
         (Get-ParamCount 'Clear-GameMediaFiles') | Should -Be 1
         $script:Seen = [System.Collections.Generic.List[object]]::new()

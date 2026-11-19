@@ -250,7 +250,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -379,7 +379,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions | Where-Object { $null -ne $_ }); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -701,7 +701,7 @@ Describe 'CD-1 loading dev.ps1' {
     }
 }
 
-Describe 'Section 6 old names of the developer tool functions are forwarding functions' {
+Describe 'Old name old names of the developer tool functions are forwarding functions' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
@@ -709,7 +709,7 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
     }
     AfterEach { Stop-Case }
 
-    It 'Section 6 <Old> is a function with no parameters and no CmdletBinding, not an alias, and calls <New> once' -ForEach $script:Forwards {
+    It 'Old name <Old> is a function with no parameters and no CmdletBinding, not an alias, and calls <New> once' -ForEach $script:Forwards {
         (Get-Command -Name $Old -ErrorAction Stop).CommandType | Should -Be 'Function'
         @(Get-Alias -Name $Old -ErrorAction SilentlyContinue).Count | Should -Be 0
         (Get-Command -Name $Old).CmdletBinding | Should -BeFalse
@@ -722,14 +722,14 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         $script:Forwarded[0] | Should -Be $New
     }
 
-    It 'Section 6 gives the return value of the new function back unchanged: Invoke-DevToolsCleanup passes it on' {
+    It 'Old name gives the return value of the new function back unchanged: Invoke-DevToolsCleanup passes it on' {
         $script:Marker = [pscustomobject]@{ Name = 'same' }
         Mock Invoke-SwDevCleanup { $script:Marker }
         $result = Invoke-DevToolsCleanup
         [object]::ReferenceEquals($result, $script:Marker) | Should -BeTrue
     }
 
-    It 'Section 6 Invoke-SweeprOwnerCacheCleanup keeps Name, Query, Arguments and Description at positions 0 to 3 without defaults' {
+    It 'Old name Invoke-SweeprOwnerCacheCleanup keeps Name, Query, Arguments and Description at positions 0 to 3 without defaults' {
         (Get-ParamLine 'Invoke-SweeprOwnerCacheCleanup' 'Name') | Should -Be 'Name|System.String|pos=0|mandatory=False|default='
         (Get-ParamLine 'Invoke-SweeprOwnerCacheCleanup' 'Query') | Should -Be 'Query|System.String[]|pos=1|mandatory=False|default='
         (Get-ParamLine 'Invoke-SweeprOwnerCacheCleanup' 'Arguments') | Should -Be 'Arguments|System.String[]|pos=2|mandatory=False|default='
@@ -738,7 +738,7 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         (Get-Command -Name Invoke-SweeprOwnerCacheCleanup).CmdletBinding | Should -BeFalse
     }
 
-    It 'Section 6 Invoke-SweeprOwnerCacheCleanup calls Invoke-SwOwnerCacheCleanup once with the four bound values' {
+    It 'Old name Invoke-SweeprOwnerCacheCleanup calls Invoke-SwOwnerCacheCleanup once with the four bound values' {
         $script:Seen = [System.Collections.Generic.List[object]]::new()
         Mock Invoke-SwOwnerCacheCleanup { $script:Seen.Add([pscustomobject]@{ Name = $Name; Query = @($Query); Arguments = @($Arguments); Description = $Description }) }
         Invoke-SweeprOwnerCacheCleanup 'npm' @('config', 'get', 'cache') @('cache', 'clean', '--force') 'npm cache'
@@ -749,7 +749,7 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         $script:Seen[0].Description | Should -Be 'npm cache'
     }
 
-    It 'Section 6 Get-SweeprOwnerCachePath keeps Name and Arguments at positions 0 and 1 and gives the string of the new function back' {
+    It 'Old name Get-SweeprOwnerCachePath keeps Name and Arguments at positions 0 and 1 and gives the string of the new function back' {
         (Get-ParamLine 'Get-SweeprOwnerCachePath' 'Name') | Should -Be 'Name|System.String|pos=0|mandatory=False|default='
         (Get-ParamLine 'Get-SweeprOwnerCachePath' 'Arguments') | Should -Be 'Arguments|System.String[]|pos=1|mandatory=False|default='
         (Get-ParamCount 'Get-SweeprOwnerCachePath') | Should -Be 2
@@ -762,12 +762,12 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         ($script:Seen[0].Arguments -join ' ') | Should -Be 'config get cache'
     }
 
-    It 'Section 6 Get-SweeprOwnerCachePath gives $null back when the new function does' {
+    It 'Old name Get-SweeprOwnerCachePath gives $null back when the new function does' {
         Mock Get-SwOwnerCachePath { $null }
         $null -eq (Get-SweeprOwnerCachePath 'npm' @('x')) | Should -BeTrue
     }
 
-    It 'Section 6 Invoke-SweeprOwnerProcess keeps Name, Arguments, TimeoutSeconds (default 5) and Outcome at positions 0 to 3' {
+    It 'Old name Invoke-SweeprOwnerProcess keeps Name, Arguments, TimeoutSeconds (default 5) and Outcome at positions 0 to 3' {
         (Get-ParamLine 'Invoke-SweeprOwnerProcess' 'Name') | Should -Be 'Name|System.String|pos=0|mandatory=False|default='
         (Get-ParamLine 'Invoke-SweeprOwnerProcess' 'Arguments') | Should -Be 'Arguments|System.String[]|pos=1|mandatory=False|default='
         (Get-ParamLine 'Invoke-SweeprOwnerProcess' 'TimeoutSeconds') | Should -Be 'TimeoutSeconds|System.Int32|pos=2|mandatory=False|default=5'
@@ -775,7 +775,7 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         (Get-ParamCount 'Invoke-SweeprOwnerProcess') | Should -Be 4
     }
 
-    It 'Section 6 Invoke-SweeprOwnerProcess calls Invoke-SwOwnerCommand once without -Mutation and passes -Outcome only when given' {
+    It 'Old name Invoke-SweeprOwnerProcess calls Invoke-SwOwnerCommand once without -Mutation and passes -Outcome only when given' {
         $script:Seen = [System.Collections.Generic.List[object]]::new()
         Mock Invoke-SwOwnerCommand {
             $script:Seen.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments); TimeoutSeconds = $TimeoutSeconds; Mutation = [bool]$Mutation; Bound = @($PesterBoundParameters.Keys) })
@@ -794,7 +794,7 @@ Describe 'Section 6 old names of the developer tool functions are forwarding fun
         $script:Seen[1].Bound | Should -Not -Contain 'Outcome'
     }
 
-    It 'Section 6 CD-9 3.7 gives no function and no forwarding function for Rust, Docker, Git, JetBrains, JVM or Cabal: <Name>' -ForEach $script:GoneNames {
+    It 'Old name CD-9 gives no function and no forwarding function for Rust, Docker, Git, JetBrains, JVM or Cabal: <Name>' -ForEach $script:GoneNames {
         $null -eq (Get-Command -Name $Name -ErrorAction SilentlyContinue) | Should -BeTrue
     }
 }

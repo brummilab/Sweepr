@@ -253,7 +253,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -1004,7 +1004,7 @@ Describe 'CD-7 S-11 one offer per place: the rows of the tables do not overlap' 
         $null -eq $clash | Should -BeTrue -Because $clash
     }
 
-    It 'CD-7 S-11 L35-20 leaves to caches.ps1, user.ps1 and these two files each their own places: no path is offered by both' {
+    It 'CD-7 S-11 leaves to caches.ps1, user.ps1 and these two files each their own places: no path is offered by both' {
         Invoke-SwDevCleanup
         Invoke-SwAppCleanup -IncludeGameMedia
         $ours = @(Get-Offered)
@@ -1018,7 +1018,7 @@ Describe 'CD-7 S-11 one offer per place: the rows of the tables do not overlap' 
         $null -eq $clash | Should -BeTrue -Because $clash
     }
 
-    It 'L35-20 gives the browser and application cache section no row for VS Code, Zed, Sublime, cpptools, the Epic webcache or Steam' {
+    It 'S-11 gives the browser and application cache section no row for VS Code, Zed, Sublime, cpptools, the Epic webcache or Steam' {
         foreach ($section in 'Clear-SwBrowserCaches', 'Clear-SwAppCaches') { try { & $section } catch { $null = $_ } }
         $paths = @(Get-Offered)
         foreach ($forbidden in (P $script:Roam 'Code'), (P $script:Roam 'Code - Insiders'), (P $script:Roam 'Zed'), (P $script:Local 'Zed'), (P $script:Roam 'Sublime Text'), (P $script:Local 'Sublime Text'),
@@ -1051,7 +1051,7 @@ Describe 'CD-30 S-12 the never-list and the dropped rows' {
         }
     }
 
-    It 'CD-30 S-12 3.7 offers none of the dropped rows: <Label>' -ForEach $script:DroppedRows {
+    It 'CD-30 S-12 offers none of the dropped rows: <Label>' -ForEach $script:DroppedRows {
         Invoke-SwDevCleanup
         Invoke-SwAppCleanup -IncludeGameMedia
         $dropped = Get-BaseFolder $Base
@@ -1063,7 +1063,7 @@ Describe 'CD-30 S-12 the never-list and the dropped rows' {
         }
     }
 
-    It 'CD-30 3.7 reads no Steam folder: ProgramFiles(x86) set to a folder with Steam in it changes nothing in what is offered' {
+    It 'CD-30 reads no Steam folder: ProgramFiles(x86) set to a folder with Steam in it changes nothing in what is offered' {
         $steam = P $script:Work 'pf86' 'Steam' 'appcache' 'httpcache'
         $null = New-File (P $steam 'x') 3
         Invoke-SwDevCleanup

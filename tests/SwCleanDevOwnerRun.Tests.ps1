@@ -227,7 +227,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -356,7 +356,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions | Where-Object { $null -ne $_ }); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -727,7 +727,7 @@ Describe 'CD-14 CD-16 CD-19 a successful command in a real run' {
         [System.IO.Directory]::Exists($script:Cache) | Should -BeTrue -Because 'the function does not remove the folder'
     }
 
-    It 'CD-16 2.6 writes exactly one OWNER line with the unchanged folder and the command line' {
+    It 'CD-16 writes exactly one OWNER line with the unchanged folder and the command line' {
         Invoke-NpmCleanup
         $owner = @(Get-OpsOf 'OWNER')
         $owner.Count | Should -Be 1
@@ -869,7 +869,7 @@ Describe 'CD-14 CD-16 CD-19 a successful command in a real run' {
         $script:TotalItems | Should -Be 9
     }
 
-    It 'CD-16 2.6 names the tool without path and extension in the command line when the name has a path, and gives the name unchanged to the command' {
+    It 'CD-16 names the tool without path and extension in the command line when the name has a path, and gives the name unchanged to the command' {
         # A folder that carries the characteristic of every tool, so that the name of the tool does not matter for the checks.
         $every = New-NpmCache (P $script:Local 'v3')
         $null = New-File (P $every 'http' 'a.bin') 10
@@ -886,7 +886,7 @@ Describe 'CD-14 CD-16 CD-19 a successful command in a real run' {
         }
     }
 
-    It 'CD-16 2.6 gives the name unchanged when it has no path: pnpm runs "pnpm store prune"' {
+    It 'CD-16 gives the name unchanged when it has no path: pnpm runs "pnpm store prune"' {
         $store = New-PlainCache (P $script:Work 'pnpm' 'store' 'v3')
         $script:QueryAnswers = @($store)
         Invoke-SwOwnerCacheCleanup -Name 'pnpm' -Query @('store', 'path') -Arguments @('store', 'prune') -Description 'pnpm store'
@@ -1150,5 +1150,67 @@ Describe 'CD-14 the owner path inside the groups: one root per run, the statisti
         [int]$script:OwnerCleanups | Should -Be 3
         (Get-Kilobytes) | Should -Be 0
         @($script:DryRunCollector | Where-Object { $_.Count -eq 0 -and $_.SizeBytes -eq 0 }).Count | Should -Be 3
+    }
+}
+
+Describe 'CD-14 CD-15 the calls of Invoke-SwOwnerCommand for one owner path, with the real query function' {
+    BeforeEach {
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        Initialize-Case -ProcessNetOnly
+        $script:Cache = New-NpmCache (P $script:Work 'npm-cache')
+        $script:Seen = [System.Collections.Generic.List[object]]::new()
+        Mock Invoke-SwOwnerCommand {
+            $script:Seen.Add([pscustomobject]@{ Name = $Name; Arguments = @($Arguments); Mutation = [bool]$Mutation; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds')
+                    TimeoutSeconds = $TimeoutSeconds; HasOutcome = $PesterBoundParameters.ContainsKey('Outcome') })
+            if ($Mutation) {
+                $gone = P $script:Cache '_cacache' 'gone.bin'
+                if ([System.IO.File]::Exists($gone)) { [System.IO.File]::Delete($gone) }
+                return [pscustomobject]@{ Output = '' }
+            }
+            [pscustomobject]@{ Output = [string]$script:Answer }
+        }
+        $script:Answer = $script:Cache
+    }
+    AfterEach { Stop-Case }
+
+    It 'CD-14 asks the command three times in a real run: the query, the query again, then the mutation with -Mutation, the limit 120 and an outcome table' {
+        $script:SweeprDryRunMode = $false
+        Invoke-NpmCleanup
+        $script:Seen.Count | Should -Be 3
+        @($script:Seen | ForEach-Object { $_.Mutation }) | Should -Be @($false, $false, $true)
+        foreach ($query in @($script:Seen[0], $script:Seen[1])) {
+            $query.Name | Should -Be 'npm'
+            ($query.Arguments -join ' ') | Should -Be 'config get cache'
+            $query.HasTimeout | Should -BeFalse
+        }
+        ($script:Seen[2].Arguments -join ' ') | Should -Be 'cache clean --force'
+        $script:Seen[2].TimeoutSeconds | Should -Be 120
+        $script:Seen[2].HasOutcome | Should -BeTrue
+        [int]$script:OwnerCleanups | Should -Be 1
+    }
+
+    It 'CD-15 asks the command once in a preview: the query only, no mutation' {
+        $script:SweeprDryRunMode = $true
+        Invoke-NpmCleanup
+        $script:Seen.Count | Should -Be 1
+        $script:Seen[0].Mutation | Should -BeFalse
+        [int]$script:OwnerCleanups | Should -Be 1
+    }
+
+    It 'CD-14 asks the command once when the folder is refused before the command: a whitelisted folder' {
+        Set-Whitelist @($script:Cache)
+        $script:SweeprDryRunMode = $false
+        Invoke-NpmCleanup
+        $script:Seen.Count | Should -Be 1
+        [int]$script:OwnerCleanups | Should -Be 0
+    }
+
+    It 'CD-14 asks the command once and starts nothing when the answer is not a plausible folder' {
+        $script:Answer = 'npm ERR! no cache'
+        $script:SweeprDryRunMode = $false
+        Invoke-NpmCleanup
+        $script:Seen.Count | Should -Be 1
+        $script:Seen[0].Mutation | Should -BeFalse
     }
 }

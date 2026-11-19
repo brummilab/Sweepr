@@ -250,7 +250,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -679,7 +679,7 @@ Describe 'CA-8 Clear-SwGameMedia: section, cutoff and roots' {
         @($script:Sections) | Should -Be @(('start:Game media (>' + $Days + 'd old)'), 'stop')
     }
 
-    It 'CA-8 L35-7 opens and closes the section and does nothing else for a negative number: <Days>' -ForEach @(@{ Days = -1 }, @{ Days = -90 }) {
+    It 'CA-8 opens and closes the section and does nothing else for a negative number: <Days>' -ForEach @(@{ Days = -1 }, @{ Days = -90 }) {
         Clear-SwGameMedia -DaysOld $Days
         @($script:Sections) | Should -Be @(('start:Game media (>' + $Days + 'd old)'), 'stop')
         $script:ScanCalls.Count | Should -Be 0
@@ -694,7 +694,7 @@ Describe 'CA-8 Clear-SwGameMedia: section, cutoff and roots' {
         foreach ($call in $script:ScanCalls) { $call.OlderThan | Should -Be $script:FixedNow.AddDays(-90) }
     }
 
-    It 'CA-8 L35-7 uses now as the cutoff for 0 days: everything that is older than now' {
+    It 'CA-8 uses now as the cutoff for 0 days: everything that is older than now' {
         Clear-SwGameMedia -DaysOld 0
         $script:ScanCalls.Count | Should -Be 12
         foreach ($call in $script:ScanCalls) { $call.OlderThan | Should -Be $script:FixedNow }
@@ -1094,7 +1094,7 @@ Describe 'CA-11 the preview and the real run of the game media with the real rem
     }
 }
 
-Describe 'Section 6 the old name Clear-GameMediaFiles' {
+Describe 'Old name the old name Clear-GameMediaFiles' {
     BeforeEach {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
@@ -1102,7 +1102,7 @@ Describe 'Section 6 the old name Clear-GameMediaFiles' {
     }
     AfterEach { Stop-Case }
 
-    It 'Section 6 keeps DaysOld (int, position 0, default 90), has no CmdletBinding, is no alias and calls Clear-SwGameMedia -DaysOld once' {
+    It 'Old name keeps DaysOld (int, position 0, default 90), has no CmdletBinding, is no alias and calls Clear-SwGameMedia -DaysOld once' {
         (Get-ParamLine 'Clear-GameMediaFiles' 'DaysOld') | Should -Be 'DaysOld|System.Int32|pos=0|mandatory=False|default=90'
         (Get-Command -Name Clear-GameMediaFiles).CommandType | Should -Be 'Function'
         (Get-Command -Name Clear-GameMediaFiles).CmdletBinding | Should -BeFalse

@@ -249,7 +249,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -378,7 +378,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions | Where-Object { $null -ne $_ }); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -1024,7 +1024,7 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
     }
     AfterEach { Stop-Case }
 
-    It 'CD-17 2.5 gives the trimmed stdout as Output, an empty Reason and closes the input at once after the start' {
+    It 'CD-17 gives the trimmed stdout as Output, an empty Reason and closes the input at once after the start' {
         Use-FakeProcesses @((New-FakeProcess -Out "  the output text `r`n"))
         $outcome = @{ Reason = 'old reason' }
         $result = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x') -Outcome $outcome
@@ -1045,12 +1045,12 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
         $result.Output | Should -BeExactly ''
     }
 
-    It 'CD-17 2.5 works without an Outcome table' {
+    It 'CD-17 works without an Outcome table' {
         Use-FakeProcesses @((New-FakeProcess -Out 'x'))
         { $null = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x') } | Should -Not -Throw
     }
 
-    It 'CD-17 2.5 reads stderr, gives it to the debug writer and never mixes it into Output' {
+    It 'CD-17 reads stderr, gives it to the debug writer and never mixes it into Output' {
         Use-FakeProcesses @((New-FakeProcess -Out 'good' -Err 'npm WARN something'))
         $result = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x')
         $result.Output | Should -BeExactly 'good'
@@ -1096,7 +1096,7 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
         $script:Created.Count | Should -Be 1 -Because 'the process ended, so no taskkill'
     }
 
-    It 'CD-17 2.5 does not fail a mutation that ended with 0 only because its output was not read' {
+    It 'CD-17 does not fail a mutation that ended with 0 only because its output was not read' {
         Use-FakeProcesses @((New-FakeProcess -Out '' -OutReadable $false -ErrReadable $false))
         $outcome = @{}
         $result = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('cache', 'clean') -Mutation -TimeoutSeconds 120 -Outcome $outcome

@@ -297,7 +297,7 @@ BeforeAll {
         $all | Where-Object { $_.StartsWith($Parameter + '|', [System.StringComparison]::Ordinal) } | Select-Object -First 1
     }
 
-    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has none, file-ops F-8) --
+    # ---- identity: a fake for Get-SwPathSnapshot and Test-SwPathSnapshot (Linux has no file identity) --
 
     function script:Test-FakeLinkAbove([string]$Path, [bool]$Leaf, [bool]$AllowLeafLink) {
         $work = [System.IO.Path]::GetFullPath($script:Work)
@@ -426,7 +426,7 @@ BeforeAll {
         $script:ScanCalls = [System.Collections.Generic.List[object]]::new()
         $script:ScanAnswers = @{}
         Mock Get-SwBoundedFileScan {
-            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
+            $script:ScanCalls.Add([pscustomobject]@{ Root = $Root; Filter = $Filter; Extensions = @($Extensions | Where-Object { $null -ne $_ }); OlderThan = $OlderThan; NoRecurse = [bool]$NoRecurse; TimeoutSeconds = $TimeoutSeconds; HasTimeout = $PesterBoundParameters.ContainsKey('TimeoutSeconds'); HasOlderThan = $PesterBoundParameters.ContainsKey('OlderThan') })
             foreach ($key in @($script:ScanAnswers.Keys)) { if ((Fold $key) -eq (Fold $Root)) { return $script:ScanAnswers[$key] } }
             @{ Files = @(); Complete = $true }
         }
@@ -959,7 +959,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         @(Get-Mutations).Count | Should -Be 0
     }
 
-    It 'CD-13 [W] refuses the known folders of the account: Desktop, Documents, Pictures, Music and Videos' -ForEach @(
+    It 'CD-13 [W] refuses the known folder of the account <Folder>' -ForEach @(
         @{ Folder = 'Desktop' }, @{ Folder = 'MyDocuments' }, @{ Folder = 'MyPictures' }, @{ Folder = 'MyMusic' }, @{ Folder = 'MyVideos' }) {
         $path = [Environment]::GetFolderPath($Folder)
         [string]::IsNullOrEmpty($path) | Should -BeFalse -Because 'the account has this known folder on Windows'
@@ -1092,7 +1092,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         (Get-NpmNotMeasured)[0].Reason | Should -Be 'not verified'
     }
 
-    It 'CD-14 N-4 refuses when one item has no Attributes, or has the reparse point attribute: such an item counts as a link' {
+    It 'CD-14 refuses when one item has no Attributes, or has the reparse point attribute: such an item counts as a link' {
         $item = P $script:Cache 'kept.bin'
         Use-FixedTree @((New-TreeItem $item @{ Attributes = $true }))
         (Test-Accepted 'npm' $script:Cache) | Should -BeFalse -Because 'no Attributes'
@@ -1102,7 +1102,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         (Get-NpmNotMeasured)[0].Reason | Should -Be 'not verified'
     }
 
-    It 'CD-14 N-4 refuses when one item has no FullName or no SweeprPathSnapshot' {
+    It 'CD-14 refuses when one item has no FullName or no SweeprPathSnapshot' {
         $item = P $script:Cache 'kept.bin'
         Use-FixedTree @((New-TreeItem $item @{ FullName = $true }))
         (Test-Accepted 'npm' $script:Cache) | Should -BeFalse -Because 'no FullName'
@@ -1110,7 +1110,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         (Test-Accepted 'npm' $script:Cache) | Should -BeFalse -Because 'no snapshot'
     }
 
-    It 'CD-14 N-4 accepts an item without Length (counts 0) or without PSIsContainer (counts as a file), and does not throw' {
+    It 'CD-14 accepts an item without Length (counts 0) or without PSIsContainer (counts as a file), and does not throw' {
         $item = P $script:Cache 'kept.bin'
         Use-FixedTree @((New-TreeItem $item @{ Length = $true }))
         { $null = Test-Accepted 'npm' $script:Cache } | Should -Not -Throw
