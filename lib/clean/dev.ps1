@@ -363,6 +363,17 @@ function Get-SwDevHelperCommand {
     return ($lines -join "`n")
 }
 
+function Close-SwDevInput {
+    # Closes the input of a process at once, without writing anything. The writer of the input is never
+    # asked to close or flush: under .NET Framework it would put its encoding preamble (a UTF-8 byte order
+    # mark under Windows PowerShell 5.1) into the pipe first, and the tool would read that as data. The
+    # stream below the writer is closed instead; releasing the process later may report that the writer
+    # cannot flush into it, which the callers ignore.
+    param($Process)
+
+    $Process.StandardInput.BaseStream.Close()
+}
+
 function Wait-SwDevRead {
     # True when the read task finishes within what is left of the one second both channels share.
     param($Task, $Clock)
@@ -388,7 +399,7 @@ function Stop-SwDevProcessTree {
         $killFile = [System.IO.Path]::Combine([System.Environment]::SystemDirectory, 'taskkill.exe')
         $killer = New-SwOwnerProcess -FilePath $killFile -Arguments ('/PID ' + $id + ' /T /F')
         $null = $killer.Start()
-        try { $killer.StandardInput.Close() }
+        try { Close-SwDevInput -Process $killer }
         catch { $null = $_ }
         $null = $killer.StandardOutput.ReadToEndAsync()
         $null = $killer.StandardError.ReadToEndAsync()
@@ -469,7 +480,7 @@ function Invoke-SwOwnerCommand {
         $outTask = $null
         $errTask = $null
         try {
-            $process.StandardInput.Close()
+            Close-SwDevInput -Process $process
             $outTask = $process.StandardOutput.ReadToEndAsync()
             $errTask = $process.StandardError.ReadToEndAsync()
             $exited = [bool]$process.WaitForExit($TimeoutSeconds * 1000)

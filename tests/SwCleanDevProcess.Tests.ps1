@@ -609,7 +609,11 @@ foreach ($argument in $args) { 'ARG:' + (($argument.ToCharArray() | ForEach-Obje
             }
         }
         $stdin = [pscustomobject]@{ Label = $Label }
-        Add-Member -InputObject $stdin -MemberType ScriptMethod -Name Close -Value { $script:Events.Add($this.Label + ':StdinClose') }
+        # The writer must never be closed or flushed (it could write a preamble); the stream below it is closed.
+        Add-Member -InputObject $stdin -MemberType ScriptMethod -Name Close -Value { $script:Events.Add($this.Label + ':StdinWriterClose') }
+        $base = [pscustomobject]@{ Label = $Label }
+        Add-Member -InputObject $base -MemberType ScriptMethod -Name Close -Value { $script:Events.Add($this.Label + ':StdinClose') }
+        Add-Member -InputObject $stdin -MemberType NoteProperty -Name BaseStream -Value $base
         $process = [pscustomobject]@{
             Label = $Label; Id = $Id; Waits = $Waits; Code = $ExitCode; StartThrows = $StartThrows; WaitThrows = $WaitThrows; ExitsWhenKillStarts = $ExitsWhenKillStarts
             StartInfo = [pscustomobject]@{ FileName = ''; Arguments = '' }; StandardInput = $stdin; StandardOutput = $stdout; StandardError = $stderr
@@ -1071,6 +1075,16 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
     }
     AfterEach { Stop-Case }
 
+    It 'CD-17 closes the stream below the input writer and never the writer itself, for the tool and for taskkill' {
+        $owner = New-FakeProcess -Waits $false -Id 42 -ExitsWhenKillStarts $true
+        Use-FakeProcesses @($owner, (New-FakeProcess -Label 'kill' -Id 77))
+        $null = Invoke-SwOwnerCommand -Name $script:Tool -Arguments @('x')
+        $script:Events | Should -Contain 'owner:StdinClose'
+        $script:Events | Should -Contain 'kill:StdinClose'
+        $script:Events | Should -Not -Contain 'owner:StdinWriterClose'
+        $script:Events | Should -Not -Contain 'kill:StdinWriterClose'
+    }
+
     It 'CD-17 gives the trimmed stdout as Output, an empty Reason and closes the input at once after the start' {
         Use-FakeProcesses @((New-FakeProcess -Out "  the output text `r`n"))
         $outcome = @{ Reason = 'old reason' }
@@ -1254,7 +1268,7 @@ Describe 'CD-17 Invoke-SwOwnerCommand with stand-in processes' {
 
     It 'CD-17 gives "error: " with the message and the evidence of the end when the input cannot be closed' {
         $owner = New-FakeProcess -Waits $false -Id 42 -ExitsWhenKillStarts $true
-        Add-Member -InputObject $owner.StandardInput -MemberType ScriptMethod -Name Close -Value { throw 'input cannot be closed' } -Force
+        Add-Member -InputObject $owner.StandardInput.BaseStream -MemberType ScriptMethod -Name Close -Value { throw 'input cannot be closed' } -Force
         Use-FakeProcesses @($owner, (New-FakeProcess -Label 'kill' -Id 77))
         $outcome = @{}
         $result = $null
@@ -1383,9 +1397,8 @@ Describe 'CD-12 CD-17 real helper processes with a stand-in tool' {
     }
 
     It 'CD-12 closes the input: a tool that reads standard input does not wait' {
-        # The caller sends nothing and closes the input at once: end of input, or on Windows PowerShell 5.1 at
-        # most an empty line that the host itself makes of it. Any text would be data from somewhere else.
-        $body = "`$line = [Console]::In.ReadLine(); if ([string]::IsNullOrEmpty(`$line)) { 'stdin closed' } else { 'stdin had data: ' + `$line }"
+        # End of input, nothing else: a byte order mark or any other text would be data from the caller.
+        $body = "`$line = [Console]::In.ReadLine(); if (`$null -eq `$line) { 'stdin closed' } else { 'stdin had data: ' + `$line }"
         $folder = New-ToolFolder 'stdin tools' $body 'stdin-fixture'
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
         $result = Invoke-SwOwnerCommand -Name (P $folder 'stdin-fixture.ps1') -Arguments @() -TimeoutSeconds 60
