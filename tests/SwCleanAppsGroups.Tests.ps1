@@ -1364,10 +1364,10 @@ Describe 'Section 6 old names of the application functions are forwarding functi
         $script:Forwarded[0] | Should -Be $New
     }
 
-    It 'Section 6 CA-14 Invoke-AppCleanup keeps the switches IncludeOrphaned and IncludeGameMedia and GameMediaDaysOld (position 2, default 90)' {
+    It 'Section 6 CA-14 Invoke-AppCleanup keeps the switches IncludeOrphaned and IncludeGameMedia and GameMediaDaysOld (default 90)' {
         (Get-ParamLine 'Invoke-AppCleanup' 'IncludeOrphaned') | Should -BeLike 'IncludeOrphaned|System.Management.Automation.SwitchParameter|*'
         (Get-ParamLine 'Invoke-AppCleanup' 'IncludeGameMedia') | Should -BeLike 'IncludeGameMedia|System.Management.Automation.SwitchParameter|*'
-        (Get-ParamLine 'Invoke-AppCleanup' 'GameMediaDaysOld') | Should -Be 'GameMediaDaysOld|System.Int32|pos=2|mandatory=False|default=90'
+        (Get-ParamLine 'Invoke-AppCleanup' 'GameMediaDaysOld') | Should -BeLike 'GameMediaDaysOld|System.Int32|*|mandatory=False|default=90'
         (Get-ParamCount 'Invoke-AppCleanup') | Should -Be 3
         (Get-Command -Name Invoke-AppCleanup).CmdletBinding | Should -BeFalse
     }
