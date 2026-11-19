@@ -45,7 +45,7 @@ BeforeAll {
     )
     # The real section functions, kept before any test replaces them with a mock.
     $script:RealInvokeUserCleanup = ${function:Invoke-SwUserCleanup}
-    $script:RealInvokeDevToolsCleanup = ${function:Invoke-DevToolsCleanup}
+    $script:RealInvokeDevCleanup = ${function:Invoke-SwDevCleanup}
     $script:RealInvokeSystemCleanup = ${function:Invoke-SwSystemCleanup}
 
     # A section as the real cleanup modules run it: titled, removing through the shared dry-run sink.
@@ -149,8 +149,8 @@ Describe 'Get-SweeprCleanPreview' {
         }
         Mock Clear-SwBrowserCaches { Invoke-FakeSection 'Browser caches' 'Browser cache' @($script:CacheDir) }
         Mock Clear-SwAppCaches { Invoke-FakeSection 'Application caches' 'Application cache' @() }
-        Mock Invoke-DevToolsCleanup { Invoke-FakeSection 'Developer tools' 'Developer cache' @() }
-        Mock Invoke-AppCleanup { Invoke-FakeSection 'Applications' 'Application data' @() }
+        Mock Invoke-SwDevCleanup { Invoke-FakeSection 'Developer tools' 'Developer cache' @() }
+        Mock Invoke-SwAppCleanup { Invoke-FakeSection 'Applications' 'Application data' @() }
         Mock Clear-SwGpuShaderCaches { Invoke-FakeSection 'GPU shader caches' 'Shader cache' @() }
         Mock Invoke-SwSystemCleanup { Invoke-FakeSection 'System cleanup' 'Windows temp files' @($script:SysFile) }
     }
@@ -410,7 +410,7 @@ Describe 'Get-SweeprCleanPreview' {
         It 'Runs neither GPU shader caches nor game media by default' {
             $result = Get-SweeprCleanPreview
             Should -Invoke Clear-SwGpuShaderCaches -Times 0 -Exactly
-            Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGameMedia }
+            Should -Invoke Invoke-SwAppCleanup -Times 1 -Exactly -ParameterFilter { -not $IncludeGameMedia }
             @($result.Sections | ForEach-Object Name) | Should -Not -Contain 'GPU shader caches'
         }
 
@@ -422,14 +422,14 @@ Describe 'Get-SweeprCleanPreview' {
 
         It 'Passes game media on to the application section' {
             $null = Get-SweeprCleanPreview -GameMedia
-            Should -Invoke Invoke-AppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
+            Should -Invoke Invoke-SwAppCleanup -Times 1 -Exactly -ParameterFilter { $IncludeGameMedia }
         }
     }
 
     Context '-SkipExternalTools' {
         BeforeEach {
             # Tool caches run through the real developer section; nothing else is needed from it.
-            Mock Invoke-DevToolsCleanup { & $script:RealInvokeDevToolsCleanup }
+            Mock Invoke-SwDevCleanup { & $script:RealInvokeDevCleanup }
         }
 
         It 'Asks the installed tools for their cache folder when the switch is absent' {
