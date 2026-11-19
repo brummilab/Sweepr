@@ -353,10 +353,12 @@ function Get-SwDevHelperCommand {
         '$utf8 = New-Object System.Text.UTF8Encoding($false)'
         'try { $OutputEncoding = $utf8 } catch { $null = $_ }'
         'try { [Console]::OutputEncoding = $utf8 } catch { $null = $_ }'
+        '$code = 0'
         'try {'
         $call
-        '} catch { exit 125 }'
-        'if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE } else { exit 0 }'
+        'if ($null -ne $LASTEXITCODE) { $code = [int]$LASTEXITCODE }'
+        '} catch { $code = 125 }'
+        'exit $code'
     )
     return ($lines -join "`n")
 }

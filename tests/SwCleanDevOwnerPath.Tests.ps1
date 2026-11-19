@@ -109,6 +109,13 @@ BeforeAll {
     $script:Links = [System.Collections.Generic.List[string]]::new()
     # The path of this PowerShell, read before any case mocks Get-Process.
     $script:HostExe = (Get-Process -Id $PID).Path
+    # The system folder variables of this process, read before any case points them at a fake folder: Windows
+    # PowerShell 5.1 does not start without them, so every child PowerShell gets the real values.
+    $script:RealSystemEnv = @{}
+    foreach ($systemName in 'SystemRoot', 'windir') {
+        $systemValue = [System.Environment]::GetEnvironmentVariable($systemName)
+        if (-not [string]::IsNullOrEmpty($systemValue)) { $script:RealSystemEnv[$systemName] = $systemValue }
+    }
 
     # ---- environment and script variables ---------------------------------------------------------
 
@@ -217,17 +224,42 @@ BeforeAll {
         Set-Age $Path $Days
         $Path
     }
+    # Name, kind, length, attributes and time stamps of everything below a folder. The first pass only lets
+    # every folder be opened and closed once: Windows brings the entry of a folder in its parent up to date
+    # when the folder is closed, so a listing made right after a fixture was built can differ from the next
+    # one although nothing was changed. The rows of the second pass count.
+    $script:ListingRoot = ''
     function script:Get-Listing([string]$Root) {
         if (-not [System.IO.Directory]::Exists($Root)) { return , @('<missing>') }
-        $rows = [System.Collections.Generic.List[string]]::new()
-        foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force)) {
-            $rel = $item.FullName.Substring($Root.Length)
-            if ($item.PSIsContainer) { $rows.Add(('D {0} {1}' -f $rel, $item.LastWriteTimeUtc.Ticks)) }
-            else { $rows.Add(('F {0} {1} {2}' -f $rel, $item.Length, $item.LastWriteTimeUtc.Ticks)) }
+        $script:ListingRoot = $Root
+        $rows = $null
+        foreach ($pass in 1, 2) {
+            $rows = [System.Collections.Generic.List[string]]::new()
+            foreach ($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force)) {
+                $rel = $item.FullName.Substring($Root.Length)
+                if ($item.PSIsContainer) { $rows.Add(('D {0} {1} {2}' -f $rel, [int]$item.Attributes, $item.LastWriteTimeUtc.Ticks)) }
+                else { $rows.Add(('F {0} {1} {2} {3}' -f $rel, $item.Length, [int]$item.Attributes, $item.LastWriteTimeUtc.Ticks)) }
+            }
         }
         , @($rows | Sort-Object)
     }
-    function script:Same-Listing($Left, $Right) { (@($Left) -join '|') -ceq (@($Right) -join '|') }
+    # True when both listings are the same. Otherwise it throws and names the rows that differ and what a
+    # new listing of the folder shows, so a failure tells a change of the tree from a late update.
+    function script:Same-Listing($Left, $Right) {
+        $after = @($Left)
+        $before = @($Right)
+        if (($after -join '|') -ceq ($before -join '|')) { return $true }
+        $gone = @($before | Where-Object { $after -cnotcontains $_ })
+        $new = @($after | Where-Object { $before -cnotcontains $_ })
+        $again = 'not asked'
+        if (-not [string]::IsNullOrEmpty($script:ListingRoot)) {
+            $third = Get-Listing $script:ListingRoot
+            if (($third -join '|') -ceq ($after -join '|')) { $again = 'a new listing equals the listing after' }
+            elseif (($third -join '|') -ceq ($before -join '|')) { $again = 'a new listing equals the listing before' }
+            else { $again = 'a new listing differs from both' }
+        }
+        throw ('The file tree is not as it was. Rows only before: [' + ($gone -join ' ## ') + ']. Rows only after: [' + ($new -join ' ## ') + ']. ' + $again + '.')
+    }
     function script:Get-FileText([string]$Path) { [System.IO.File]::ReadAllText($Path, $script:Utf8) }
     function script:S([int[]]$CodePoints) {
         $sb = New-Object System.Text.StringBuilder
@@ -501,6 +533,7 @@ BeforeAll {
         $script:CurrentSection = @{ Active = $false; Activity = $false; Name = 'Example section' }
         $script:SweeprOperationsLogFile = P $script:Work 'oplog' 'operations.log'
         $script:SweeprOperationsLogStarted = $false
+        if ($RealProcess) { foreach ($systemName in @($script:RealSystemEnv.Keys)) { Set-Env $systemName $script:RealSystemEnv[$systemName] } }
         if (-not $RealIdentity) { Use-FakeIdentity }
         Use-Spies -RealSections:$RealSections -RealNotMeasured:$RealNotMeasured
         if (-not $RealProcess) { Mock Get-Process { @() } }
@@ -548,6 +581,7 @@ BeforeAll {
         $psi.WorkingDirectory = $WorkingDirectory
         $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
         $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        foreach ($name in @($script:RealSystemEnv.Keys)) { $psi.EnvironmentVariables[$name] = [string]$script:RealSystemEnv[$name] }
         foreach ($name in $RemoveEnvironment) { if ($psi.EnvironmentVariables.ContainsKey($name)) { $psi.EnvironmentVariables.Remove($name) } }
         foreach ($name in $Environment.Keys) { $psi.EnvironmentVariables[$name] = [string]$Environment[$name] }
         $process = [System.Diagnostics.Process]::Start($psi)
@@ -925,7 +959,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         [int]$script:OwnerCleanups | Should -Be 0
         $script:Calls.Count | Should -Be 0
         $script:Ops.Count | Should -Be 0
-        $note = Get-NpmNotMeasured
+        $note = @(Get-NpmNotMeasured)
         $note.Count | Should -Be 1
         $note[0].Reason | Should -Be 'not verified'
     }
@@ -962,7 +996,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
     It 'CD-13 [W] refuses the known folder of the account <Folder>' -ForEach @(
         @{ Folder = 'Desktop' }, @{ Folder = 'MyDocuments' }, @{ Folder = 'MyPictures' }, @{ Folder = 'MyMusic' }, @{ Folder = 'MyVideos' }) {
         $path = [Environment]::GetFolderPath($Folder)
-        [string]::IsNullOrEmpty($path) | Should -BeFalse -Because 'the account has this known folder on Windows'
+        if ([string]::IsNullOrEmpty($path)) { Set-ItResult -Skipped -Because 'this account has no known folder of this kind (a service account or a CI runner)'; return }
         $script:OwnerCleanups = 0
         $script:QueryAnswers = @($path)
         Invoke-NpmCleanup
@@ -972,7 +1006,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
 
     It 'CD-13 refuses an ancestor of a known folder of the account [W]' {
         $documents = [Environment]::GetFolderPath('MyDocuments')
-        [string]::IsNullOrEmpty($documents) | Should -BeFalse
+        if ([string]::IsNullOrEmpty($documents)) { Set-ItResult -Skipped -Because 'this account has no Documents folder (a service account or a CI runner)'; return }
         $parent = [System.IO.Path]::GetDirectoryName($documents)
         $script:QueryAnswers = @($parent)
         Invoke-NpmCleanup
@@ -994,7 +1028,7 @@ Describe 'CD-13 CD-14 the folder must be plausible, carry the characteristic of 
         $v = New-PlainCache (P $store $Leaf)
         (Test-Accepted 'pnpm' $v) | Should -BeTrue
         (Test-Accepted 'pnpm' $store) | Should -BeFalse
-        (@(Get-NotMeasuredFor 'pnpm') | Where-Object { $_.Reason -eq 'not verified' }).Count | Should -Be 1
+        @(@(Get-NotMeasuredFor 'pnpm') | Where-Object { $_.Reason -eq 'not verified' }).Count | Should -Be 1
     }
 
     It 'CD-13 pnpm: a leaf that is only v or v followed by a letter is refused' -ForEach @(@{ Leaf = 'v' }, @{ Leaf = 'vx' }, @{ Leaf = 'v3x' }, @{ Leaf = 'store' }) {
