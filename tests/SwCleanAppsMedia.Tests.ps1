@@ -921,6 +921,7 @@ Describe 'CA-9 CA-10 S-10 which files are chosen, with the real search' {
 
     It 'CA-9 CD-8 does not deliver a file that is a link' {
         $real = New-OldFile (P $script:Work 'elsewhere' 'real.mp4') 200
+        $null = New-Dir (P $script:Profile 'Videos' 'Medal')
         if (-not (New-TestLink (P $script:Profile 'Videos' 'Medal' 'linked.mp4') $real)) { Set-ItResult -Skipped -Because 'this host cannot create a file link here'; return }
         Clear-SwGameMedia -DaysOld 90
         @(Get-MediaCalls).Count | Should -Be 0
@@ -929,6 +930,7 @@ Describe 'CA-9 CA-10 S-10 which files are chosen, with the real search' {
     It 'CA-9 CD-8 does not enter a folder that is a link' {
         $target = New-Dir (P $script:Work 'media target')
         $null = New-OldFile (P $target 'inside.mp4') 200
+        $null = New-Dir (P $script:Profile 'Videos' 'Medal')
         if (-not (New-TestLink (P $script:Profile 'Videos' 'Medal' 'link') $target)) { Set-ItResult -Skipped -Because 'this host cannot create a link here'; return }
         Clear-SwGameMedia -DaysOld 90
         @(Get-MediaCalls).Count | Should -Be 0
