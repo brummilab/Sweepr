@@ -1383,7 +1383,9 @@ Describe 'CD-12 CD-17 real helper processes with a stand-in tool' {
     }
 
     It 'CD-12 closes the input: a tool that reads standard input does not wait' {
-        $body = "`$line = [Console]::In.ReadLine(); if (`$null -eq `$line) { 'stdin closed' } else { 'stdin had data' }"
+        # The caller sends nothing and closes the input at once: end of input, or on Windows PowerShell 5.1 at
+        # most an empty line that the host itself makes of it. Any text would be data from somewhere else.
+        $body = "`$line = [Console]::In.ReadLine(); if ([string]::IsNullOrEmpty(`$line)) { 'stdin closed' } else { 'stdin had data: ' + `$line }"
         $folder = New-ToolFolder 'stdin tools' $body 'stdin-fixture'
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
         $result = Invoke-SwOwnerCommand -Name (P $folder 'stdin-fixture.ps1') -Arguments @() -TimeoutSeconds 60
