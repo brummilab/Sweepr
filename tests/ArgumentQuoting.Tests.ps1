@@ -76,7 +76,7 @@ AfterAll {
     $env:SWEEPR_TEST_ARGS_OUT = $script:SavedOut
 }
 
-Describe 'Owner process command (dev.ps1 Invoke-SweeprOwnerProcess)' {
+Describe 'Owner process command (dev.ps1 Invoke-SwOwnerCommand)' {
     BeforeEach {
         $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $null = New-Item -ItemType Directory -Path $script:Work -Force
@@ -86,20 +86,27 @@ Describe 'Owner process command (dev.ps1 Invoke-SweeprOwnerProcess)' {
         $env:SWEEPR_TEST_ARGS_OUT = $script:Out
         $env:PATH = $script:BinDir + [IO.Path]::PathSeparator + $script:SavedPath
         $script:Recorded = $null
-        # Fake Process object: records the StartInfo, never starts anything.
-        Mock New-Object { [Diagnostics.ProcessStartInfo]::new() }
-        Mock New-Object -ParameterFilter { $TypeName -eq 'Diagnostics.Process' } -MockWith {
-            $fake = [pscustomobject]@{ StartInfo = $null; ExitCode = 0; HasExited = $true; Id = 1 }
+        # Stand-in process: records the file name and the arguments, never starts anything.
+        Mock New-SwOwnerProcess {
+            param($FilePath, $Arguments)
+            $fake = [pscustomobject]@{
+                StartInfo = [pscustomobject]@{ FileName = $FilePath; Arguments = $Arguments }
+                ExitCode = 0; HasExited = $true; Id = 1
+            }
             $reader = [pscustomobject]@{}
             $reader | Add-Member -MemberType ScriptMethod -Name ReadToEndAsync -Value {
                 $task = [pscustomobject]@{ Result = '' }
                 $task | Add-Member -MemberType ScriptMethod -Name Wait -Value { param($ms) $true }
                 $task
             }
+            $writer = [pscustomobject]@{}
+            $writer | Add-Member -MemberType ScriptMethod -Name Close -Value { }
+            $fake | Add-Member -NotePropertyName StandardInput -NotePropertyValue $writer
             $fake | Add-Member -NotePropertyName StandardOutput -NotePropertyValue $reader
             $fake | Add-Member -NotePropertyName StandardError -NotePropertyValue $reader
             $fake | Add-Member -MemberType ScriptMethod -Name Start -Value { $true }
             $fake | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($ms) $true }
+            $fake | Add-Member -MemberType ScriptMethod -Name Kill -Value { }
             $fake | Add-Member -MemberType ScriptMethod -Name Dispose -Value { }
             $script:Recorded = $fake
             $fake
@@ -109,7 +116,7 @@ Describe 'Owner process command (dev.ps1 Invoke-SweeprOwnerProcess)' {
     It 'Passes one unchanged argument and runs no injected command: <_>' -ForEach $hostileValues {
         $value = $_
         New-EchoCommand (Join-Path $script:BinDir 'owner-fixture.ps1')
-        $null = Invoke-SweeprOwnerProcess -Name 'owner-fixture.ps1' -Arguments @('first', $value)
+        $null = Invoke-SwOwnerCommand -Name 'owner-fixture' -Arguments @('first', $value)
         $script:Recorded | Should -Not -BeNullOrEmpty
         $log = Invoke-RecordedEncodedCommand -Arguments $script:Recorded.StartInfo.Arguments -WorkDir $script:Work
         $script:Out | Should -Exist -Because ($log -join ' | ')
@@ -119,9 +126,9 @@ Describe 'Owner process command (dev.ps1 Invoke-SweeprOwnerProcess)' {
     }
 
     It 'Runs an executable whose path holds quote-like characters, spaces and semicolons: <_>' -ForEach $hostileValues {
-        $name = "own$(ConvertTo-SafeName $_) x.ps1"
-        New-EchoCommand (Join-Path $script:BinDir $name)
-        $null = Invoke-SweeprOwnerProcess -Name $name -Arguments @('ok')
+        $name = "own$(ConvertTo-SafeName $_) x"
+        New-EchoCommand (Join-Path $script:BinDir "$name.ps1")
+        $null = Invoke-SwOwnerCommand -Name $name -Arguments @('ok')
         $script:Recorded | Should -Not -BeNullOrEmpty
         $log = Invoke-RecordedEncodedCommand -Arguments $script:Recorded.StartInfo.Arguments -WorkDir $script:Work
         $script:Out | Should -Exist -Because ($log -join ' | ')
@@ -134,7 +141,7 @@ Describe 'Owner process command (dev.ps1 Invoke-SweeprOwnerProcess)' {
         $null = New-Item -ItemType Directory -Path $folder -Force
         $env:PATH = $folder + [IO.Path]::PathSeparator + $script:SavedPath
         New-EchoCommand (Join-Path $folder 'owner-fixture.ps1')
-        $null = Invoke-SweeprOwnerProcess -Name 'owner-fixture.ps1' -Arguments @('ok')
+        $null = Invoke-SwOwnerCommand -Name 'owner-fixture' -Arguments @('ok')
         $script:Recorded | Should -Not -BeNullOrEmpty
         $log = Invoke-RecordedEncodedCommand -Arguments $script:Recorded.StartInfo.Arguments -WorkDir $script:Work
         $script:Out | Should -Exist -Because ($log -join ' | ')
